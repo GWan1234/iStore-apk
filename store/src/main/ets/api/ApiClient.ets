@@ -366,6 +366,38 @@ export class ApiClient {
     return []
   }
 
+  async getDockerOverview(): Promise<Object> {
+    const result = await this.request('docker_overview')
+    if (result && result.data) {
+      return result.data
+    }
+    return new EmptyRecord()
+  }
+
+  async dockerService(action: string): Promise<Object> {
+    const result = await this.request(`docker_service&service_action=${action}`)
+    if (result && result.data) {
+      return result.data
+    }
+    return new EmptyRecord()
+  }
+
+  async getDockerContainers(): Promise<Object[]> {
+    const result = await this.request('docker_containers')
+    if (result && result.data && Array.isArray(result.data)) {
+      return [result.data]
+    }
+    return []
+  }
+
+  async dockerContainerAction(container: string, action: string): Promise<Object> {
+    const result = await this.request(`docker_container&container=${container}&container_action=${action}`)
+    if (result && result.data) {
+      return result.data
+    }
+    return new EmptyRecord()
+  }
+
   // ========== 家长控制类 API ==========
 
   /** 获取 OAF（应用过滤引擎）运行状态 */

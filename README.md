@@ -23,9 +23,9 @@ iStore 是一款基于 **HarmonyOS 6.1.0** 开发的路由器管理应用，支�
 | :---------------------------- | :----------------------- |:-------------------------|
 | ![系统监控](images/dashboard.jpg) | ![磁盘管理](images/disk.jpg) | ![磁盘管理](images/apps.jpg) |
 
-| 网络管理                        | 系统配置                     |
-| :-------------------------- |:-------------------------|
-| ![网络管理](images/network.jpg) | ![应用中心](images/system.jpg) |
+| Docker管理                   | 网络管理                       | 系统配置                     |
+|:---------------------------|:---------------------------|:-------------------------|
+| ![网络管理](images/docker.jpg) | ![网络管理](images/network.jpg) | ![应用中心](images/system.jpg) |
 
 ## 支持的设备
 
@@ -34,6 +34,9 @@ iStore 是一款基于 **HarmonyOS 6.1.0** 开发的路由器管理应用，支�
 - **QWRT** - 支持（通过 router-api）
 - **ImmortalWrt** - 支持（通过 router-api）
 - **LEDE** - 支持（通过 router-api）
+
+## APP下载
+下载：https://github.com/HWYWL/iStore/releases
 
 ## API 脚本（router-api）
 

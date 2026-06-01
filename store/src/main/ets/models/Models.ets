@@ -82,49 +82,12 @@ export interface ConnectedDevice {
 }
 
 /**
- * 插件信息 - iStore 应用商店中的插件
- */
-export interface Plugin {
-  id: string                // 插件唯一标识
-  name: string              // 插件名称（英文）
-  displayName: string       // 显示名称（中文）
-  description: string       // 插件描述
-  version: string           // 版本号
-  author: string            // 作者
-  category: string          // 分类
-  installed: boolean        // 是否已安装
-  enabled: boolean          // 是否已启用
-  running: boolean          // 是否正在运行
-  iconUrl: string           // 图标地址
-  size: string              // 包大小
-}
-
-/**
- * DHCP 租约 - 设备 IP 分配记录
- */
-export interface DhcpLease {
-  mac: string               // 设备 MAC 地址
-  ip: string                // 分配的 IP 地址
-  hostname: string          // 设备主机名
-  expiresAt: string         // 租约到期时间
-}
-
-/**
  * 流量历史记录 - 用于图表展示
  */
 export interface TrafficHistory {
   timestamp: string         // 时间戳
   rx: number                // 接收流量（字节/秒）
   tx: number                // 发送流量（字节/秒）
-}
-
-/**
- * 通用 API 响应格式
- */
-export interface ApiResponse<T> {
-  code: number              // 状态码（0 表示成功）
-  message: string           // 响应消息
-  data: T                   // 响应数据
 }
 
 /**
@@ -137,43 +100,6 @@ export interface ConnectionConfig {
   useHttps: boolean         // 是否使用 HTTPS
   username?: string         // 用户名（可选，用于基本认证）
   password?: string         // 密码（可选，用于基本认证）
-}
-
-/**
- * 日志条目
- */
-export interface LogEntry {
-  time: string              // 日志时间
-  level: 'info' | 'warn' | 'error'  // 日志级别
-  module: string            // 所属模块
-  message: string           // 日志内容
-}
-
-/**
- * WiFi 设置 - 无线网络配置
- */
-export interface WifiSettings {
-  radio: string             // 无线频段（2G/5G）
-  ssid: string              // WiFi 名称
-  channel: number           // 信道号
-  bandwidth: string         // 带宽（20MHz/40MHz/80MHz）
-  encryption: string        // 加密方式
-  password: string          // WiFi 密码
-  enabled: boolean          // 是否启用
-  hidden: boolean           // 是否隐藏 SSID
-}
-
-/**
- * 防火墙规则
- */
-export interface FirewallRule {
-  name: string              // 规则名称
-  src: string               // 源地址
-  dest: string              // 目标地址
-  proto: string             // 协议（tcp/udp/icmp）
-  port: string              // 端口号
-  target: 'ACCEPT' | 'REJECT' | 'DROP'  // 动作：允许/拒绝/丢弃
-  enabled: boolean          // 是否启用
 }
 
 /**
@@ -392,4 +318,22 @@ export interface IStoreApp {
   icon: string
   link: string
   iconBase64: string
+}
+
+export interface DockerOverview {
+  dockerVersion: string
+  daemonStatus: string
+  containersTotal: number
+  containersRunning: number
+  imagesTotal: number
+  diskUsed: string
+  memUsedMb: string
+}
+
+export interface DockerContainer {
+  id: string
+  name: string
+  status: string
+  image: string
+  running: boolean
 }

@@ -619,13 +619,164 @@ handle_istore_apps() {
     printf '{"code":0,"data":%s}\n' "$output"
 }
 
+handle_docker_overview() {
+    if ! command -v docker >/dev/null 2>&1; then
+        json_error 500 "Docker not installed"
+        return
+    fi
+
+    if ! docker info >/dev/null 2>&1; then
+        json_error 503 "Docker daemon not running"
+        return
+    fi
+
+    local containers_all=$(docker ps -a --format '{{.ID}}' 2>/dev/null | wc -l)
+    local containers_running=$(docker ps --format '{{.ID}}' 2>/dev/null | wc -l)
+    local images=$(docker images --format '{{.ID}}' 2>/dev/null | wc -l)
+
+    # ---- 磁盘占用（优先使用 docker system df） ----
+    local disk_used="N/A"
+    if docker system df --format '{{.TotalCount}} {{.Size}}' 2>/dev/null | grep -qv '^0'; then
+        # 取第一个非 0 行的 Size 字段
+        disk_used=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1)
+    elif command -v du >/dev/null && [ -d /var/lib/docker ]; then
+        disk_used=$(du -sh /var/lib/docker 2>/dev/null | cut -f1)
+    fi
+
+    # ---- 内存占用（兼容 cgroup v1 / v2） ----
+    local mem_used="N/A"
+    if [ -f /sys/fs/cgroup/memory/docker/memory.usage_in_bytes ]; then
+        # cgroup v1
+        local mem_bytes=$(cat /sys/fs/cgroup/memory/docker/memory.usage_in_bytes 2>/dev/null)
+        [ -n "$mem_bytes" ] && mem_used=$(( mem_bytes / 1024 / 1024 ))
+    elif [ -f /sys/fs/cgroup/system.slice/docker.service/memory.current ]; then
+        # cgroup v2（systemd 管理时常见）
+        local mem_bytes=$(cat /sys/fs/cgroup/system.slice/docker.service/memory.current 2>/dev/null)
+        [ -n "$mem_bytes" ] && mem_used=$(( mem_bytes / 1024 / 1024 ))
+    elif [ -f /sys/fs/cgroup/memory.current ]; then
+        # cgroup v2 根目录
+        local mem_bytes=$(cat /sys/fs/cgroup/memory.current 2>/dev/null)
+        [ -n "$mem_bytes" ] && mem_used=$(( mem_bytes / 1024 / 1024 ))
+    fi
+
+    local docker_version=$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo "unknown")
+    local daemon_status="running"
+    if ! docker info >/dev/null 2>&1; then daemon_status="stopped"; fi
+
+    # 安全输出：数字或 null
+    local mem_json="null"
+    [ "$mem_used" != "N/A" ] && mem_json="$mem_used"
+
+    printf '{"code":0,"data":{"docker_version":"%s","daemon_status":"%s","containers_total":%d,"containers_running":%d,"images_total":%d,"disk_used":"%s","mem_used_mb":%s}}\n' \
+        "$docker_version" "$daemon_status" "$containers_all" "$containers_running" "$images" "$disk_used" "$mem_json"
+}
+
+handle_docker_service() {
+    local action=$(echo "$QUERY_STRING" | sed -n 's/.*service_action=\([^&]*\).*/\1/p')
+    if [ -z "$action" ]; then
+        json_error 400 "service_action parameter required (start|stop|restart)"
+        return
+    fi
+
+    case "$action" in
+        start)
+            /etc/init.d/dockerd start >/dev/null 2>&1
+            printf '{"code":0,"msg":"Docker service start signal sent"}\n'
+            ;;
+        stop)
+            /etc/init.d/dockerd stop >/dev/null 2>&1
+            printf '{"code":0,"msg":"Docker service stop signal sent"}\n'
+            ;;
+        restart)
+            /etc/init.d/dockerd restart >/dev/null 2>&1
+            printf '{"code":0,"msg":"Docker service restart signal sent"}\n'
+            ;;
+        *)
+            json_error 400 "invalid service_action: $action (use start|stop|restart)"
+            ;;
+    esac
+}
+
+handle_docker_container() {
+    local container=$(echo "$QUERY_STRING" | sed -n 's/.*container=\([^&]*\).*/\1/p')
+    local action=$(echo "$QUERY_STRING" | sed -n 's/.*container_action=\([^&]*\).*/\1/p')
+
+    if [ -z "$container" ]; then
+        json_error 400 "container parameter required (id or name)"
+        return
+    fi
+    if [ -z "$action" ]; then
+        json_error 400 "container_action parameter required (start|stop|restart)"
+        return
+    fi
+
+    if ! command -v docker >/dev/null 2>&1; then
+        json_error 500 "Docker not installed"
+        return
+    fi
+
+    case "$action" in
+        start)
+            docker start "$container" >/dev/null 2>&1
+            printf '{"code":0,"msg":"Container %s start signal sent"}\n' "$container"
+            ;;
+        stop)
+            docker stop "$container" >/dev/null 2>&1
+            printf '{"code":0,"msg":"Container %s stop signal sent"}\n' "$container"
+            ;;
+        restart)
+            docker restart "$container" >/dev/null 2>&1
+            printf '{"code":0,"msg":"Container %s restart signal sent"}\n' "$container"
+            ;;
+        *)
+            json_error 400 "invalid container_action: $action (use start|stop|restart)"
+            ;;
+    esac
+}
+
+handle_docker_containers() {
+    if ! command -v docker >/dev/null 2>&1; then
+        json_error 500 "Docker not installed"
+        return
+    fi
+
+    # 确保 Docker 守护进程运行
+    if ! docker info >/dev/null 2>&1; then
+        json_error 503 "Docker daemon not running"
+        return
+    fi
+
+    local tmp="/tmp/docker_ps_$$"
+    docker ps -a --format '{{.ID}}|{{.Names}}|{{.Status}}|{{.Image}}' 2>/dev/null > "$tmp"
+
+    local output="[" first=1
+    while IFS='|' read -r id name status image; do
+        [ -z "$id" ] && continue
+
+        local running="false"
+        if echo "$status" | grep -q '^Up'; then running="true"; fi
+
+        local escaped_name=$(echo "$name" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        local escaped_status=$(echo "$status" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        local escaped_image=$(echo "$image" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+        [ "$first" = "1" ] && first=0 || output="${output},"
+        output="${output}{\"id\":\"${id}\",\"name\":\"${escaped_name}\",\"status\":\"${escaped_status}\",\"image\":\"${escaped_image}\",\"running\":${running}}"
+    done < "$tmp"
+
+    output="${output}]"
+    printf '{"code":0,"data":%s}\n' "$output"
+    rm -f "$tmp"
+}
+
 # ---- 解析请求 ----
 METHOD="${REQUEST_METHOD:-GET}"
 QUERY_STRING="${QUERY_STRING:-}"
 ACTION=""
 
 if echo "$QUERY_STRING" | grep -q 'action='; then
-    ACTION=$(echo "$QUERY_STRING" | sed 's/.*action=\([^&]*\).*/\1/')
+    # 前面加上 &，防止误匹配 container_action 中的 action=
+    ACTION=$(echo "&$QUERY_STRING" | sed 's/.*&action=\([^&]*\).*/\1/')
 elif [ -n "${PATH_INFO}" ]; then
     ACTION=$(echo "${PATH_INFO}" | sed 's|^/||; s|/|_|g')
 fi
@@ -726,6 +877,23 @@ case "$ACTION" in
     uci_get_all)
         check_auth
         handle_uci_get_all
+        ;;
+
+    docker_overview)
+        check_auth
+        handle_docker_overview
+        ;;
+    docker_service)
+        check_auth
+        handle_docker_service
+        ;;
+    docker_container)
+        check_auth
+        handle_docker_container
+        ;;
+    docker_containers)
+        check_auth
+        handle_docker_containers
         ;;
 
     *)

@@ -5,7 +5,6 @@
  */
 import { StyleConstants } from '../constants/StyleConstants'
 import { TrafficHistory } from '../../models/Models'
-import { FormatUtils } from '../utils/FormatUtils'
 
 @Component
 export struct TrafficLineChart {

@@ -18,6 +18,8 @@ import {
   WirelessClient,
   WirelessDevice,
   IStoreApp,
+  DockerOverview,
+  DockerContainer,
   OafStatus,
   AppFilterBase,
   AppClass,
@@ -85,6 +87,20 @@ class ObjectHelper {
       }
     }
     return []
+  }
+
+  static getBool(obj: Object, key: string): boolean {
+    if (!obj || typeof obj !== 'object') return false
+    const keys = Object.keys(obj)
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i] === key) {
+        const record = obj as Record<string, Object>
+        const v = record[key]
+        if (v === undefined || v === null) return false
+        return Boolean(v)
+      }
+    }
+    return false
   }
 
   /** 安全读取嵌套对象字段，缺失时返回空对象 */
@@ -1021,6 +1037,66 @@ export class ApiService {
       hilog.error(DOMAIN, TAG, `fetchIStoreApps err: ${String(e)}`)
     }
     return []
+  }
+
+  async fetchDockerOverview(): Promise<DockerOverview> {
+    try {
+      const data = await this.client.getDockerOverview()
+      return {
+        dockerVersion: ObjectHelper.getString(data, 'docker_version', ''),
+        daemonStatus: ObjectHelper.getString(data, 'daemon_status', 'stopped'),
+        containersTotal: ObjectHelper.getNumber(data, 'containers_total', 0),
+        containersRunning: ObjectHelper.getNumber(data, 'containers_running', 0),
+        imagesTotal: ObjectHelper.getNumber(data, 'images_total', 0),
+        diskUsed: ObjectHelper.getString(data, 'disk_used', '0'),
+        memUsedMb: ObjectHelper.getString(data, 'mem_used_mb', '0')
+      }
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `fetchDockerOverview err: ${String(e)}`)
+    }
+    return { dockerVersion: '', daemonStatus: 'stopped', containersTotal: 0, containersRunning: 0, imagesTotal: 0, diskUsed: '0', memUsedMb: '0' }
+  }
+
+  async dockerServiceAction(action: string): Promise<boolean> {
+    try {
+      await this.client.dockerService(action)
+      return true
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `dockerServiceAction err: ${String(e)}`)
+    }
+    return false
+  }
+
+  async fetchDockerContainers(): Promise<DockerContainer[]> {
+    try {
+      const result = await this.client.getDockerContainers()
+      const arr = result.length > 0 ? result[0] as Object[] : []
+      const list: DockerContainer[] = []
+      for (let i = 0; i < arr.length; i++) {
+        const c = arr[i]
+        list.push({
+          id: ObjectHelper.getString(c, 'id', ''),
+          name: ObjectHelper.getString(c, 'name', ''),
+          status: ObjectHelper.getString(c, 'status', ''),
+          image: ObjectHelper.getString(c, 'image', ''),
+          running: ObjectHelper.getBool(c, 'running')
+        })
+      }
+      return list
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `fetchDockerContainers err: ${String(e)}`)
+    }
+    return []
+  }
+
+  async dockerContainerAction(container: string, action: string): Promise<boolean> {
+    try {
+      await this.client.dockerContainerAction(container, action)
+      return true
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `dockerContainerAction err: ${String(e)}`)
+    }
+    return false
   }
 
   async factoryReset(): Promise<string> {

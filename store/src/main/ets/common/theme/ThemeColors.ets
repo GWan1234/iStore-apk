@@ -100,16 +100,3 @@ export const LIGHT_THEME: ThemePalette = {
   borderGlassFocus: 'rgba(0, 0, 0, 0.2)'
 }
 
-/**
- * 页面渐变背景色预设
- * 用于 build() 中的 .linearGradient() 背景
- * 深色模式：深蓝 → 中蓝紫 → 深蓝（三段式渐变）
- * 浅色模式：浅灰蓝 → 近白 → 浅灰蓝（三段式渐变）
- */
-export const DARK_GRADIENT_START = '#0A0E27'
-export const DARK_GRADIENT_MID = '#121637'
-export const DARK_GRADIENT_END = '#0A0E27'
-
-export const LIGHT_GRADIENT_START = '#E8ECF1'
-export const LIGHT_GRADIENT_MID = '#F5F7FA'
-export const LIGHT_GRADIENT_END = '#E8ECF1'
