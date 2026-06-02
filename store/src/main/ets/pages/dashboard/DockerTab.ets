@@ -209,8 +209,8 @@ export struct DockerTab {
   }
 
   build() {
-    Scroll() {
-      Refresh({ refreshing: $$this.isRefreshing }) {
+    Refresh({ refreshing: $$this.isRefreshing }) {
+      Scroll() {
         Column() {
           Text('🐳 Docker')
             .fontSize(20).fontWeight(FontWeight.Bold)
@@ -381,11 +381,9 @@ export struct DockerTab {
           }
         }
       }
-      .width('100%').padding({ left: 16, right: 16, bottom: 120 })
+      .width('100%').padding({ left: 16, right: 16, bottom: 140 })
       }
-      .onRefreshing(() => { this.onRefresh() })
-    }
-    .width('100%').height('100%').scrollBar(BarState.Off)
+      .width('100%').height('100%').scrollBar(BarState.Off)
       .onScroll((_x: number, y: number) => {
         const diff = y - this.lastScrollY
         this.lastScrollY = y
@@ -395,5 +393,7 @@ export struct DockerTab {
           AppState.getInstance().showNav()
         }
       })
+    }
+    .onRefreshing(() => { this.onRefresh() })
   }
 }

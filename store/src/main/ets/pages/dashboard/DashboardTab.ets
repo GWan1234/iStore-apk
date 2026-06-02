@@ -679,7 +679,7 @@ export struct DashboardTab {
             .border({ width: 0.5, color: this.theme.borderGlass })
           }
           .width('100%')
-          .padding({ left: 12, right: 12 })
+          .padding({ left: 12, right: 12, bottom: 120 })
         }
         .width('100%')
         .layoutWeight(1)
