@@ -22,8 +22,8 @@ export struct DashboardTab {
   @State conntrack: ConntrackInfo = { current: 0, max: 0, percent: 0 }
   @State networkInterfaces: NetworkInterface[] = []
   @State onlineClientCount: number = 0
+  private lastScrollY: number = 0
   private timerId: number = -1
-
   aboutToAppear(): void {
     // 首次加载数据，然后启动 5 秒轮询刷新
     this.loadData()
@@ -684,6 +684,15 @@ export struct DashboardTab {
         .width('100%')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
+        .onScroll((_x: number, y: number) => {
+          const diff = y - this.lastScrollY
+          this.lastScrollY = y
+          if (diff > 10 && y > 120) {
+            AppState.getInstance().hideNav()
+          } else if (diff < -10 && y < 80) {
+            AppState.getInstance().showNav()
+          }
+        })
       }
     }
     .width('100%')

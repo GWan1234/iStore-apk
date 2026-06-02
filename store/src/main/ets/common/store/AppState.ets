@@ -83,6 +83,42 @@ export class AppState {
     hilog.info(DOMAIN, TAG, `Initialized: ${this.devices.length} devices, ${this.isDarkMode ? 'dark' : 'light'}`)
   }
 
+  private navHidden: boolean = false
+  private navListeners: (() => void)[] = []
+
+  hideNav(): void {
+    if (!this.navHidden) {
+      this.navHidden = true
+      for (const l of this.navListeners) {
+        try { l() } catch (_) {}
+      }
+    }
+  }
+
+  showNav(): void {
+    if (this.navHidden) {
+      this.navHidden = false
+      for (const l of this.navListeners) {
+        try { l() } catch (_) {}
+      }
+    }
+  }
+
+  isNavHidden(): boolean {
+    return this.navHidden
+  }
+
+  onNavChange(listener: () => void): void {
+    if (!this.navListeners.includes(listener)) {
+      this.navListeners.push(listener)
+    }
+  }
+
+  offNavChange(listener: () => void): void {
+    const idx = this.navListeners.indexOf(listener)
+    if (idx >= 0) this.navListeners.splice(idx, 1)
+  }
+
   // ========== 主题管理 ==========
 
   /**

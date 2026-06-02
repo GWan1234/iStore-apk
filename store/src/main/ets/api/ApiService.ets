@@ -20,6 +20,7 @@ import {
   IStoreApp,
   DockerOverview,
   DockerContainer,
+  DockerStats,
   OafStatus,
   AppFilterBase,
   AppClass,
@@ -1097,6 +1098,28 @@ export class ApiService {
       hilog.error(DOMAIN, TAG, `dockerContainerAction err: ${String(e)}`)
     }
     return false
+  }
+
+  async fetchDockerStats(): Promise<DockerStats[]> {
+    try {
+      const result = await this.client.getDockerStats()
+      const arr = result.length > 0 ? result[0] as Object[] : []
+      const list: DockerStats[] = []
+      for (let i = 0; i < arr.length; i++) {
+        const s = arr[i]
+        list.push({
+          id: ObjectHelper.getString(s, 'id', ''),
+          name: ObjectHelper.getString(s, 'name', ''),
+          cpuPercent: ObjectHelper.getNumber(s, 'cpu_percent', 0),
+          memUsage: ObjectHelper.getString(s, 'mem_usage', '0'),
+          memPercent: ObjectHelper.getNumber(s, 'mem_percent', 0)
+        })
+      }
+      return list
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `fetchDockerStats err: ${String(e)}`)
+    }
+    return []
   }
 
   async factoryReset(): Promise<string> {

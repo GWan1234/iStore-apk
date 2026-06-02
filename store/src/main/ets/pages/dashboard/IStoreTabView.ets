@@ -11,7 +11,7 @@ export struct IStoreTabView {
   @State isLoading: boolean = true
   @State errorText: string = ''
   private api: ApiService = new ApiService()
-
+  private lastScrollY: number = 0
   aboutToAppear(): void {
     this.loadApps()
   }
@@ -113,5 +113,14 @@ export struct IStoreTabView {
       .width('100%').padding({ left: 16, right: 16, bottom: 120 })
     }
     .width('100%').height('100%').scrollBar(BarState.Off)
+      .onScroll((_x: number, y: number) => {
+        const diff = y - this.lastScrollY
+        this.lastScrollY = y
+        if (diff > 10 && y > 120) {
+          AppState.getInstance().hideNav()
+        } else if (diff < -10 && y < 80) {
+          AppState.getInstance().showNav()
+        }
+      })
   }
 }

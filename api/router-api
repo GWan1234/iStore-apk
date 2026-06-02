@@ -769,6 +769,47 @@ handle_docker_containers() {
     rm -f "$tmp"
 }
 
+handle_docker_stats() {
+    if ! command -v docker >/dev/null 2>&1; then
+        json_error 500 "Docker not installed"
+        return
+    fi
+
+    if ! docker info >/dev/null 2>&1; then
+        json_error 503 "Docker daemon not running"
+        return
+    fi
+
+    # 一次命令获取所有运行中容器的统计，用 tab 分隔字段（避免空格冲突）
+    local stats_data
+    stats_data=$(docker stats --no-stream --format '{{.ID}}\t{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}' 2>/dev/null)
+
+    local output="[" first=1
+    # 设置 IFS 为制表符，确保容器名中的空格不会干扰分割
+    while IFS=$'\t' read -r id name cpu_raw mem_usage mem_perc_raw; do
+        [ -z "$id" ] && continue
+
+        cpu_raw=$(echo "$cpu_raw" | sed 's/%//')
+        mem_perc_raw=$(echo "$mem_perc_raw" | sed 's/%//')
+        [ -z "$cpu_raw" ] && cpu_raw="0"
+        [ -z "$mem_usage" ] && mem_usage="0B / 0B"
+        [ -z "$mem_perc_raw" ] && mem_perc_raw="0"
+
+        local cpu_percent=$(printf "%.2f" "$cpu_raw" 2>/dev/null || echo "0.00")
+        local mem_percent=$(printf "%.2f" "$mem_perc_raw" 2>/dev/null || echo "0.00")
+
+        local escaped_name=$(echo "$name" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+        [ "$first" = "1" ] && first=0 || output="${output},"
+        output="${output}{\"id\":\"${id}\",\"name\":\"${escaped_name}\",\"cpu_percent\":${cpu_percent},\"mem_usage\":\"${mem_usage}\",\"mem_percent\":${mem_percent}}"
+    done <<EOF
+$stats_data
+EOF
+
+    output="${output}]"
+    printf '{"code":0,"data":%s}\n' "$output"
+}
+
 # ---- 解析请求 ----
 METHOD="${REQUEST_METHOD:-GET}"
 QUERY_STRING="${QUERY_STRING:-}"
@@ -894,6 +935,11 @@ case "$ACTION" in
     docker_containers)
         check_auth
         handle_docker_containers
+        ;;
+
+    docker_stats)
+        check_auth
+        handle_docker_stats
         ;;
 
     *)

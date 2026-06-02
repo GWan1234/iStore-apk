@@ -18,7 +18,7 @@ export struct DeviceTab {
   @State subTab: number = 0
   @State wirelessClients: WirelessClient[] = []
   @State wirelessLoading: boolean = false
-
+  private lastScrollY: number = 0
   aboutToAppear(): void {
     this.loadDevices()
     this.loadWirelessData()
@@ -299,6 +299,15 @@ export struct DeviceTab {
       .width('100%')
       .layoutWeight(1)
       .scrollBar(BarState.Off)
+      .onScroll((_x: number, y: number) => {
+        const diff = y - this.lastScrollY
+        this.lastScrollY = y
+        if (diff > 10 && y > 120) {
+          AppState.getInstance().hideNav()
+        } else if (diff < -10 && y < 80) {
+          AppState.getInstance().showNav()
+        }
+      })
       } else {
       // 无线客户端列表
       Scroll() {
@@ -401,6 +410,15 @@ export struct DeviceTab {
       .width('100%')
       .layoutWeight(1)
       .scrollBar(BarState.Off)
+      .onScroll((_x: number, y: number) => {
+        const diff = y - this.lastScrollY
+        this.lastScrollY = y
+        if (diff > 10 && y > 120) {
+          AppState.getInstance().hideNav()
+        } else if (diff < -10 && y < 80) {
+          AppState.getInstance().showNav()
+        }
+      })
       }
     }
     .width('100%')

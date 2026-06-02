@@ -337,3 +337,11 @@ export interface DockerContainer {
   image: string
   running: boolean
 }
+
+export interface DockerStats {
+  id: string
+  name: string
+  cpuPercent: number
+  memUsage: string
+  memPercent: number
+}

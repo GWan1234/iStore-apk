@@ -15,6 +15,8 @@ struct MainPage {
   @State theme: ThemePalette = DARK_THEME
   @State isDark: boolean = true
   @State deviceName: string = ''
+  @State navHidden: boolean = false
+  private lastScrollOffset: number = 0
   private tabsController: HdsTabsController = new HdsTabsController()
 
   aboutToAppear(): void {
@@ -27,6 +29,14 @@ struct MainPage {
       this.isDark = AppState.getInstance().isDarkMode
       this.theme = AppState.getInstance().getTheme()
     })
+
+    AppState.getInstance().onNavChange(() => {
+      this.navHidden = AppState.getInstance().isNavHidden()
+    })
+  }
+
+  aboutToDisappear(): void {
+    AppState.getInstance().offNavChange(() => {})
   }
 
   build() {
@@ -118,7 +128,7 @@ struct MainPage {
         })
         .barFloatingStyle({
           barWidth: { smallWidth: 320, mediumWidth: 400, largeWidth: 480 },
-          barBottomMargin: 24,
+          barBottomMargin: this.navHidden ? -100 : 24,
           gradientMask: { maskColor: this.isDark ? '#22000000' : '#33E8ECF1', maskHeight: 88 },
           systemMaterialEffect: {
             materialType: hdsMaterial.MaterialType.IMMERSIVE,
@@ -126,6 +136,7 @@ struct MainPage {
           }
         })
         .layoutWeight(1)
+        .animation({ duration: 300, curve: Curve.EaseInOut })
       }
       .width('100%')
       .height('100%')

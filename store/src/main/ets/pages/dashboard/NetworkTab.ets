@@ -16,7 +16,7 @@ export struct NetworkTab {
   @State lanStatus: WanStatus = this.emptyWan()
   @State isLoading: boolean = true
   @State errorText: string = ''
-
+  private lastScrollY: number = 0
   aboutToAppear(): void {
     this.loadData()
   }
@@ -258,6 +258,15 @@ export struct NetworkTab {
       .width('100%')
       .layoutWeight(1)
       .scrollBar(BarState.Off)
+      .onScroll((_x: number, y: number) => {
+        const diff = y - this.lastScrollY
+        this.lastScrollY = y
+        if (diff > 10 && y > 120) {
+          AppState.getInstance().hideNav()
+        } else if (diff < -10 && y < 80) {
+          AppState.getInstance().showNav()
+        }
+      })
     }
     .width('100%')
     .height('100%')

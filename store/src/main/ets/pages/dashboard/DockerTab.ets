@@ -1,8 +1,14 @@
 import { AppState } from '../../common/store/AppState'
 import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
-import { DockerOverview, DockerContainer } from '../../models/Models'
+import { DockerOverview, DockerContainer, DockerStats } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import { DualLineChart } from './DualLineChart'
+
+interface StatsHistory {
+  cpu: number[]
+  mem: number[]
+}
 
 @Component
 export struct DockerTab {
@@ -14,18 +20,26 @@ export struct DockerTab {
   @State actionContainer: string = ''
   @State dockerStarting: boolean = false
   @State isRefreshing: boolean = false
+  @State statsHistory: Map<string, StatsHistory> = new Map()
   private api: ApiService = new ApiService()
+  private lastScrollY: number = 0
   private refreshTimer: number = -1
-
+  private statsTimer: number = -1
   aboutToAppear(): void {
     this.loadData()
+    this.fetchStats()
     this.refreshTimer = setInterval(() => { this.refreshSilently() }, 5000)
+    this.statsTimer = setInterval(() => { this.fetchStats() }, 5000)
   }
 
   aboutToDisappear(): void {
     if (this.refreshTimer !== -1) {
       clearInterval(this.refreshTimer)
       this.refreshTimer = -1
+    }
+    if (this.statsTimer !== -1) {
+      clearInterval(this.statsTimer)
+      this.statsTimer = -1
     }
   }
 
@@ -49,8 +63,31 @@ export struct DockerTab {
       if (this.overview.daemonStatus === 'running') {
         this.containers = await this.api.fetchDockerContainers()
       }
+      this.fetchStats()
     } catch (e) {
       hilog.error(0x0001, 'DockerTab', `refreshSilently err: ${String(e)}`)
+    }
+  }
+
+  async fetchStats(): Promise<void> {
+    try {
+      const stats = await this.api.fetchDockerStats()
+      const maxLen = 30
+      const newMap = new Map<string, StatsHistory>()
+      for (let i = 0; i < stats.length; i++) {
+        const s = stats[i]
+        const existing = this.statsHistory.get(s.name)
+        const cpuArr = existing ? [...existing.cpu] : []
+        const memArr = existing ? [...existing.mem] : []
+        cpuArr.push(s.cpuPercent)
+        memArr.push(s.memPercent)
+        if (cpuArr.length > maxLen) cpuArr.shift()
+        if (memArr.length > maxLen) memArr.shift()
+        newMap.set(s.name, { cpu: cpuArr, mem: memArr })
+      }
+      this.statsHistory = newMap
+    } catch (e) {
+      hilog.error(0x0001, 'DockerTab', `fetchStats err: ${String(e)}`)
     }
   }
 
@@ -130,6 +167,45 @@ export struct DockerTab {
       name = parts[parts.length - 2] + '/' + parts[parts.length - 1]
     }
     return `https://xuanyuan.cloud/api/logo/${name}.png`
+  }
+
+  chartCpu(container: DockerContainer): number[] {
+    const hist = this.statsHistory.get(container.name)
+    return hist ? hist.cpu : []
+  }
+
+  chartMem(container: DockerContainer): number[] {
+    const hist = this.statsHistory.get(container.name)
+    return hist ? hist.mem : []
+  }
+
+  lastCpu(container: DockerContainer): string {
+    const hist = this.statsHistory.get(container.name)
+    if (hist && hist.cpu.length > 0) {
+      return hist.cpu[hist.cpu.length - 1].toFixed(1)
+    }
+    return '0'
+  }
+
+  lastMem(container: DockerContainer): string {
+    const hist = this.statsHistory.get(container.name)
+    if (hist && hist.mem.length > 0) {
+      return hist.mem[hist.mem.length - 1].toFixed(1)
+    }
+    return '0'
+  }
+
+  chartMaxVal(container: DockerContainer): number {
+    const hist = this.statsHistory.get(container.name)
+    if (!hist) return 1
+    let max = 1
+    for (let i = 0; i < hist.cpu.length; i++) {
+      if (hist.cpu[i] > max) max = hist.cpu[i]
+    }
+    for (let i = 0; i < hist.mem.length; i++) {
+      if (hist.mem[i] > max) max = hist.mem[i]
+    }
+    return Math.ceil(max)
   }
 
   build() {
@@ -274,6 +350,24 @@ export struct DockerTab {
                     }
                   }
                   .width('100%')
+
+                  DualLineChart({
+                    cpuData: this.chartCpu(c),
+                    memData: this.chartMem(c),
+                    chartMax: this.chartMaxVal(c),
+                    chartWidth: 300,
+                    chartHeight: 42
+                  })
+
+                  Row() {
+                    Circle({ width: 6, height: 6 }).fill('#FF9800')
+                    Text(` CPU ${this.lastCpu(c)}%`)
+                      .fontSize(9).fontColor('rgba(255,255,255,0.5)')
+                    Circle({ width: 6, height: 6 }).fill('#64B5F6').margin({ left: 14 })
+                    Text(` MEM ${this.lastMem(c)}%`)
+                      .fontSize(9).fontColor('rgba(255,255,255,0.5)')
+                  }
+                  .width('100%').margin({ top: 4 })
                 }
                 .width('100%').padding(12).borderRadius(12).margin({ top: 6 })
                 .backgroundColor(this.theme.bgCard).backdropBlur(20)
@@ -292,5 +386,14 @@ export struct DockerTab {
       .onRefreshing(() => { this.onRefresh() })
     }
     .width('100%').height('100%').scrollBar(BarState.Off)
+      .onScroll((_x: number, y: number) => {
+        const diff = y - this.lastScrollY
+        this.lastScrollY = y
+        if (diff > 10 && y > 120) {
+          AppState.getInstance().hideNav()
+        } else if (diff < -10 && y < 80) {
+          AppState.getInstance().showNav()
+        }
+      })
   }
 }
