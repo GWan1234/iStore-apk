@@ -123,15 +123,15 @@ export struct DeviceTab {
             this.searchText = v
           })
           .layoutWeight(1)
-          .height(40)
+          .height(44)
         Text('🔍')
           .fontSize(16)
           .fontColor(this.theme.textSecondary)
           .padding({ left: 10, right: 4 })
       }
       .width('100%')
-      .height(40)
-      .borderRadius(12)
+      .height(44)
+      .borderRadius(20)
       .backgroundColor(this.theme.bgCard)
       .backdropBlur(10)
       .border({ width: 0.5, color: this.theme.borderGlass })
@@ -146,8 +146,8 @@ export struct DeviceTab {
             .fontColor(this.subTab === 0 ? this.theme.textPrimary : this.theme.textTertiary)
             .fontWeight(this.subTab === 0 ? FontWeight.Medium : FontWeight.Normal)
         }
-        .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-        .borderRadius(100)
+        .padding({ left: 18, right: 18, top: 10, bottom: 10 })
+        .borderRadius(14)
         .backgroundColor(this.subTab === 0 ? this.theme.bgCardHover : 'transparent')
         .border(this.subTab === 0 ? { width: 0.5, color: this.theme.primary } : {})
         .onClick(() => {
@@ -160,8 +160,8 @@ export struct DeviceTab {
             .fontColor(this.subTab === 1 ? this.theme.textPrimary : this.theme.textTertiary)
             .fontWeight(this.subTab === 1 ? FontWeight.Medium : FontWeight.Normal)
         }
-        .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-        .borderRadius(100)
+        .padding({ left: 18, right: 18, top: 10, bottom: 10 })
+        .borderRadius(14)
         .backgroundColor(this.subTab === 1 ? this.theme.bgCardHover : 'transparent')
         .border(this.subTab === 1 ? { width: 0.5, color: this.theme.primary } : {})
         .margin({ left: 10 })
@@ -229,14 +229,14 @@ export struct DeviceTab {
                   .fontSize(28)
                   .width(44)
                   .height(44)
-                  .borderRadius(12)
+                  .borderRadius(20)
                   .backgroundColor(this.theme.bgGlassLight)
                   .textAlign(TextAlign.Center)
 
                 // 设备信息
                 Column() {
                   Text(device.hostname || 'Unknown')
-                    .fontSize(14)
+                    .fontSize(15)
                     .fontColor(this.theme.textPrimary)
                     .fontWeight(FontWeight.Medium)
                     .maxLines(1)
@@ -274,9 +274,9 @@ export struct DeviceTab {
                   .margin({ left: 8 })
               }
               .width('100%')
-              .padding(14)
-              .borderRadius(14)
-              .margin({ top: 6 })
+              .padding(16)
+              .borderRadius(20)
+              .margin({ top: 10 })
               .backgroundColor(this.theme.bgCard)
               .backdropBlur(20)
               .border({ width: 0.5, color: this.theme.borderGlass })
@@ -294,7 +294,7 @@ export struct DeviceTab {
           }
         }
         .width('100%')
-        .padding({ left: 12, right: 12, top: 4, bottom: 100 })
+        .padding({ left: 12, right: 12, top: 4, bottom: 130 })
       }
       .width('100%')
       .layoutWeight(1)
@@ -347,13 +347,13 @@ export struct DeviceTab {
                   .fontSize(28)
                   .width(44)
                   .height(44)
-                  .borderRadius(12)
+                  .borderRadius(20)
                   .backgroundColor(this.theme.bgGlassLight)
                   .textAlign(TextAlign.Center)
 
                 Column() {
                   Text(client.hostname || client.mac)
-                    .fontSize(14)
+                    .fontSize(15)
                     .fontColor(this.theme.textPrimary)
                     .fontWeight(FontWeight.Medium)
                     .maxLines(1)
@@ -385,9 +385,9 @@ export struct DeviceTab {
                 .alignItems(HorizontalAlign.End)
               }
               .width('100%')
-              .padding(14)
-              .borderRadius(14)
-              .margin({ top: 6 })
+              .padding(16)
+              .borderRadius(20)
+              .margin({ top: 10 })
             .backgroundColor(this.theme.bgCard)
             .backdropBlur(20)
             .border({ width: 0.5, color: this.theme.borderGlass })
@@ -405,7 +405,7 @@ export struct DeviceTab {
           }
         }
         .width('100%')
-        .padding({ left: 12, right: 12, top: 4, bottom: 100 })
+        .padding({ left: 12, right: 12, top: 4, bottom: 130 })
       }
       .width('100%')
       .layoutWeight(1)

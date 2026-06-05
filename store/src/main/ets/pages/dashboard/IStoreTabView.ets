@@ -45,7 +45,7 @@ export struct IStoreTabView {
     Scroll() {
       Column() {
         Text('📦 iStore')
-          .fontSize(20).fontWeight(FontWeight.Bold)
+          .fontSize(24).fontWeight(FontWeight.Bold)
           .fontColor(this.theme.textPrimary).width('100%').margin({ top: 12 })
 
         Text('已安装的应用列表')
@@ -84,8 +84,8 @@ export struct IStoreTabView {
                 Text('打开 ›')
                   .fontSize(12).fontColor(this.theme.primary).fontWeight(FontWeight.Medium)
               }
-              .width('100%').padding({ top: 14, bottom: 14, left: 14, right: 14 })
-              .borderRadius(12).margin({ bottom: 8 })
+              .width('100%').padding({ top: 18, bottom: 18, left: 18, right: 18 })
+              .borderRadius(20).margin({ bottom: 12 })
               .backgroundColor(this.theme.bgCard).backdropBlur(20)
               .border({ width: 0.5, color: this.theme.borderGlass })
               .onClick(() => {
@@ -110,7 +110,7 @@ export struct IStoreTabView {
           .width('100%').margin({ top: 12 })
         }
       }
-      .width('100%').padding({ left: 16, right: 16, bottom: 120 })
+      .width('100%').padding({ left: 16, right: 16, bottom: 130 })
     }
     .width('100%').height('100%').scrollBar(BarState.Off)
       .onScroll((_x: number, y: number) => {

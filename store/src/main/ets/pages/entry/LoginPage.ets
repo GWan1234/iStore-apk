@@ -403,7 +403,7 @@ struct LoginPage {
                   .width('100%')
                   .onClick(() => { this.connectAndEnter(device) })
                 }
-                .width('100%').padding(14).borderRadius(16).margin({ top: 6 })
+                .width('100%').padding(20).borderRadius(20).margin({ top: 16 })
                 .backgroundColor(this.theme.bgCard).backdropBlur(20)
                 .border({ width: 0.5, color: this.theme.borderGlass })
               }, (item: SavedDevice): string => `${item.id}_v${item.version}`)
@@ -421,7 +421,7 @@ struct LoginPage {
             }
             .width('100%').justifyContent(FlexAlign.Center)
             .onClick(() => { this.toggleAddForm() })
-            .margin({ top: this.savedDevices.length > 0 ? 8 : 0 })
+            .margin({ top: this.savedDevices.length > 0 ? 16 : 0 })
 
             if (this.showAddForm) {
               Column() {
@@ -430,36 +430,36 @@ struct LoginPage {
                     .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
                     .backgroundColor('transparent')
                     .onChange((v: string) => { this.label = v })
-                    .layoutWeight(1).height(48)
+                    .layoutWeight(1).height(52)
                 }
-                .width('100%').height(48).borderRadius(12)
+                .width('100%').height(52).borderRadius(24)
                 .backgroundColor(this.theme.bgCard).backdropBlur(10)
                 .border({ width: 0.5, color: this.theme.borderGlass })
-                .padding({ left: 14, right: 14 }).margin({ bottom: 10 })
+                .padding({ left: 14, right: 14 }).margin({ bottom: 16 })
 
                 Row() {
                   TextInput({ placeholder: 'IP 地址（如 192.168.1.1）', text: this.host })
                     .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
                     .backgroundColor('transparent')
                     .onChange((v: string) => { this.host = v })
-                    .layoutWeight(1).height(48)
+                    .layoutWeight(1).height(52)
                 }
-                .width('100%').height(48).borderRadius(12)
+                .width('100%').height(52).borderRadius(24)
                 .backgroundColor(this.theme.bgCard).backdropBlur(10)
                 .border({ width: 0.5, color: this.theme.borderGlass })
-                .padding({ left: 14, right: 14 }).margin({ bottom: 10 })
+                .padding({ left: 14, right: 14 }).margin({ bottom: 16 })
 
                 Row() {
                   TextInput({ placeholder: '端口', text: this.port })
                     .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
                     .backgroundColor('transparent').type(InputType.Number)
                     .onChange((v: string) => { this.port = v })
-                    .width('30%').height(48)
+                    .width('30%').height(52)
                 }
-                .width('100%').height(48).borderRadius(12)
+                .width('100%').height(52).borderRadius(24)
                 .backgroundColor(this.theme.bgCard).backdropBlur(10)
                 .border({ width: 0.5, color: this.theme.borderGlass })
-                .padding({ left: 14, right: 14 }).margin({ bottom: 10 })
+                .padding({ left: 14, right: 14 }).margin({ bottom: 16 })
 
                 Row() {
                   TextInput({ placeholder: 'Token', text: this.token })
@@ -467,12 +467,12 @@ struct LoginPage {
                     .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
                     .backgroundColor('transparent')
                     .onChange((v: string) => { this.token = v })
-                    .layoutWeight(1).height(48)
+                    .layoutWeight(1).height(52)
                   Text(this.showToken ? '◉' : '◎')
                     .fontSize(18).fontColor(this.theme.textSecondary).padding(8)
                     .onClick(() => { this.showToken = !this.showToken })
                 }
-                .width('100%').height(48).borderRadius(12)
+                .width('100%').height(52).borderRadius(24)
                 .backgroundColor(this.theme.bgCard)
                 .border({ width: 0.5, color: this.theme.borderGlass })
                 .padding({ left: 14, right: 8 }).margin({ bottom: 16 })
@@ -482,7 +482,7 @@ struct LoginPage {
                     Text('保存设备')
                       .fontSize(14).fontColor(this.theme.textPrimary)
                   }
-                  .width('47%').height(44).borderRadius(100)
+                  .width('47%').height(52).borderRadius(26)
                   .backgroundColor(this.theme.bgCard)
                   .border({ width: 1, color: this.theme.borderGlass })
                   .enabled(!this.isSaving)
@@ -492,7 +492,7 @@ struct LoginPage {
                     Text('连接并进入')
                       .fontSize(14).fontColor('#FFFFFF').fontWeight(FontWeight.Medium)
                   }
-                  .width('47%').height(44).borderRadius(100)
+                  .width('47%').height(52).borderRadius(26)
                   .linearGradient({ angle: 135, colors: [[this.theme.primary, 0], [this.theme.secondary, 1]] })
                   .enabled(!this.isConnecting && !this.isSaving)
                   .onClick(() => { this.connectAndEnter() })

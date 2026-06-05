@@ -172,8 +172,8 @@ export struct NetworkTab {
               }
             }
             .width('100%')
-            .padding(14)
-            .borderRadius(14)
+            .padding(20)
+            .borderRadius(24)
             .margin({ top: 8 })
             .backgroundColor(this.theme.bgCard)
             .backdropBlur(20)
@@ -244,8 +244,8 @@ export struct NetworkTab {
               }
               .width('100%')
               .padding(14)
-              .borderRadius(14)
-              .margin({ top: 8 })
+              .borderRadius(20)
+              .margin({ top: 12 })
               .backgroundColor(this.theme.bgCard)
               .backdropBlur(20)
               .border({ width: 0.5, color: this.theme.borderGlass })
@@ -253,7 +253,7 @@ export struct NetworkTab {
           }
         }
         .width('100%')
-        .padding({ left: 12, right: 12, top: 4, bottom: 100 })
+        .padding({ left: 12, right: 12, top: 4, bottom: 130 })
       }
       .width('100%')
       .layoutWeight(1)

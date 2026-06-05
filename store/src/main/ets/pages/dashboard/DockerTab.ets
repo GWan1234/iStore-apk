@@ -213,7 +213,7 @@ export struct DockerTab {
       Scroll() {
         Column() {
           Text('🐳 Docker')
-            .fontSize(20).fontWeight(FontWeight.Bold)
+            .fontSize(24).fontWeight(FontWeight.Bold)
           .fontColor(this.theme.textPrimary).width('100%').margin({ top: 12 })
 
         if (this.isLoading) {
@@ -230,11 +230,11 @@ export struct DockerTab {
           Row() {
             Column() {
               Text('Daemon')
-                .fontSize(11).fontColor(this.theme.textTertiary)
+                .fontSize(12).fontColor(this.theme.textTertiary)
               Row() {
                 Circle({ width: 8, height: 8 }).fill(this.getStatusColor())
                 Text(this.getStatusText())
-                  .fontSize(18).fontColor(this.getStatusColor()).fontWeight(FontWeight.Bold)
+                  .fontSize(20).fontColor(this.getStatusColor()).fontWeight(FontWeight.Bold)
                   .margin({ left: 6 })
               }
               .margin({ top: 4 })
@@ -243,29 +243,29 @@ export struct DockerTab {
 
             Column() {
               Text('容器')
-                .fontSize(11).fontColor(this.theme.textTertiary)
+                .fontSize(12).fontColor(this.theme.textTertiary)
               Text(`${this.overview.containersRunning}/${this.overview.containersTotal}`)
-                .fontSize(18).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
+                .fontSize(20).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
             }
             .alignItems(HorizontalAlign.Center).layoutWeight(1)
 
             Column() {
               Text('镜像')
-                .fontSize(11).fontColor(this.theme.textTertiary)
+                .fontSize(12).fontColor(this.theme.textTertiary)
               Text(`${this.overview.imagesTotal}`)
-                .fontSize(18).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
+                .fontSize(20).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
             }
             .alignItems(HorizontalAlign.Center).layoutWeight(1)
 
             Column() {
               Text('磁盘')
-                .fontSize(11).fontColor(this.theme.textTertiary)
+                .fontSize(12).fontColor(this.theme.textTertiary)
               Text(this.overview.diskUsed)
                 .fontSize(14).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
             }
             .alignItems(HorizontalAlign.Center).layoutWeight(1)
           }
-          .width('100%').padding(16).borderRadius(14).margin({ top: 12 })
+          .width('100%').padding(20).borderRadius(24).margin({ top: 12 })
           .backgroundColor(this.theme.bgCard).backdropBlur(20)
           .border({ width: 0.5, color: this.theme.borderGlass })
 
@@ -288,7 +288,7 @@ export struct DockerTab {
                   .onClick(() => { this.startDocker() })
               }
             }
-            .width('100%').padding(14).borderRadius(12).margin({ top: 12 })
+            .width('100%').padding(18).borderRadius(20).margin({ top: 12 })
             .backgroundColor(this.theme.bgCard).backdropBlur(20)
             .border({ width: 0.5, color: this.theme.borderGlass })
           } else {
@@ -300,7 +300,7 @@ export struct DockerTab {
 
             if (this.containers.length > 0) {
               Text('容器列表')
-                .fontSize(12).fontColor(this.theme.textTertiary)
+                .fontSize(13).fontColor(this.theme.textTertiary)
                 .width('100%').padding({ left: 4, top: 12, bottom: 6 })
 
               ForEach(this.containers, (c: DockerContainer) => {
@@ -311,16 +311,16 @@ export struct DockerTab {
                         LoadingProgress().width(16).height(16).color(this.theme.primary)
                       } else {
                         Image(this.containerIconUrl(c.image))
-                          .width(36).height(36).objectFit(ImageFit.Cover).borderRadius(8)
+                          .width(40).height(40).objectFit(ImageFit.Cover).borderRadius(12)
                       }
                     }
-                    .width(36).height(36).borderRadius(8)
+                    .width(40).height(40).borderRadius(12)
                     .backgroundColor('rgba(200,200,200,0.15)')
                     .justifyContent(FlexAlign.Center)
 
                     Column() {
                       Text(c.name)
-                        .fontSize(14).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Medium)
+                        .fontSize(15).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Medium)
                       Text(this.actionContainer === c.name ? '操作中...' : c.status)
                         .fontSize(11).fontColor(this.theme.textTertiary).margin({ top: 2 })
                         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -333,18 +333,18 @@ export struct DockerTab {
                     } else if (c.running) {
                       Text('停止')
                         .fontSize(11).fontColor('#FF5252').fontWeight(FontWeight.Medium)
-                        .padding({ top: 6, bottom: 6, left: 12, right: 12 }).borderRadius(6)
+                        .padding({ top: 8, bottom: 8, left: 14, right: 14 }).borderRadius(10)
                         .backgroundColor(this.theme.bgGlassLight)
                         .onClick(() => { this.containerAction(c.name, 'stop') })
                       Text('重启')
                         .fontSize(11).fontColor(this.theme.primary).fontWeight(FontWeight.Medium)
-                        .padding({ top: 6, bottom: 6, left: 12, right: 12 }).borderRadius(6)
+                        .padding({ top: 8, bottom: 8, left: 14, right: 14 }).borderRadius(10)
                         .backgroundColor(this.theme.bgGlassLight).margin({ left: 6 })
                         .onClick(() => { this.containerAction(c.name, 'restart') })
                     } else {
                       Text('启动')
                         .fontSize(11).fontColor('#4CAF50').fontWeight(FontWeight.Medium)
-                        .padding({ top: 6, bottom: 6, left: 16, right: 16 }).borderRadius(6)
+                        .padding({ top: 8, bottom: 8, left: 18, right: 18 }).borderRadius(10)
                         .backgroundColor(this.theme.bgGlassLight)
                         .onClick(() => { this.containerAction(c.name, 'start') })
                     }
@@ -362,14 +362,14 @@ export struct DockerTab {
                   Row() {
                     Circle({ width: 6, height: 6 }).fill('#FF9800')
                     Text(` CPU ${this.lastCpu(c)}%`)
-                      .fontSize(9).fontColor('rgba(255,255,255,0.5)')
+                      .fontSize(10).fontColor('rgba(255,255,255,0.5)')
                     Circle({ width: 6, height: 6 }).fill('#64B5F6').margin({ left: 14 })
                     Text(` MEM ${this.lastMem(c)}%`)
-                      .fontSize(9).fontColor('rgba(255,255,255,0.5)')
+                      .fontSize(10).fontColor('rgba(255,255,255,0.5)')
                   }
                   .width('100%').margin({ top: 4 })
                 }
-                .width('100%').padding(12).borderRadius(12).margin({ top: 6 })
+                .width('100%').padding(16).borderRadius(20).margin({ top: 10 })
                 .backgroundColor(this.theme.bgCard).backdropBlur(20)
                 .border({ width: 0.5, color: this.theme.borderGlass })
               }, (c: DockerContainer): string => c.id)
@@ -381,7 +381,7 @@ export struct DockerTab {
           }
         }
       }
-      .width('100%').padding({ left: 16, right: 16, bottom: 140 })
+      .width('100%').padding({ left: 16, right: 16, bottom: 150 })
       }
       .width('100%').height('100%').scrollBar(BarState.Off)
       .onScroll((_x: number, y: number) => {

@@ -233,7 +233,7 @@ export struct DashboardTab {
       Row() {
         Column() {
           Text(this.systemInfo.hostname || 'OpenWrt')
-            .fontSize(20)
+            .fontSize(24)
             .fontColor(this.theme.textPrimary)
             .fontWeight(FontWeight.Bold)
             .maxLines(1)
@@ -345,11 +345,11 @@ export struct DashboardTab {
               // CPU
               Column() {
                 Text('CPU')
-                  .fontSize(10)
+                  .fontSize(11)
                   .fontColor(this.theme.textTertiary)
                   .margin({ bottom: 4 })
                 Text(FormatUtils.formatPercent(this.systemInfo.cpuUsage))
-                  .fontSize(16)
+                  .fontSize(18)
                   .fontColor(this.getCpuColor(this.systemInfo.cpuUsage))
                   .fontWeight(FontWeight.Bold)
                   .margin({ bottom: 6 })
@@ -386,16 +386,16 @@ export struct DashboardTab {
               // 内存
               Column() {
                 Text('内存')
-                  .fontSize(10)
+                  .fontSize(11)
                   .fontColor(this.theme.textTertiary)
                   .margin({ bottom: 4 })
                 Text(`${this.getMemoryPct().toFixed(1)}%`)
-                  .fontSize(16)
+                  .fontSize(18)
                   .fontColor(this.getMemoryColor(this.getMemoryPct()))
                   .fontWeight(FontWeight.Bold)
                   .margin({ bottom: 2 })
                 Text(`${FormatUtils.formatBytes(this.systemInfo.memoryUsed)} / ${FormatUtils.formatBytes(this.systemInfo.memoryTotal)}`)
-                  .fontSize(9)
+                  .fontSize(11)
                   .fontColor(this.theme.textTertiary)
                   .margin({ bottom: 4 })
 
@@ -431,12 +431,12 @@ export struct DashboardTab {
               // 温度
               Column() {
                 Text('CPU温度')
-                  .fontSize(10)
+                  .fontSize(11)
                   .fontColor(this.theme.textTertiary)
                   .margin({ bottom: 4 })
                 Row() {
                   Text(this.systemInfo.cpuTemp > 0 ? this.systemInfo.cpuTemp.toFixed(1) : '--')
-                    .fontSize(16)
+                    .fontSize(18)
                     .fontColor(this.getTempColor(this.systemInfo.cpuTemp))
                     .fontWeight(FontWeight.Bold)
                   Text('°C')
@@ -514,8 +514,8 @@ export struct DashboardTab {
               this.infoRow('运行时间', this.systemInfo.uptime > 0 ? FormatUtils.formatUptime(this.systemInfo.uptime) : '--')
             }
             .width('100%')
-            .padding(14)
-            .borderRadius(14)
+            .padding(20)
+            .borderRadius(24)
             .margin({ top: 10 })
             .backgroundColor(this.theme.bgCard)
             .backdropBlur(20)
@@ -632,11 +632,11 @@ export struct DashboardTab {
 
                     Row() {
                       Text(`${FormatUtils.formatBytes(mp.used)} / ${FormatUtils.formatBytes(mp.size)}`)
-                        .fontSize(10)
+                        .fontSize(11)
                         .fontColor(this.theme.textTertiary)
                       Blank()
                       Text(`可用 ${FormatUtils.formatBytes(mp.available)}`)
-                        .fontSize(10)
+                        .fontSize(11)
                         .fontColor(this.theme.textSecondary)
                     }
                     .width('100%')
@@ -672,14 +672,14 @@ export struct DashboardTab {
             }
             .width('100%')
             .padding(14)
-            .borderRadius(14)
-            .margin({ top: 10 })
+            .borderRadius(18)
+            .margin({ top: 12 })
             .backgroundColor(this.theme.bgCard)
             .backdropBlur(20)
             .border({ width: 0.5, color: this.theme.borderGlass })
           }
           .width('100%')
-          .padding({ left: 12, right: 12, bottom: 120 })
+          .padding({ left: 12, right: 12, bottom: 130 })
         }
         .width('100%')
         .layoutWeight(1)
@@ -720,7 +720,7 @@ export struct DashboardTab {
     if (iface.macAddress) {
       Row() {
         Text('MAC  ')
-          .fontSize(10)
+          .fontSize(11)
           .fontColor(this.theme.textTertiary)
         Text(iface.macAddress)
           .fontSize(11)
@@ -735,16 +735,16 @@ export struct DashboardTab {
       Row() {
         if (iface.gateway) {
           Text(`网关 ${iface.gateway}`)
-            .fontSize(10)
+            .fontSize(11)
             .fontColor(this.theme.textTertiary)
         }
         if (iface.gateway && iface.mtu > 0) {
           Text('  ·  ')
-            .fontSize(10)
+            .fontSize(11)
             .fontColor(this.theme.textTertiary)
         }
         Text(`MTU ${iface.mtu}`)
-          .fontSize(10)
+          .fontSize(11)
           .fontColor(this.theme.textTertiary)
       }
       .width('100%')
@@ -754,10 +754,10 @@ export struct DashboardTab {
     if (iface.rxBytes > 0 || iface.txBytes > 0) {
       Row() {
         Text(`↓ ${FormatUtils.formatBytes(iface.rxBytes)}`)
-          .fontSize(10)
+          .fontSize(11)
           .fontColor('#00E676')
         Text(`  ↑ ${FormatUtils.formatBytes(iface.txBytes)}`)
-          .fontSize(10)
+          .fontSize(11)
           .fontColor('#448AFF')
       }
       .width('100%')
@@ -768,11 +768,11 @@ export struct DashboardTab {
   @Builder infoRow(label: string, value: string) {
     Row() {
       Text(label)
-        .fontSize(12)
+        .fontSize(11)
         .fontColor(this.theme.textSecondary)
         .width(60)
       Text(value)
-        .fontSize(12)
+        .fontSize(11)
         .fontColor(this.theme.textPrimary)
         .fontWeight(FontWeight.Medium)
     }
