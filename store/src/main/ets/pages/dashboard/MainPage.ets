@@ -2,7 +2,7 @@ import { AppState } from '../../common/store/AppState'
 import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit'
-import { SymbolGlyphModifier } from '@kit.ArkUI'
+import { SymbolGlyphModifier, window } from '@kit.ArkUI'
 import { DashboardTab } from './DashboardTab'
 import { DeviceTab } from './DeviceTab'
 import { IStoreTabView } from './IStoreTabView'
@@ -16,6 +16,7 @@ struct MainPage {
   @State isDark: boolean = true
   @State deviceName: string = ''
   @State navHidden: boolean = false
+  @State bottomSafeArea: number = 0
   private lastScrollOffset: number = 0
   private tabsController: HdsTabsController = new HdsTabsController()
 
@@ -32,6 +33,14 @@ struct MainPage {
 
     AppState.getInstance().onNavChange(() => {
       this.navHidden = AppState.getInstance().isNavHidden()
+    })
+
+    // 获取系统底部导航指示条高度，避免 Tab 栏被遮挡（HarmonyOS 7+ 适配）
+    window.getLastWindow(this.getUIContext().getHostContext()).then((win: window.Window) => {
+      const avoidArea: window.AvoidArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
+      this.bottomSafeArea = px2vp(avoidArea.bottomRect.height)
+    }).catch(() => {
+      this.bottomSafeArea = 0
     })
   }
 
@@ -69,16 +78,16 @@ struct MainPage {
             DeviceTab({ theme: this.theme })
           }
           .tabBar(new BottomTabBarStyle({
-            normal: new SymbolGlyphModifier($r('sys.symbol.rectangle_on_rectangle_fill')),
-            selected: new SymbolGlyphModifier($r('sys.symbol.rectangle_on_rectangle_fill'))
+            normal: new SymbolGlyphModifier($r('sys.symbol.phone_fill')),
+            selected: new SymbolGlyphModifier($r('sys.symbol.phone_fill'))
           }, '设备'))
 
           TabContent() {
             NetworkTab({ theme: this.theme })
           }
           .tabBar(new BottomTabBarStyle({
-            normal: new SymbolGlyphModifier($r('sys.symbol.square_on_square_fill')),
-            selected: new SymbolGlyphModifier($r('sys.symbol.square_on_square_fill'))
+            normal: new SymbolGlyphModifier($r('sys.symbol.ohos_wifi')),
+            selected: new SymbolGlyphModifier($r('sys.symbol.ohos_wifi'))
           }, '网络'))
 
           TabContent() {
@@ -92,10 +101,7 @@ struct MainPage {
           TabContent() {
             DockerTab({ theme: this.theme })
           }
-          .tabBar(new BottomTabBarStyle({
-            normal: new SymbolGlyphModifier($r('sys.symbol.square_fill')),
-            selected: new SymbolGlyphModifier($r('sys.symbol.square_fill'))
-          }, 'Docker'))
+          .tabBar(new BottomTabBarStyle($r('app.media.docker_icon'), 'Docker'))
 
           TabContent() {
             Column() {
@@ -128,7 +134,7 @@ struct MainPage {
         })
         .barFloatingStyle({
           barWidth: { smallWidth: 320, mediumWidth: 400, largeWidth: 480 },
-          barBottomMargin: this.navHidden ? -100 : 24,
+          barBottomMargin: this.navHidden ? -100 : (24 + this.bottomSafeArea),
           gradientMask: { maskColor: this.isDark ? '#22000000' : '#33E8ECF1', maskHeight: 88 },
           systemMaterialEffect: {
             materialType: hdsMaterial.MaterialType.IMMERSIVE,

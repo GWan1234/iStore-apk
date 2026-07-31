@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Docker whale body -->
+  <path d="M8 26 C8 20, 12 16, 24 16 C36 16, 40 20, 40 26 L40 32 C40 34, 38 36, 36 36 L12 36 C10 36, 8 34, 8 32 Z" fill="#0DB7ED" stroke="#0DB7ED" stroke-width="0.5"/>
+  <!-- Containers on whale back -->
+  <rect x="11" y="12" width="4" height="4" rx="0.5" fill="#0DB7ED"/>
+  <rect x="17" y="10" width="4" height="6" rx="0.5" fill="#0DB7ED"/>
+  <rect x="23" y="8" width="4" height="8" rx="0.5" fill="#0DB7ED"/>
+  <rect x="29" y="10" width="4" height="6" rx="0.5" fill="#0DB7ED"/>
+  <rect x="35" y="12" width="4" height="4" rx="0.5" fill="#0DB7ED"/>
+  <!-- Whale tail -->
+  <path d="M40 28 L46 24 L44 28 L46 32 Z" fill="#0DB7ED"/>
+  <!-- Whale eye -->
+  <circle cx="14" cy="24" r="1.5" fill="#FFFFFF"/>
+  <!-- Whale mouth line -->
+  <path d="M12 26 Q16 28 20 26" stroke="#066B8C" stroke-width="0.5" fill="none"/>
+  <!-- Lower fins -->
+  <path d="M16 36 L14 40 L18 36" fill="#0A9BC9"/>
+  <path d="M32 36 L30 40 L34 36" fill="#0A9BC9"/>
+</svg>
