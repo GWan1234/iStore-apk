@@ -152,7 +152,9 @@ export class DeviceStore {
       host: d.host,
       port: Number(d.port),  // port 在 SavedDevice 中是字符串，需转为数字
       token: d.token,
-      useHttps: d.useHttps
+      useHttps: d.useHttps,
+      username: d.username || '',
+      password: d.password || ''
     }
   }
 

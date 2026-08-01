@@ -875,13 +875,14 @@ export class ApiService {
   async fetchOafStatus(): Promise<OafStatus> {
     try {
       // 获取 OAF（应用过滤引擎）各组件版本和运行状态
+      // ubus appfilter.get_oaf_status 返回 {enable, version, engine_status, engine_version, kernel_version, config_enable}
       const status = await this.client.getOafStatus()
       return {
-        pluginVersion: ObjectHelper.getString(status, 'plugin_version', ''),
+        pluginVersion: ObjectHelper.getString(status, 'version', ''),
         engineVersion: ObjectHelper.getString(status, 'engine_version', ''),
         kernelVersion: ObjectHelper.getString(status, 'kernel_version', ''),
-        configStatus: ObjectHelper.getString(status, 'config_status', ''),
-        filterStatus: ObjectHelper.getString(status, 'filter_status', ''),
+        configStatus: ObjectHelper.getString(status, 'config_enable', ''),
+        filterStatus: ObjectHelper.getString(status, 'enable', ''),
         engineStatus: ObjectHelper.getString(status, 'engine_status', ''),
         versionTooHigh: false
       }
@@ -901,12 +902,13 @@ export class ApiService {
 
   async fetchAppFilterBase(): Promise<AppFilterBase> {
     try {
-      // 读取应用过滤总开关配置，API 返回 0/1 数值，需转为布尔值
+      // 读取应用过滤总开关配置
+      // ubus appfilter.get_app_filter_base 返回 {enable, work_mode, record_enable}
       const base = await this.client.getAppFilterBase()
       return {
-        appFilterEnabled: ObjectHelper.getNumber(base, 'enabled', 0) === 1,
-        appLogEnabled: ObjectHelper.getNumber(base, 'log_enabled', 0) === 1,
-        workMode: 'gateway'
+        appFilterEnabled: ObjectHelper.getNumber(base, 'enable', 0) === 1,
+        appLogEnabled: ObjectHelper.getNumber(base, 'record_enable', 0) === 1,
+        workMode: ObjectHelper.getNumber(base, 'work_mode', 0) === 1 ? 'bypass' : 'gateway'
       }
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'fetchAppFilterBase err')
@@ -916,30 +918,30 @@ export class ApiService {
 
   async fetchAppFilterClasses(): Promise<AppClass[]> {
     try {
-      // API 返回 [{ classes: [{ id, name, apps: [{ id, name }] }] }] 结构
+      // ubus appfilter.class_list 返回 {class_list: [{name, app_list: ["id,名称,启用", ...]}]}
       const classes = await this.client.getAppFilterClassList()
-      // 取第一个元素的 'classes' 数组
-      const classList = classes.length > 0 ? ObjectHelper.getArray(classes[0], 'classes') : []
+      const classList = classes.length > 0 ? ObjectHelper.getArray(classes[0], 'class_list') : []
       const list: AppClass[] = []
 
-      // 两层嵌套遍历：分类 → 每个分类下的应用
       for (let i = 0; i < classList.length; i++) {
         const cls = classList[i]
-        const apps = ObjectHelper.getArray(cls, 'apps')
+        const apps = ObjectHelper.getArray(cls, 'app_list')
         const appList: AppItem[] = []
 
         for (let j = 0; j < apps.length; j++) {
-          const app = apps[j]
+          // 应用条目为 "id,名称,启用标志" 的 CSV 字符串
+          const parts: string[] = String(apps[j]).split(',')
+          if (parts.length < 2) continue
           const appItem: AppItem = {
-            id: ObjectHelper.getNumber(app, 'id', 0),
-            name: ObjectHelper.getString(app, 'name', ''),
-            enabled: false
+            id: parseInt(parts[0]) || 0,
+            name: parts[1] || '',
+            enabled: parts.length > 2 && parts[2] === '1'
           }
           appList.push(appItem)
         }
 
         const item: AppClass = {
-          id: ObjectHelper.getNumber(cls, 'id', 0),
+          id: i + 1,
           name: ObjectHelper.getString(cls, 'name', ''),
           apps: appList
         }
@@ -958,26 +960,35 @@ export class ApiService {
 
   async fetchAppFilterTime(): Promise<AppFilterTime> {
     try {
-      // 解析时间段配置，包含固定时间段和动态时长两种模式
+      // ubus appfilter.get_app_filter_time 返回
+      // {mode, weekday_list, start_time, end_time, deny_time, allow_time, time_list: [{start, end}]}
       const time = await this.client.getAppFilterTime()
 
-      // 1. 解析固定时间段数组（每个包含 startHour/startMin/endHour/endMin）
-      const fixedTimes = ObjectHelper.getArray(time, 'fixed_times')
+      // 1. 解析固定时间段数组（start/end 为 "HH:MM" 字符串）
+      const fixedTimes = ObjectHelper.getArray(time, 'time_list')
       const fixedList: TimeSlot[] = []
 
       for (let i = 0; i < fixedTimes.length; i++) {
         const t = fixedTimes[i]
+        const startParts: string[] = ObjectHelper.getString(t, 'start', '00:00').split(':')
+        const endParts: string[] = ObjectHelper.getString(t, 'end', '00:00').split(':')
         const slot: TimeSlot = {
-          startHour: ObjectHelper.getNumber(t, 'start_hour', 0),
-          startMin: ObjectHelper.getNumber(t, 'start_min', 0),
-          endHour: ObjectHelper.getNumber(t, 'end_hour', 0),
-          endMin: ObjectHelper.getNumber(t, 'end_min', 0)
+          startHour: parseInt(startParts[0]) || 0,
+          startMin: startParts.length > 1 ? (parseInt(startParts[1]) || 0) : 0,
+          endHour: parseInt(endParts[0]) || 0,
+          endMin: endParts.length > 1 ? (parseInt(endParts[1]) || 0) : 0
         }
         fixedList.push(slot)
       }
 
-      // 2. 解析生效的星期列表（0=周日, 1=周一 ... 6=周六）
-      const weekdaysArr = ObjectHelper.getArray(time, 'weekdays')
+      // 2. 解析动态时长起止时间（顶层 start_time/end_time）
+      const dynStart: string[] = ObjectHelper.getString(time, 'start_time', '00:00').split(':')
+      const dynEnd: string[] = ObjectHelper.getString(time, 'end_time', '00:00').split(':')
+      // 动态时长：allow_time 为允许使用分钟数（-1 表示未启用）
+      const allowTime: number = ObjectHelper.getNumber(time, 'allow_time', -1)
+
+      // 3. 解析生效的星期列表（0=周日, 1=周一 ... 6=周六）
+      const weekdaysArr = ObjectHelper.getArray(time, 'weekday_list')
       const weekdays: number[] = []
       for (let i = 0; i < weekdaysArr.length; i++) {
         weekdays.push(Number(weekdaysArr[i]))
@@ -985,11 +996,11 @@ export class ApiService {
 
       return {
         fixedTimes: fixedList,
-        dynamicMinutes: ObjectHelper.getNumber(time, 'dynamic_minutes', 0),
-        dynamicStartHour: ObjectHelper.getNumber(time, 'dynamic_start_hour', 0),
-        dynamicStartMin: ObjectHelper.getNumber(time, 'dynamic_start_min', 0),
-        dynamicEndHour: ObjectHelper.getNumber(time, 'dynamic_end_hour', 0),
-        dynamicEndMin: ObjectHelper.getNumber(time, 'dynamic_end_min', 0),
+        dynamicMinutes: allowTime > 0 ? allowTime : 0,
+        dynamicStartHour: parseInt(dynStart[0]) || 0,
+        dynamicStartMin: dynStart.length > 1 ? (parseInt(dynStart[1]) || 0) : 0,
+        dynamicEndHour: parseInt(dynEnd[0]) || 0,
+        dynamicEndMin: dynEnd.length > 1 ? (parseInt(dynEnd[1]) || 0) : 0,
         weekdays: weekdays
       }
     } catch (e) {
@@ -1000,8 +1011,10 @@ export class ApiService {
 
   async fetchAppFilterUser(): Promise<AppFilterUser> {
     try {
+      // ubus appfilter.get_app_filter_user 返回 {mode: 0|1, list: [...]}
       const userConfig = await this.client.getAppFilterUser()
-      return { mode: ObjectHelper.getString(userConfig, 'mode', 'auto') as AppFilterMode, users: [] }
+      const mode: AppFilterMode = ObjectHelper.getNumber(userConfig, 'mode', 0) === 1 ? 'manual' : 'auto'
+      return { mode: mode, users: [] }
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'fetchAppFilterUser err')
     }
@@ -1064,6 +1077,21 @@ export class ApiService {
       return true
     } catch (e) {
       hilog.error(DOMAIN, TAG, `dockerServiceAction err: ${String(e)}`)
+    }
+    return false
+  }
+
+  /** Docker Remote API（2375）是否可用 */
+  hasDockerApi(): boolean {
+    return this.client.hasDockerApi()
+  }
+
+  /** 开启 Docker Remote API（会导致容器短暂重启） */
+  async enableDockerApi(): Promise<boolean> {
+    try {
+      return await this.client.enableDockerApi()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `enableDockerApi err: ${String(e)}`)
     }
     return false
   }

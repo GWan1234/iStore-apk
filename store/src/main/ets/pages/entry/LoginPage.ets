@@ -20,13 +20,14 @@ struct LoginPage {
   // ========== 表单状态 ==========
   @State host: string = ''
   @State port: string = '80'
-  @State token: string = ''
+  @State username: string = 'root'
+  @State password: string = ''
   @State label: string = ''
   @State isConnecting: boolean = false
   @State isSaving: boolean = false
   @State errorMessage: string = ''
   @State successMessage: string = ''
-  @State showToken: boolean = false
+  @State showPassword: boolean = false
   @State savedDevices: SavedDevice[] = []
   @State showAddForm: boolean = false
   @State editingId: string = ''
@@ -67,8 +68,10 @@ struct LoginPage {
     return {
       host: host,
       port: Number(port) || 80,
-      token: this.token,
-      useHttps: false
+      token: '',
+      useHttps: false,
+      username: this.username.trim(),
+      password: this.password
     }
   }
 
@@ -91,17 +94,19 @@ struct LoginPage {
       let device: SavedDevice
       if (this.editingId) {
         const existing: SavedDevice | undefined = this.appState.getDeviceById(this.editingId)
+        // 编辑旧 Token 设备时，若未填写密码则保留原 Token（避免破坏旧连接）
+        const keepLegacyToken: boolean = !this.password && !!existing && !!existing.token
         device = {
           id: this.editingId,
           label: deviceLabel,
           host: config.host,
           port: String(config.port),
-          token: config.token,
+          token: keepLegacyToken ? existing!.token : '',
           useHttps: false,
           lastConnected: existing ? existing.lastConnected : Date.now(),
           version: existing ? existing.version : 0,
-          username: existing ? existing.username : '',
-          password: existing ? existing.password : ''
+          username: keepLegacyToken ? '' : config.username!,
+          password: keepLegacyToken ? '' : config.password!
         }
         this.editingId = ''
       } else {
@@ -111,12 +116,12 @@ struct LoginPage {
           label: deviceLabel,
           host: config.host,
           port: String(config.port),
-          token: config.token,
+          token: '',
           useHttps: false,
           lastConnected: Date.now(),
           version: 0,
-          username: '',
-          password: ''
+          username: config.username!,
+          password: config.password!
         }
       }
 
@@ -138,11 +143,17 @@ struct LoginPage {
     // 优先使用已保存设备的参数，否则使用表单输入值
     const host: string = savedDevice ? savedDevice.host : this.host.trim()
     const port: string = savedDevice ? savedDevice.port : this.port
-    const token: string = savedDevice ? savedDevice.token : this.token
-    const config: ConnectionConfig = { host, port: Number(port) || 80, token, useHttps: false }
+    const token: string = savedDevice ? savedDevice.token : ''
+    const username: string = savedDevice ? (savedDevice.username || '') : this.username.trim()
+    const password: string = savedDevice ? (savedDevice.password || '') : this.password
+    const config: ConnectionConfig = { host, port: Number(port) || 80, token, useHttps: false, username, password }
 
     if (!host) {
       this.errorMessage = '请输入设备地址'
+      return
+    }
+    if (!username && !token) {
+      this.errorMessage = '请输入用户名和密码'
       return
     }
 
@@ -174,8 +185,8 @@ struct LoginPage {
           useHttps: false,
           lastConnected: Date.now(),
           version: 0,
-          username: '',
-          password: ''
+          username: config.username!,
+          password: config.password!
         }
         await this.appState.saveDevice(device)
         savedDevice = device
@@ -208,7 +219,7 @@ struct LoginPage {
         if (lastErr) {
           this.errorMessage = lastErr
         } else {
-          this.errorMessage = '连接失败，请检查地址和 Token'
+          this.errorMessage = '连接失败，请检查地址和账号密码'
         }
         setTimeout(() => { this.errorMessage = '' }, 10000)
       }
@@ -229,7 +240,8 @@ struct LoginPage {
   resetForm(): void {
     this.host = ''
     this.port = '80'
-    this.token = ''
+    this.username = 'root'
+    this.password = ''
     this.label = ''
     this.editingId = ''
     this.errorMessage = ''
@@ -239,7 +251,8 @@ struct LoginPage {
   fillForm(device: SavedDevice): void {
     this.host = device.host
     this.port = device.port
-    this.token = device.token
+    this.username = device.username || 'root'
+    this.password = device.password || ''
     this.label = device.label
     this.editingId = device.id
     this.formVersion++
@@ -262,7 +275,14 @@ struct LoginPage {
 
   shareDevice(device: SavedDevice): void {
     try {
-      const js = JSON.stringify({ host: device.host, port: device.port, token: device.token, label: device.label || '' })
+      const js = JSON.stringify({
+        host: device.host,
+        port: device.port,
+        username: device.username || '',
+        password: device.password || '',
+        token: device.token || '',
+        label: device.label || ''
+      })
       const pb = pasteboard.getSystemPasteboard()
       pb.setData(pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, js))
       this.successMessage = '已复制，可在其他设备粘贴导入'
@@ -302,8 +322,8 @@ struct LoginPage {
         label: label,
         version: 0,
         lastConnected: 0,
-        username: '',
-        password: ''
+        username: json['username'] || '',
+        password: json['password'] || ''
       }
       await this.appState.saveDevice(device)
       this.savedDevices = this.appState.devices
@@ -462,15 +482,27 @@ struct LoginPage {
                 .padding({ left: 14, right: 14 }).margin({ bottom: 16 })
 
                 Row() {
-                  TextInput({ placeholder: 'Token', text: this.token })
-                    .type(this.showToken ? InputType.Normal : InputType.Password)
+                  TextInput({ placeholder: '用户名（一般为 root）', text: this.username })
                     .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
                     .backgroundColor('transparent')
-                    .onChange((v: string) => { this.token = v })
+                    .onChange((v: string) => { this.username = v })
                     .layoutWeight(1).height(52)
-                  Text(this.showToken ? '◉' : '◎')
+                }
+                .width('100%').height(52).borderRadius(24)
+                .backgroundColor(this.theme.bgCard)
+                .border({ width: 0.5, color: this.theme.borderGlass })
+                .padding({ left: 14, right: 14 }).margin({ bottom: 16 })
+
+                Row() {
+                  TextInput({ placeholder: '密码（路由器管理密码）', text: this.password })
+                    .type(this.showPassword ? InputType.Normal : InputType.Password)
+                    .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
+                    .backgroundColor('transparent')
+                    .onChange((v: string) => { this.password = v })
+                    .layoutWeight(1).height(52)
+                  Text(this.showPassword ? '◉' : '◎')
                     .fontSize(18).fontColor(this.theme.textSecondary).padding(8)
-                    .onClick(() => { this.showToken = !this.showToken })
+                    .onClick(() => { this.showPassword = !this.showPassword })
                 }
                 .width('100%').height(52).borderRadius(24)
                 .backgroundColor(this.theme.bgCard)

@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_tpLnfJy8q7pCVD6CStUQsFYyjyfhT_RDsmoRSwLHPqs=.cer",
+          "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_RZRZz8JgZ7c07AsL653SAdBYYr9lkz1aTEseqMAFvqs=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B0D48123F29C7FB3722A718B1892D05CDA90065E844BD4ACA666F5484BF36E11DC3EB070138F72F",
-          "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_tpLnfJy8q7pCVD6CStUQsFYyjyfhT_RDsmoRSwLHPqs=.p7b",
+          "keyPassword": "0000001B3EA849F72AA291AB947343929DB4C8CEE1F782E85C2394C1415E59811659D21AC94DD9B942078D",
+          "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_RZRZz8JgZ7c07AsL653SAdBYYr9lkz1aTEseqMAFvqs=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_tpLnfJy8q7pCVD6CStUQsFYyjyfhT_RDsmoRSwLHPqs=.p12",
-          "storePassword": "0000001B4426C831C0E14CF7CEA07695DDDB6CE72067AB9FFB9EFD28DDE36FE52B91B8ABCBB56662D0E5E1"
+          "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_RZRZz8JgZ7c07AsL653SAdBYYr9lkz1aTEseqMAFvqs=.p12",
+          "storePassword": "0000001B9984CD71A4F14859DF43937F485A4340CBA3ED01A9D0701B68BCE172715530F8A0B2DC32FE019A"
         }
       }
     ],

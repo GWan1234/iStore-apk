@@ -3,12 +3,6 @@ import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
 import { DockerOverview, DockerContainer, DockerStats } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
 import { hilog } from '@kit.PerformanceAnalysisKit'
-import { DualLineChart } from './DualLineChart'
-
-interface StatsHistory {
-  cpu: number[]
-  mem: number[]
-}
 
 @Component
 export struct DockerTab {
@@ -20,14 +14,18 @@ export struct DockerTab {
   @State actionContainer: string = ''
   @State dockerStarting: boolean = false
   @State isRefreshing: boolean = false
-  @State statsHistory: Map<string, StatsHistory> = new Map()
+  @State statsMap: Map<string, DockerStats> = new Map()
+  @State apiAvailable: boolean = false
+  @State showApiConfirm: boolean = false
+  @State apiEnabling: boolean = false
   private api: ApiService = new ApiService()
   private lastScrollY: number = 0
   private refreshTimer: number = -1
   private statsTimer: number = -1
+
   aboutToAppear(): void {
+    this.apiAvailable = this.api.hasDockerApi()
     this.loadData()
-    this.fetchStats()
     this.refreshTimer = setInterval(() => { this.refreshSilently() }, 5000)
     this.statsTimer = setInterval(() => { this.fetchStats() }, 5000)
   }
@@ -50,6 +48,7 @@ export struct DockerTab {
       this.overview = await this.api.fetchDockerOverview()
       if (this.overview.daemonStatus === 'running') {
         this.containers = await this.api.fetchDockerContainers()
+        this.fetchStats()
       }
     } catch (e) {
       this.errorText = '加载失败'
@@ -62,30 +61,28 @@ export struct DockerTab {
       this.overview = await this.api.fetchDockerOverview()
       if (this.overview.daemonStatus === 'running') {
         this.containers = await this.api.fetchDockerContainers()
+        this.fetchStats()
       }
-      this.fetchStats()
     } catch (e) {
       hilog.error(0x0001, 'DockerTab', `refreshSilently err: ${String(e)}`)
     }
   }
 
+  /** 拉取容器实时统计（CPU%/MEM%），仅 Docker API 可用时有数据 */
   async fetchStats(): Promise<void> {
     try {
-      const stats = await this.api.fetchDockerStats()
-      const maxLen = 30
-      const newMap = new Map<string, StatsHistory>()
-      for (let i = 0; i < stats.length; i++) {
-        const s = stats[i]
-        const existing = this.statsHistory.get(s.name)
-        const cpuArr = existing ? [...existing.cpu] : []
-        const memArr = existing ? [...existing.mem] : []
-        cpuArr.push(s.cpuPercent)
-        memArr.push(s.memPercent)
-        if (cpuArr.length > maxLen) cpuArr.shift()
-        if (memArr.length > maxLen) memArr.shift()
-        newMap.set(s.name, { cpu: cpuArr, mem: memArr })
+      if (this.overview.daemonStatus !== 'running' || this.containers.length === 0) {
+        return
       }
-      this.statsHistory = newMap
+      const stats = await this.api.fetchDockerStats()
+      if (stats.length === 0) {
+        return
+      }
+      const newMap = new Map<string, DockerStats>()
+      for (let i = 0; i < stats.length; i++) {
+        newMap.set(stats[i].name, stats[i])
+      }
+      this.statsMap = newMap
     } catch (e) {
       hilog.error(0x0001, 'DockerTab', `fetchStats err: ${String(e)}`)
     }
@@ -100,6 +97,19 @@ export struct DockerTab {
       this.errorText = '启动 Docker 失败'
     }
     this.dockerStarting = false
+  }
+
+  /** 开启 Docker Remote API（容器会短暂重启） */
+  async enableApi(): Promise<void> {
+    this.apiEnabling = true
+    const ok = await this.api.enableDockerApi()
+    this.apiAvailable = this.api.hasDockerApi()
+    if (!this.apiAvailable) {
+      this.errorText = ok ? 'Docker API 已开启，但探测失败，请稍后重试' : '开启 Docker API 失败'
+    }
+    this.apiEnabling = false
+    this.showApiConfirm = false
+    await this.loadData()
   }
 
   async onRefresh(): Promise<void> {
@@ -169,43 +179,14 @@ export struct DockerTab {
     return `https://xuanyuan.cloud/api/logo/${name}.png`
   }
 
-  chartCpu(container: DockerContainer): number[] {
-    const hist = this.statsHistory.get(container.name)
-    return hist ? hist.cpu : []
+  cpuText(c: DockerContainer): string {
+    const s = this.statsMap.get(c.name)
+    return s ? s.cpuPercent.toFixed(1) : ''
   }
 
-  chartMem(container: DockerContainer): number[] {
-    const hist = this.statsHistory.get(container.name)
-    return hist ? hist.mem : []
-  }
-
-  lastCpu(container: DockerContainer): string {
-    const hist = this.statsHistory.get(container.name)
-    if (hist && hist.cpu.length > 0) {
-      return hist.cpu[hist.cpu.length - 1].toFixed(1)
-    }
-    return '0'
-  }
-
-  lastMem(container: DockerContainer): string {
-    const hist = this.statsHistory.get(container.name)
-    if (hist && hist.mem.length > 0) {
-      return hist.mem[hist.mem.length - 1].toFixed(1)
-    }
-    return '0'
-  }
-
-  chartMaxVal(container: DockerContainer): number {
-    const hist = this.statsHistory.get(container.name)
-    if (!hist) return 1
-    let max = 1
-    for (let i = 0; i < hist.cpu.length; i++) {
-      if (hist.cpu[i] > max) max = hist.cpu[i]
-    }
-    for (let i = 0; i < hist.mem.length; i++) {
-      if (hist.mem[i] > max) max = hist.mem[i]
-    }
-    return Math.ceil(max)
+  memText(c: DockerContainer): string {
+    const s = this.statsMap.get(c.name)
+    return s ? s.memPercent.toFixed(1) : ''
   }
 
   build() {
@@ -222,11 +203,12 @@ export struct DockerTab {
             Text('加载中...').fontSize(13).fontColor(this.theme.textTertiary).margin({ top: 12 })
           }
           .width('100%').padding(40).alignItems(HorizontalAlign.Center).margin({ top: 20 })
-        } else if (this.errorText && this.containers.length === 0) {
+        } else if (this.errorText && this.containers.length === 0 && this.overview.daemonStatus !== 'running') {
           Text(this.errorText)
             .fontSize(13).fontColor(this.theme.textTertiary)
             .width('100%').textAlign(TextAlign.Center).margin({ top: 40 })
         } else {
+          // ========== 概览卡片 ==========
           Row() {
             Column() {
               Text('Daemon')
@@ -258,10 +240,10 @@ export struct DockerTab {
             .alignItems(HorizontalAlign.Center).layoutWeight(1)
 
             Column() {
-              Text('磁盘')
+              Text('版本')
                 .fontSize(12).fontColor(this.theme.textTertiary)
-              Text(this.overview.diskUsed)
-                .fontSize(14).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
+              Text(this.overview.dockerVersion || '-')
+                .fontSize(15).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
             }
             .alignItems(HorizontalAlign.Center).layoutWeight(1)
           }
@@ -292,12 +274,58 @@ export struct DockerTab {
             .backgroundColor(this.theme.bgCard).backdropBlur(20)
             .border({ width: 0.5, color: this.theme.borderGlass })
           } else {
-            if (this.overview.dockerVersion) {
-              Text(`Docker ${this.overview.dockerVersion}`)
-                .fontSize(11).fontColor(this.theme.textTertiary)
-                .width('100%').padding({ left: 4, top: 14 })
+            // ========== Docker API 开启引导（未开启时显示） ==========
+            if (!this.apiAvailable) {
+              Column() {
+                Row() {
+                  Text('💡')
+                    .fontSize(14)
+                  Text('开启 Docker API 后，可显示容器 CPU / 内存实时统计')
+                    .fontSize(12).fontColor(this.theme.textSecondary)
+                    .layoutWeight(1).margin({ left: 8 })
+                }
+                .width('100%')
+
+                if (this.apiEnabling) {
+                  Row() {
+                    LoadingProgress().width(14).height(14).color(this.theme.primary)
+                    Text('正在开启（约 10 秒，容器会短暂重启）...')
+                      .fontSize(12).fontColor(this.theme.primary).margin({ left: 8 })
+                  }
+                  .margin({ top: 10 })
+                } else if (this.showApiConfirm) {
+                  Row() {
+                    Text('容器将短暂重启，确认开启？')
+                      .fontSize(12).fontColor('#FF9800').layoutWeight(1)
+                    Text('取消')
+                      .fontSize(12).fontColor(this.theme.textTertiary)
+                      .padding({ top: 6, bottom: 6, left: 12, right: 12 })
+                      .onClick(() => { this.showApiConfirm = false })
+                    Text('确认开启')
+                      .fontSize(12).fontColor('#FFFFFF').fontWeight(FontWeight.Medium)
+                      .padding({ top: 6, bottom: 6, left: 12, right: 12 }).borderRadius(8)
+                      .backgroundColor(this.theme.primary).margin({ left: 8 })
+                      .onClick(() => { this.enableApi() })
+                  }
+                  .width('100%').margin({ top: 10 })
+                } else {
+                  Row() {
+                    Blank()
+                    Text('立即开启')
+                      .fontSize(12).fontColor(this.theme.primary).fontWeight(FontWeight.Medium)
+                      .padding({ top: 6, bottom: 6, left: 14, right: 14 }).borderRadius(8)
+                      .backgroundColor(this.theme.bgGlassLight)
+                      .onClick(() => { this.showApiConfirm = true })
+                  }
+                  .width('100%').margin({ top: 8 })
+                }
+              }
+              .width('100%').padding(16).borderRadius(20).margin({ top: 12 })
+              .backgroundColor(this.theme.bgCard).backdropBlur(20)
+              .border({ width: 0.5, color: this.theme.borderGlass })
             }
 
+            // ========== 容器列表 ==========
             if (this.containers.length > 0) {
               Text('容器列表')
                 .fontSize(13).fontColor(this.theme.textTertiary)
@@ -308,7 +336,7 @@ export struct DockerTab {
                   Row() {
                     Column() {
                       if (this.actionContainer === c.name) {
-                        LoadingProgress().width(16).height(16).color(this.theme.primary)
+                        LoadingProgress().width(18).height(18).color(this.theme.primary)
                       } else {
                         Image(this.containerIconUrl(c.image))
                           .width(40).height(40).objectFit(ImageFit.Cover).borderRadius(12)
@@ -321,53 +349,60 @@ export struct DockerTab {
                     Column() {
                       Text(c.name)
                         .fontSize(15).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Medium)
-                      Text(this.actionContainer === c.name ? '操作中...' : c.status)
-                        .fontSize(11).fontColor(this.theme.textTertiary).margin({ top: 2 })
                         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                      Row() {
+                        Circle({ width: 6, height: 6 })
+                          .fill(c.running ? '#4CAF50' : '#9E9E9E')
+                        Text(this.actionContainer === c.name ? '操作中...' : c.status)
+                          .fontSize(11).fontColor(this.theme.textTertiary)
+                          .margin({ left: 5 })
+                          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                      }
+                      .margin({ top: 3 })
                     }
                     .alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 10 })
 
-                    if (this.actionContainer === c.name) {
-                      LoadingProgress().width(16).height(16).color(this.theme.primary)
-                        .margin({ right: 12 })
-                    } else if (c.running) {
-                      Text('停止')
-                        .fontSize(11).fontColor('#FF5252').fontWeight(FontWeight.Medium)
-                        .padding({ top: 8, bottom: 8, left: 14, right: 14 }).borderRadius(10)
-                        .backgroundColor(this.theme.bgGlassLight)
-                        .onClick(() => { this.containerAction(c.name, 'stop') })
-                      Text('重启')
-                        .fontSize(11).fontColor(this.theme.primary).fontWeight(FontWeight.Medium)
-                        .padding({ top: 8, bottom: 8, left: 14, right: 14 }).borderRadius(10)
-                        .backgroundColor(this.theme.bgGlassLight).margin({ left: 6 })
-                        .onClick(() => { this.containerAction(c.name, 'restart') })
-                    } else {
-                      Text('启动')
-                        .fontSize(11).fontColor('#4CAF50').fontWeight(FontWeight.Medium)
-                        .padding({ top: 8, bottom: 8, left: 18, right: 18 }).borderRadius(10)
-                        .backgroundColor(this.theme.bgGlassLight)
-                        .onClick(() => { this.containerAction(c.name, 'start') })
+                    if (this.actionContainer !== c.name) {
+                      if (c.running) {
+                        Text('停止')
+                          .fontSize(11).fontColor('#FF5252').fontWeight(FontWeight.Medium)
+                          .padding({ top: 8, bottom: 8, left: 14, right: 14 }).borderRadius(10)
+                          .backgroundColor(this.theme.bgGlassLight)
+                          .onClick(() => { this.containerAction(c.name, 'stop') })
+                        Text('重启')
+                          .fontSize(11).fontColor(this.theme.primary).fontWeight(FontWeight.Medium)
+                          .padding({ top: 8, bottom: 8, left: 14, right: 14 }).borderRadius(10)
+                          .backgroundColor(this.theme.bgGlassLight).margin({ left: 6 })
+                          .onClick(() => { this.containerAction(c.name, 'restart') })
+                      } else {
+                        Text('启动')
+                          .fontSize(11).fontColor('#4CAF50').fontWeight(FontWeight.Medium)
+                          .padding({ top: 8, bottom: 8, left: 18, right: 18 }).borderRadius(10)
+                          .backgroundColor(this.theme.bgGlassLight)
+                          .onClick(() => { this.containerAction(c.name, 'start') })
+                      }
                     }
                   }
                   .width('100%')
 
-                  DualLineChart({
-                    cpuData: this.chartCpu(c),
-                    memData: this.chartMem(c),
-                    chartMax: this.chartMaxVal(c),
-                    chartWidth: 300,
-                    chartHeight: 42
-                  })
-
                   Row() {
-                    Circle({ width: 6, height: 6 }).fill('#FF9800')
-                    Text(` CPU ${this.lastCpu(c)}%`)
-                      .fontSize(10).fontColor('rgba(255,255,255,0.5)')
-                    Circle({ width: 6, height: 6 }).fill('#64B5F6').margin({ left: 14 })
-                    Text(` MEM ${this.lastMem(c)}%`)
-                      .fontSize(10).fontColor('rgba(255,255,255,0.5)')
+                    Text(c.image)
+                      .fontSize(10).fontColor(this.theme.textTertiary)
+                      .layoutWeight(1)
+                      .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+
+                    if (c.running && this.cpuText(c) !== '') {
+                      Text(`CPU ${this.cpuText(c)}%`)
+                        .fontSize(10).fontColor('#FF9800')
+                        .padding({ top: 3, bottom: 3, left: 8, right: 8 }).borderRadius(8)
+                        .backgroundColor('rgba(255,152,0,0.12)')
+                      Text(`MEM ${this.memText(c)}%`)
+                        .fontSize(10).fontColor('#64B5F6')
+                        .padding({ top: 3, bottom: 3, left: 8, right: 8 }).borderRadius(8)
+                        .backgroundColor('rgba(100,181,246,0.12)').margin({ left: 6 })
+                    }
                   }
-                  .width('100%').margin({ top: 4 })
+                  .width('100%').margin({ top: 10 })
                 }
                 .width('100%').padding(16).borderRadius(20).margin({ top: 10 })
                 .backgroundColor(this.theme.bgCard).backdropBlur(20)

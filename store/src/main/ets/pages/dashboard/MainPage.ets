@@ -78,16 +78,16 @@ struct MainPage {
             DeviceTab({ theme: this.theme })
           }
           .tabBar(new BottomTabBarStyle({
-            normal: new SymbolGlyphModifier($r('sys.symbol.phone_fill')),
-            selected: new SymbolGlyphModifier($r('sys.symbol.phone_fill'))
+            normal: new SymbolGlyphModifier($r('sys.symbol.nearby_devices')),
+            selected: new SymbolGlyphModifier($r('sys.symbol.nearby_devices'))
           }, '设备'))
 
           TabContent() {
             NetworkTab({ theme: this.theme })
           }
           .tabBar(new BottomTabBarStyle({
-            normal: new SymbolGlyphModifier($r('sys.symbol.ohos_wifi')),
-            selected: new SymbolGlyphModifier($r('sys.symbol.ohos_wifi'))
+            normal: new SymbolGlyphModifier($r('sys.symbol.wifi_router_fill')),
+            selected: new SymbolGlyphModifier($r('sys.symbol.wifi_router_fill'))
           }, '网络'))
 
           TabContent() {
@@ -101,7 +101,10 @@ struct MainPage {
           TabContent() {
             DockerTab({ theme: this.theme })
           }
-          .tabBar(new BottomTabBarStyle($r('app.media.docker_icon'), 'Docker'))
+          .tabBar(new BottomTabBarStyle({
+            normal: new SymbolGlyphModifier($r('sys.symbol.archivebox_fill')),
+            selected: new SymbolGlyphModifier($r('sys.symbol.archivebox_fill'))
+          }, 'Docker'))
 
           TabContent() {
             Column() {

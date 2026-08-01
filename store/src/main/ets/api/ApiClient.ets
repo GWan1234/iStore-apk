@@ -1,11 +1,18 @@
 /**
  * API 客户端（单例）
- * 负责与路由器 CGI API 的底层 HTTP 通信
- * 提供各类数据的底层请求方法，返回原始 JSON 数据
+ * 负责与路由器的底层 HTTP 通信，提供各类数据的底层请求方法
  *
  * 架构说明：
  * - ApiClient：底层 HTTP 通信层（本文件）
  * - ApiService：业务逻辑层，调用 ApiClient 并解析数据为 Models 类型
+ *
+ * 连接模式（connect 时自动选择）：
+ * 1. ubus 模式（推荐）：使用 LuCI 自带的 /ubus JSON-RPC 接口，
+ *    通过账号密码登录获取会话，无需在路由器上安装任何脚本。
+ *    所有 OpenWrt 衍生版（iStoreOS / ImmortalWrt / QWRT / LEDE 等）
+ *    只要带有 LuCI 网页管理界面即原生支持。
+ * 2. legacy 模式（兼容）：使用旧版 router-api CGI 脚本 + Token，
+ *    仅用于兼容已保存的旧设备，新设备不再使用。
  */
 import { http } from '@kit.NetworkKit'
 import { ConnectionConfig } from '../models/Models'
@@ -13,6 +20,9 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 
 const TAG = 'iStoreApi'
 const DOMAIN = 0x0001
+
+/** ubus 未登录时使用的空会话 ID */
+const NULL_SESSION = '00000000000000000000000000000000'
 
 /**
  * 路由器 API 标准响应格式
@@ -31,11 +41,133 @@ class RouterApiResponse {
 class EmptyRecord {
 }
 
+// ========== ubus JSON-RPC 请求参数类型（ArkTS 要求显式声明） ==========
+
+class RpcRequest {
+  jsonrpc: string = '2.0'
+  id: number = 1
+  method: string = 'call'
+  params: Object[] = []
+}
+
+class LoginParams {
+  username: string = ''
+  password: string = ''
+}
+
+class DeviceParam {
+  device: string = ''
+}
+
+class FileReadParam {
+  path: string = ''
+}
+
+class FileExecParam {
+  command: string = ''
+  params: string[] = []
+}
+
+class UciGetParam {
+  config: string = ''
+  section: string = ''
+  option: string = ''
+}
+
+class RcInitParam {
+  name: string = ''
+  action: string = ''
+}
+
+class ServiceListParam {
+  name: string = ''
+}
+
+class VerboseParam {
+  verbose: boolean = true
+}
+
+class UciSetParam {
+  config: string = ''
+  section: string = ''
+  values: Object = new Object()
+}
+
+class UciApplyParam {
+  rollback: boolean = false
+}
+
+class DockerHostsValues {
+  hosts: string[] = []
+}
+
+/**
+ * LuCI 网页通道 HTTP 结果
+ */
+class LuciHttpResult {
+  status: number = 0   // HTTP 状态码（0 = 网络错误）
+  body: string = ''    // 响应体（HTML 或 JSON 文本）
+}
+
+/** dockerman 容器行解析结果 */
+class DockerRow {
+  fullId: string = ''
+  shortId: string = ''
+  name: string = ''
+  image: string = ''
+  status: string = ''
+  command: string = ''
+  running: boolean = false
+}
+
+/**
+ * JSON-RPC 底层响应
+ */
+class RpcResponse {
+  transportOk: boolean = false  // HTTP 200 且 JSON 解析成功
+  httpCode: number = 0
+  hasError: boolean = false     // 存在 JSON-RPC error 对象
+  errorCode: number = 0
+  errorMessage: string = ''
+  result: Object = new EmptyRecord() // result 原始内容（数组或对象）
+}
+
+/** 连接模式 */
+type ConnMode = 'none' | 'ubus' | 'legacy'
+
 export class ApiClient {
-  baseUrl: string = ''       // API 基础 URL
-  token: string = ''         // 认证令牌
+  baseUrl: string = ''       // API 基础 URL（协议://主机:端口）
+  token: string = ''         // 认证令牌（legacy 模式）
   connected: boolean = false // 连接状态
   lastError: string = ''     // 最近一次错误信息
+
+  // ========== 连接配置 ==========
+  private username: string = ''
+  private password: string = ''
+  private ubusUrl: string = ''    // /ubus JSON-RPC 地址
+  private legacyUrl: string = ''  // /cgi-bin/router-api 地址（旧脚本）
+
+  // ========== ubus 会话状态 ==========
+  private mode: ConnMode = 'none'
+  private sessionId: string = ''
+  private sessionExpireAt: number = 0
+  private loginInFlight: Promise<boolean> | null = null  // 登录互斥锁，防止并发重复登录
+  private ubusMissing: boolean = false                   // /ubus 接口不存在（非 LuCI 设备）
+
+  // ========== LuCI 网页通道状态（补充 ubus ACL 之外的能力：iStore 应用、Docker 容器） ==========
+  private luciCookie: string = ''                        // sysauth_http 会话 Cookie
+  private luciLoginInFlight: Promise<boolean> | null = null
+  private dockerIdMap: Map<string, string> = new Map()   // 容器名/短ID -> 完整ID（用于操作）
+  private dockerApiBase: string = ''                     // Docker Remote API 根地址（探测成功才设置）
+  private iStoreStatusCache: Object | null = null        // quickstart 系统状态缓存（温度/CPU 真实值）
+  private iStoreStatusTime: number = 0
+
+  // ========== 网速统计快照（用于差值计算实时速率） ==========
+  private prevDevStats: Map<string, number[]> = new Map()
+  private prevStatsTime: number = 0
+  private ratesInFlight: Promise<Object[]> | null = null // 速率采样互斥锁
+  private boardCache: Object | null = null               // system board 缓存
+  private rpcId: number = 1
 
   // ========== 单例模式 ==========
   private static instance: ApiClient
@@ -49,79 +181,1725 @@ export class ApiClient {
 
   /**
    * 配置连接参数
-   * @param config 连接配置（host, port, token, useHttps）
+   * @param config 连接配置（host, port, token, username, password, useHttps）
    */
   configure(config: ConnectionConfig): void {
     const protocol: string = config.useHttps ? 'https' : 'http'
-    this.baseUrl = `${protocol}://${config.host}:${config.port}/cgi-bin/router-api`
+    this.baseUrl = `${protocol}://${config.host}:${config.port}`
+    this.ubusUrl = `${this.baseUrl}/ubus`
+    this.legacyUrl = `${this.baseUrl}/cgi-bin/router-api`
     this.token = config.token
+    this.username = config.username ? config.username : ''
+    this.password = config.password ? config.password : ''
+    this.mode = 'none'
     this.connected = false
     this.lastError = ''
+    this.sessionId = ''
+    this.sessionExpireAt = 0
+    this.ubusMissing = false
+    this.prevDevStats.clear()
+    this.prevStatsTime = 0
+    this.boardCache = null
+    this.luciCookie = ''
+    this.dockerIdMap.clear()
+    this.dockerApiBase = ''
+    this.iStoreStatusCache = null
+    this.iStoreStatusTime = 0
   }
 
   /**
-   * 测试连接并验证认证：发送 system_board 请求（需要认证）
-   * ping 不检查 Token，改用 system_board 确保 Token 有效性
+   * 建立连接：
+   * 1. 有用户名时优先尝试 ubus 账号密码登录（无需脚本）
+   * 2. ubus 不可用且有 Token 时，回退到旧版 router-api 脚本模式
    * @returns 连接是否成功
    */
   async connect(): Promise<boolean> {
-    try {
-      const result = await this.request('system_board')
-      if (result && result.code === 0) {
+    // 1. 优先 ubus 模式（账号密码登录）
+    if (this.username) {
+      const loginOk: boolean = await this.ensureSession(true)
+      if (loginOk) {
+        // 验证会话权限：调用 system board
+        const board: Object | null = await this.ubusCall('system', 'board', new EmptyRecord())
+        if (board) {
+          this.mode = 'ubus'
+          this.connected = true
+          this.lastError = ''
+          this.boardCache = board
+          // 附带建立 LuCI 网页通道（iStore 应用 / Docker 容器等数据补充），失败不影响主连接
+          await this.ensureLuciCookie(true)
+          // 探测 Docker Remote API（2375），失败静默降级
+          await this.probeDockerApi()
+          return true
+        }
+        this.lastError = '登录成功，但该账号权限不足，请使用 root 账号'
+        return false
+      }
+      // ubus 接口存在但登录失败（密码错误等）→ 直接失败，不回退
+      if (!this.ubusMissing) {
+        return false
+      }
+      // /ubus 不存在（非 LuCI 设备）→ 尝试 legacy 模式
+    }
+
+    // 2. legacy 模式（旧 Token + router-api 脚本）
+    if (this.token) {
+      const legacyOk: boolean = await this.legacyConnect()
+      if (legacyOk) {
+        this.mode = 'legacy'
         this.connected = true
         this.lastError = ''
         return true
+      }
+      return false
+    }
+
+    if (this.ubusMissing) {
+      this.lastError = '该设备未安装 LuCI 管理界面，无法使用账号密码登录'
+    } else if (!this.username) {
+      this.lastError = '请输入用户名和密码'
+    }
+    return false
+  }
+
+  // ============================================================
+  //  ubus JSON-RPC 通信
+  // ============================================================
+
+  /**
+   * 发送 JSON-RPC 请求（POST）
+   */
+  private async jsonRpc(url: string, method: string, params: Object[]): Promise<RpcResponse> {
+    const resp: RpcResponse = new RpcResponse()
+    const body: RpcRequest = new RpcRequest()
+    body.id = this.rpcId++
+    body.method = method
+    body.params = params
+    const bodyStr: string = JSON.stringify(body)
+
+    const req: http.HttpRequest = http.createHttp()
+    try {
+      const r: http.HttpResponse = await req.request(url, {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/json' },
+        extraData: bodyStr,
+        connectTimeout: 5000,
+        readTimeout: 10000
+      })
+      resp.httpCode = r.responseCode
+      if (r.responseCode === 200) {
+        const resultData = r.result
+        const text: string = (typeof resultData === 'string') ? resultData : JSON.stringify(resultData)
+        const parsed = JSON.parse(text) as Record<string, Object>
+        const errObj = parsed['error']
+        if (errObj && typeof errObj === 'object') {
+          resp.hasError = true
+          resp.errorCode = ApiClient.numOf(errObj, 'code', 0)
+          resp.errorMessage = ApiClient.strOf(errObj, 'message')
+        }
+        const resultVal = parsed['result']
+        if (resultVal !== undefined && resultVal !== null) {
+          resp.result = resultVal as Object
+        }
+        resp.transportOk = true
+      }
+      req.destroy()
+    } catch (e) {
+      req.destroy()
+      hilog.error(DOMAIN, TAG, `jsonRpc error: ${e}`)
+    }
+    return resp
+  }
+
+  /**
+   * 执行 ubus 登录，获取会话 ID
+   */
+  private async doUbusLogin(): Promise<boolean> {
+    const params: LoginParams = new LoginParams()
+    params.username = this.username
+    params.password = this.password
+    const res: RpcResponse = await this.jsonRpc(this.ubusUrl, 'call',
+      [NULL_SESSION, 'session', 'login', params])
+
+    if (!res.transportOk) {
+      if (res.httpCode === 404) {
+        // /ubus 路径不存在 = 非 LuCI 设备
+        this.ubusMissing = true
+        this.lastError = '该设备未安装 LuCI 管理界面，无法使用账号密码登录'
       } else {
-        let msg: string = ''
-        if (result && result.message) {
-          msg = result.message
-        }
-        if (!msg && result) {
-          const code: number = result.code
-          if (code === 401 || code === 403) {
-            msg = `认证失败：${code === 401 ? 'Token 未提供' : 'Token 无效或已过期'}`
-          } else if (code !== 0) {
-            msg = `服务器返回错误 (${code})`
-          }
-        }
-        if (!msg) {
-          msg = '连接失败，请检查设备地址和 Token'
-        }
-        this.lastError = msg
+        // httpCode 0 = 网络错误（设备离线/地址错误/超时）
+        this.lastError = '无法连接到设备，请检查网络和地址'
+      }
+      return false
+    }
+    this.ubusMissing = false
+
+    if (res.hasError) {
+      this.lastError = '登录请求被拒绝，请确认设备支持 LuCI 网页管理'
+      return false
+    }
+
+    // result 格式：[ubus状态码, 数据]
+    const arr = res.result
+    if (!Array.isArray(arr) || arr.length < 1) {
+      this.lastError = '登录响应格式异常'
+      return false
+    }
+    const code: number = Number(arr[0])
+    if (code === 0 && arr.length >= 2) {
+      const data = arr[1] as Record<string, Object>
+      const sid = data['ubus_rpc_session']
+      this.sessionId = (typeof sid === 'string') ? sid : ''
+      const timeoutSec: number = ApiClient.numOf(data, 'timeout', 300)
+      // 预留 30 秒余量，会话为滑动过期（每次调用自动续期）
+      this.sessionExpireAt = Date.now() + Math.max(timeoutSec - 30, 30) * 1000
+      if (!this.sessionId) {
+        this.lastError = '登录响应缺少会话标识'
         return false
       }
+      return true
+    }
+
+    // ubus 错误码：5=用户不存在 6=密码错误/权限拒绝
+    if (code === 6) {
+      this.lastError = '用户名或密码错误'
+    } else if (code === 5 || code === 4) {
+      this.lastError = '用户不存在或登录参数错误'
+    } else {
+      this.lastError = `登录失败（错误码 ${code}）`
+    }
+    return false
+  }
+
+  /**
+   * 确保 ubus 会话有效（带互斥锁，避免并发重复登录）
+   * @param force 是否强制重新登录
+   */
+  private async ensureSession(force: boolean = false): Promise<boolean> {
+    if (!force && this.sessionId && Date.now() < this.sessionExpireAt) {
+      return true
+    }
+    if (this.loginInFlight) {
+      return this.loginInFlight
+    }
+    this.loginInFlight = this.doUbusLogin()
+    const ok: boolean = await this.loginInFlight
+    this.loginInFlight = null
+    return ok
+  }
+
+  /**
+   * 调用 ubus 对象方法
+   * @returns 成功时返回数据对象，失败返回 null；会话失效会自动重登并重试一次
+   */
+  private async ubusCall(obj: string, method: string, params: Object, allowRetry: boolean = true): Promise<Object | null> {
+    const loggedIn: boolean = await this.ensureSession()
+    if (!loggedIn) {
+      return null
+    }
+    const res: RpcResponse = await this.jsonRpc(this.ubusUrl, 'call', [this.sessionId, obj, method, params])
+
+    if (!res.transportOk) {
+      return null
+    }
+    if (res.hasError) {
+      // -32002/-32004：会话无效或访问被拒（会话过期）→ 重新登录后重试一次
+      if (allowRetry && (res.errorCode === -32002 || res.errorCode === -32004)) {
+        this.sessionId = ''
+        this.sessionExpireAt = 0
+        const reloginOk: boolean = await this.ensureSession(true)
+        if (reloginOk) {
+          return this.ubusCall(obj, method, params, false)
+        }
+      }
+      hilog.warn(DOMAIN, TAG, `ubus ${obj}.${method} rpc error ${res.errorCode}: ${res.errorMessage}`)
+      return null
+    }
+
+    const arr = res.result
+    if (Array.isArray(arr) && arr.length >= 1) {
+      const code: number = Number(arr[0])
+      if (code === 0) {
+        if (arr.length >= 2 && arr[1] !== null && typeof arr[1] === 'object') {
+          return arr[1] as Object
+        }
+        // 无数据但调用成功（如 reboot / rc init）
+        return new EmptyRecord()
+      }
+      hilog.warn(DOMAIN, TAG, `ubus ${obj}.${method} status ${code}`)
+    }
+    return null
+  }
+
+  /**
+   * 列出 ubus 对象（用于 WiFi 设备发现等），返回对象名列表
+   */
+  private async ubusList(pattern: string): Promise<string[]> {
+    const names: string[] = []
+    const loggedIn: boolean = await this.ensureSession()
+    if (!loggedIn) {
+      return names
+    }
+    const res: RpcResponse = await this.jsonRpc(this.ubusUrl, 'list', [this.sessionId, pattern])
+    if (!res.transportOk || res.hasError) {
+      return names
+    }
+    const result = res.result as Record<string, Object>
+    const keys = Object.keys(result)
+    for (let i = 0; i < keys.length; i++) {
+      names.push(keys[i])
+    }
+    return names
+  }
+
+  /** 读取路由器文件内容（受 LuCI 文件 ACL 限制） */
+  private async ubusReadFile(path: string): Promise<string> {
+    const p: FileReadParam = new FileReadParam()
+    p.path = path
+    const data: Object | null = await this.ubusCall('file', 'read', p)
+    if (data) {
+      return ApiClient.strOf(data, 'data')
+    }
+    return ''
+  }
+
+  /** 在路由器上执行命令（受 LuCI 命令 ACL 限制） */
+  private async ubusExec(command: string, args: string[]): Promise<string> {
+    const p: FileExecParam = new FileExecParam()
+    p.command = command
+    p.params = args
+    const data: Object | null = await this.ubusCall('file', 'exec', p)
+    if (data) {
+      return ApiClient.strOf(data, 'stdout')
+    }
+    return ''
+  }
+
+  // ============================================================
+  //  LuCI 网页通道（表单登录 + Cookie）
+  //  用于获取 ubus ACL 之外的数据：iStore 应用列表、Docker 容器等
+  // ============================================================
+
+  /**
+   * LuCI 表单登录，获取 sysauth_http Cookie
+   */
+  private async doLuciFormLogin(): Promise<boolean> {
+    this.luciCookie = ''
+    const body: string =
+      `luci_username=${encodeURIComponent(this.username)}&luci_password=${encodeURIComponent(this.password)}`
+    const req: http.HttpRequest = http.createHttp()
+    try {
+      const r: http.HttpResponse = await req.request(`${this.baseUrl}/cgi-bin/luci/`, {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        extraData: body,
+        connectTimeout: 5000,
+        readTimeout: 10000
+      })
+      // 登录成功：302 跳转（或直接 200），从 Set-Cookie 中提取 sysauth* 值
+      const cookie: string = ApiClient.extractSysauthCookie(r.header)
+      req.destroy()
+      if (cookie) {
+        this.luciCookie = cookie
+        return true
+      }
+      return false
     } catch (e) {
-      this.lastError = '无法连接到设备，请检查网络和地址'
-      hilog.error(DOMAIN, TAG, `Connect failed: ${e}`)
+      req.destroy()
+      hilog.error(DOMAIN, TAG, `luciFormLogin error: ${e}`)
       return false
     }
   }
 
   /**
-   * 底层 HTTP GET 请求方法
-   * @param action API 操作名称（如 'ping', 'system_info' 等）
+   * 从响应头中提取 sysauth Cookie（兼容 sysauth / sysauth_http，大小写不敏感）
+   */
+  private static extractSysauthCookie(header: Object): string {
+    if (!header || typeof header !== 'object') {
+      return ''
+    }
+    const rec = header as Record<string, Object>
+    const keys = Object.keys(rec)
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i].toLowerCase() !== 'set-cookie') {
+        continue
+      }
+      const raw = rec[keys[i]]
+      const parts: string[] = []
+      if (Array.isArray(raw)) {
+        for (let j = 0; j < raw.length; j++) {
+          parts.push(String(raw[j]))
+        }
+      } else if (raw !== undefined && raw !== null) {
+        parts.push(String(raw))
+      }
+      for (let j = 0; j < parts.length; j++) {
+        const m = parts[j].match(/(sysauth[_a-z]*)=([0-9a-fA-F]+)/)
+        if (m && m[2]) {
+          return `${m[1]}=${m[2]}`
+        }
+      }
+    }
+    return ''
+  }
+
+  /**
+   * 确保 LuCI Cookie 有效（带互斥锁）
+   */
+  private async ensureLuciCookie(force: boolean = false): Promise<boolean> {
+    if (!force && this.luciCookie) {
+      return true
+    }
+    if (this.luciLoginInFlight) {
+      return this.luciLoginInFlight
+    }
+    this.luciLoginInFlight = this.doLuciFormLogin()
+    const ok: boolean = await this.luciLoginInFlight
+    this.luciLoginInFlight = null
+    return ok
+  }
+
+  /**
+   * LuCI 网页 GET 请求（自动带 Cookie，403 时自动重新登录重试一次）
+   */
+  private async luciGet(path: string, allowRetry: boolean = true): Promise<LuciHttpResult> {
+    const ok: boolean = await this.ensureLuciCookie()
+    if (!ok) {
+      return new LuciHttpResult()
+    }
+    const res: LuciHttpResult = await this.luciHttp('GET', path, '')
+    if ((res.status === 401 || res.status === 403) && allowRetry) {
+      const reOk: boolean = await this.ensureLuciCookie(true)
+      if (reOk) {
+        return this.luciGet(path, false)
+      }
+      return new LuciHttpResult()
+    }
+    return res
+  }
+
+  /**
+   * LuCI 网页表单 POST（自动带 Cookie，403 时自动重新登录重试一次）
+   */
+  private async luciPostForm(path: string, encodedBody: string, allowRetry: boolean = true): Promise<LuciHttpResult> {
+    const ok: boolean = await this.ensureLuciCookie()
+    if (!ok) {
+      return new LuciHttpResult()
+    }
+    const res: LuciHttpResult = await this.luciHttp('POST', path, encodedBody)
+    if ((res.status === 401 || res.status === 403) && allowRetry) {
+      const reOk: boolean = await this.ensureLuciCookie(true)
+      if (reOk) {
+        return this.luciPostForm(path, encodedBody, false)
+      }
+      return new LuciHttpResult()
+    }
+    return res
+  }
+
+  /**
+   * LuCI 网页底层请求
+   */
+  private async luciHttp(method: string, path: string, encodedBody: string): Promise<LuciHttpResult> {
+    const result: LuciHttpResult = new LuciHttpResult()
+    const req: http.HttpRequest = http.createHttp()
+    try {
+      const r: http.HttpResponse = await req.request(`${this.baseUrl}/cgi-bin/luci/${path}`, {
+        method: method === 'POST' ? http.RequestMethod.POST : http.RequestMethod.GET,
+        header: {
+          'Cookie': this.luciCookie,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        extraData: method === 'POST' ? encodedBody : undefined,
+        connectTimeout: 5000,
+        readTimeout: 15000
+      })
+      result.status = r.responseCode
+      const data = r.result
+      if (typeof data === 'string') {
+        result.body = data
+      } else if (data !== undefined && data !== null) {
+        result.body = JSON.stringify(data)
+      }
+      req.destroy()
+    } catch (e) {
+      req.destroy()
+      hilog.error(DOMAIN, TAG, `luciHttp ${method} ${path} error: ${e}`)
+    }
+    return result
+  }
+
+  // ============================================================
+  //  Docker Remote API 通道（tcp 2375，官方接口：容器/统计/操作）
+  // ============================================================
+
+  /** Docker API 根地址（http(s)://host:2375） */
+  private dockerApiRoot(): string {
+    const protoSplit: string[] = this.baseUrl.split('://')
+    const proto: string = protoSplit.length > 0 ? protoSplit[0] : 'http'
+    const hostPort: string = protoSplit.length > 1 ? protoSplit[1] : ''
+    const host: string = hostPort.split(':')[0]
+    return `${proto}://${host}:2375`
+  }
+
+  /** 探测 Docker Remote API 是否可用 */
+  private async probeDockerApi(): Promise<void> {
+    this.dockerApiBase = ''
+    const root: string = this.dockerApiRoot()
+    const req: http.HttpRequest = http.createHttp()
+    try {
+      const r: http.HttpResponse = await req.request(`${root}/info`, {
+        method: http.RequestMethod.GET,
+        connectTimeout: 2500,
+        readTimeout: 4000
+      })
+      req.destroy()
+      if (r.responseCode === 200) {
+        this.dockerApiBase = root
+      }
+    } catch (e) {
+      req.destroy()
+    }
+  }
+
+  /** Docker API 是否可用 */
+  hasDockerApi(): boolean {
+    return this.dockerApiBase !== ''
+  }
+
+  /**
+   * 开启 Docker Remote API（uci 配置 hosts + 应用 + 重启 dockerd）
+   * 注意：会导致运行中的容器短暂停止重启
+   */
+  async enableDockerApi(): Promise<boolean> {
+    if (this.mode !== 'ubus') {
+      return false
+    }
+    const hosts: DockerHostsValues = new DockerHostsValues()
+    hosts.hosts = ['unix:///var/run/docker.sock', 'tcp://0.0.0.0:2375']
+    const setP: UciSetParam = new UciSetParam()
+    setP.config = 'dockerd'
+    setP.section = 'globals'
+    setP.values = hosts as Object
+    const setOk: Object | null = await this.ubusCall('uci', 'set', setP)
+    if (setOk === null) {
+      return false
+    }
+    const applyP: UciApplyParam = new UciApplyParam()
+    applyP.rollback = false
+    const applyOk: Object | null = await this.ubusCall('uci', 'apply', applyP)
+    if (applyOk === null) {
+      return false
+    }
+    const rcP: RcInitParam = new RcInitParam()
+    rcP.name = 'dockerd'
+    rcP.action = 'restart'
+    const rcOk: Object | null = await this.ubusCall('rc', 'init', rcP)
+    if (rcOk === null) {
+      return false
+    }
+    // 等待 dockerd 完成重启后再探测
+    await this.sleep(10000)
+    await this.probeDockerApi()
+    return this.dockerApiBase !== ''
+  }
+
+  /** Docker API GET，返回解析后的 JSON（失败 null） */
+  private async dockerApiGet(path: string, timeout: number = 8000): Promise<Object | null> {
+    if (!this.dockerApiBase) {
+      return null
+    }
+    const req: http.HttpRequest = http.createHttp()
+    try {
+      const r: http.HttpResponse = await req.request(`${this.dockerApiBase}${path}`, {
+        method: http.RequestMethod.GET,
+        connectTimeout: 4000,
+        readTimeout: timeout
+      })
+      if (r.responseCode === 200) {
+        const data = r.result
+        const text: string = (typeof data === 'string') ? data : JSON.stringify(data)
+        req.destroy()
+        return JSON.parse(text) as Object
+      }
+      req.destroy()
+    } catch (e) {
+      req.destroy()
+      hilog.error(DOMAIN, TAG, `dockerApiGet ${path} error: ${e}`)
+    }
+    return null
+  }
+
+  /** Docker API POST（无 body），返回是否成功（204/304/200 视为成功） */
+  private async dockerApiPost(path: string): Promise<boolean> {
+    if (!this.dockerApiBase) {
+      return false
+    }
+    const req: http.HttpRequest = http.createHttp()
+    try {
+      const r: http.HttpResponse = await req.request(`${this.dockerApiBase}${path}`, {
+        method: http.RequestMethod.POST,
+        connectTimeout: 4000,
+        readTimeout: 15000
+      })
+      const code: number = r.responseCode
+      req.destroy()
+      return code === 204 || code === 304 || code === 200
+    } catch (e) {
+      req.destroy()
+      hilog.error(DOMAIN, TAG, `dockerApiPost ${path} error: ${e}`)
+    }
+    return false
+  }
+
+  /** 经 Docker API 构建容器列表 */
+  private async buildDockerContainersApi(): Promise<Object> {
+    const list: Object[] = []
+    const data: Object | null = await this.dockerApiGet('/containers/json?all=1')
+    if (data && Array.isArray(data)) {
+      const arr = data as Object[]
+      for (let i = 0; i < arr.length; i++) {
+        const c = arr[i] as Record<string, Object>
+        if (!c || typeof c !== 'object') {
+          continue
+        }
+        const id: string = ApiClient.strOf(c, 'Id')
+        let name: string = ''
+        const names = c['Names']
+        if (Array.isArray(names) && names.length > 0) {
+          name = String(names[0]).replace(/^\//, '')
+        }
+        const item: Record<string, Object> = {}
+        item['id'] = id.length > 12 ? id.substring(0, 12) : id
+        item['name'] = name
+        item['image'] = ApiClient.strOf(c, 'Image')
+        item['status'] = ApiClient.strOf(c, 'Status')
+        item['running'] = ApiClient.strOf(c, 'State') === 'running'
+        list.push(item as Object)
+      }
+    }
+    return list as Object
+  }
+
+  /** 经 Docker API 构建容器实时统计（CPU%/内存，官方采样差值公式） */
+  private async buildDockerStatsApi(): Promise<Object> {
+    const list: Object[] = []
+    const data: Object | null = await this.dockerApiGet('/containers/json')
+    if (!data || !Array.isArray(data)) {
+      return list as Object
+    }
+    const arr = data as Object[]
+    const jobs: Promise<Object | null>[] = []
+    for (let i = 0; i < arr.length; i++) {
+      const c = arr[i] as Record<string, Object>
+      const id: string = ApiClient.strOf(c, 'Id')
+      if (id) {
+        jobs.push(this.fetchOneContainerStat(id))
+      }
+    }
+    const results: (Object | null)[] = await Promise.all(jobs)
+    for (let i = 0; i < results.length; i++) {
+      if (results[i] !== null) {
+        list.push(results[i] as Object)
+      }
+    }
+    return list as Object
+  }
+
+  /** 获取单个容器统计并计算 CPU%/内存占比 */
+  private async fetchOneContainerStat(id: string): Promise<Object | null> {
+    const data: Object | null = await this.dockerApiGet(`/containers/${id}/stats?stream=false`, 10000)
+    if (!data) {
+      return null
+    }
+    const j = data as Record<string, Object>
+    const cpuStats = j['cpu_stats'] as Record<string, Object>
+    const preStats = j['precpu_stats'] as Record<string, Object>
+    const memStats = j['memory_stats'] as Record<string, Object>
+    if (!cpuStats || !preStats || !memStats) {
+      return null
+    }
+    const curUsage = (cpuStats['cpu_usage'] as Record<string, Object>)
+    const preUsage = (preStats['cpu_usage'] as Record<string, Object>)
+    const cpuDelta: number = ApiClient.numOf(curUsage, 'total_usage', 0) - ApiClient.numOf(preUsage, 'total_usage', 0)
+    const sysDelta: number = ApiClient.numOf(cpuStats, 'system_cpu_usage', 0) - ApiClient.numOf(preStats, 'system_cpu_usage', 0)
+    const onlineCpus: number = ApiClient.numOf(cpuStats, 'online_cpus', 0)
+    let cpuPercent: number = 0
+    if (sysDelta > 0 && cpuDelta >= 0 && onlineCpus > 0) {
+      cpuPercent = (cpuDelta / sysDelta) * onlineCpus * 100
+    }
+    const memUsage: number = ApiClient.numOf(memStats, 'usage', 0)
+    const memLimit: number = ApiClient.numOf(memStats, 'limit', 0)
+    const memPercent: number = memLimit > 0 ? (memUsage / memLimit) * 100 : 0
+
+    const item: Record<string, Object> = {}
+    item['id'] = id.length > 12 ? id.substring(0, 12) : id
+    item['name'] = ApiClient.strOf(j, 'name').replace(/^\//, '')
+    item['cpu_percent'] = Math.round(cpuPercent * 100) / 100
+    item['mem_usage'] = `${ApiClient.fmtBytes(memUsage)} / ${ApiClient.fmtBytes(memLimit)}`
+    item['mem_percent'] = Math.round(memPercent * 100) / 100
+    return item as Object
+  }
+
+  /** 字节格式化（与 FormatUtils 一致的简版，避免通信层依赖 UI 工具） */
+  private static fmtBytes(bytes: number): string {
+    if (bytes <= 0 || isNaN(bytes)) {
+      return '0 B'
+    }
+    const units: string[] = ['B', 'KB', 'MB', 'GB', 'TB']
+    const base: number = 1024
+    const i: number = Math.min(Math.floor(Math.log(bytes) / Math.log(base)), units.length - 1)
+    return `${(bytes / Math.pow(base, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+  }
+
+  // ============================================================
+  //  统一 action 请求入口
+  // ============================================================
+
+  /**
+   * 底层请求方法（保持原有 action 接口不变）
+   * @param action API 操作名称（可附带 &key=value 参数）
    * @param device 可选设备参数（如网络接口名）
    * @returns 解析后的 API 响应，失败时返回 null
    */
   async request(action: string, device?: string): Promise<RouterApiResponse | null> {
-    // 构建请求 URL：基础路径 + action + token
-    let url = `${this.baseUrl}?action=${action}&token=${encodeURIComponent(this.token)}`
+    if (this.mode === 'legacy') {
+      return this.legacyRequest(action, device)
+    }
+    if (this.mode === 'ubus') {
+      return this.ubusRequest(action, device)
+    }
+    return null
+  }
+
+  /** 直接请求任意 action 并返回完整响应（含 rates 等扩展字段） */
+  async requestDirect(action: string, device?: string): Promise<RouterApiResponse | null> {
+    return this.request(action, device)
+  }
+
+  /**
+   * ubus 模式：将旧 action 映射为 ubus 调用，返回与旧脚本一致的数据结构
+   */
+  private async ubusRequest(action: string, device?: string): Promise<RouterApiResponse | null> {
+    // 解析 action 中附带的参数（如 docker_service&service_action=start）
+    const parts: string[] = action.split('&')
+    const base: string = parts[0]
+    const kv: Map<string, string> = new Map()
+    for (let i = 1; i < parts.length; i++) {
+      const eq: number = parts[i].indexOf('=')
+      if (eq > 0) {
+        kv.set(parts[i].substring(0, eq), decodeURIComponent(parts[i].substring(eq + 1)))
+      }
+    }
+
+    const resp: RouterApiResponse = new RouterApiResponse()
+
+    switch (base) {
+      case 'ping': {
+        resp.code = 0
+        return resp
+      }
+
+      case 'system_board': {
+        const data: Object | null = await this.getBoard()
+        if (data) {
+          resp.code = 0
+          resp.data = data
+          return resp
+        }
+        return null
+      }
+
+      case 'system_info': {
+        const info: Object | null = await this.ubusCall('system', 'info', new EmptyRecord())
+        if (!info) {
+          return null
+        }
+        // CPU 使用率：优先 quickstart 真实值（iStoreOS），否则进程求和估算
+        const st: Object | null = await this.fetchIStoreSystemStatus()
+        const cpuUsage: number = st ? ApiClient.numOf(st, 'cpuUsage', 0) : await this.getCpuUsageFromProcs()
+        resp.code = 0
+        resp.data = this.buildSystemInfo(info, cpuUsage)
+        return resp
+      }
+
+      case 'cpu_info': {
+        const st: Object | null = await this.fetchIStoreSystemStatus()
+        const board: Object | null = await this.getBoard()
+        const data: Record<string, Object> = {}
+        data['usage_percent'] = st ? ApiClient.numOf(st, 'cpuUsage', 0) : await this.getCpuUsageFromProcs()
+        data['model'] = board ? ApiClient.strOf(board, 'system') : ''
+        data['cores'] = 0
+        // CPU 温度：quickstart 接口（iStoreOS 网页端同源），其他系统无 HTTP 可达来源
+        data['cpu_temp'] = st ? ApiClient.numOf(st, 'cpuTemperature', 0) : 0
+        resp.code = 0
+        resp.data = data as Object
+        return resp
+      }
+
+      case 'memory_info': {
+        const info: Object | null = await this.ubusCall('system', 'info', new EmptyRecord())
+        if (!info) {
+          return null
+        }
+        const mem = (info as Record<string, Object>)['memory'] as Record<string, Object>
+        const data: Record<string, Object> = {}
+        if (mem) {
+          data['total_kb'] = Math.floor(ApiClient.numOf(mem, 'total', 0) / 1024)
+          data['free_kb'] = Math.floor(ApiClient.numOf(mem, 'free', 0) / 1024)
+          data['available_kb'] = Math.floor(ApiClient.numOf(mem, 'available', 0) / 1024)
+          data['used_kb'] = Math.floor((ApiClient.numOf(mem, 'total', 0) - ApiClient.numOf(mem, 'available', 0)) / 1024)
+          data['buffers_kb'] = Math.floor(ApiClient.numOf(mem, 'buffered', 0) / 1024)
+          data['cached_kb'] = Math.floor(ApiClient.numOf(mem, 'cached', 0) / 1024)
+        }
+        resp.code = 0
+        resp.data = data as Object
+        return resp
+      }
+
+      case 'network_interfaces': {
+        const dump: Object | null = await this.ubusCall('network.interface', 'dump', new EmptyRecord())
+        const rates: Object[] = await this.sampleRates(dump)
+        resp.code = 0
+        resp.data = dump ? dump : new EmptyRecord()
+        resp.rates = rates as Object
+        return resp
+      }
+
+      case 'network_rates': {
+        const rates: Object[] = await this.sampleRates(null)
+        resp.code = 0
+        resp.data = rates as Object
+        return resp
+      }
+
+      case 'bandwidth': {
+        const rates: Object[] = await this.sampleRates(null)
+        const dev: string = device ? device : (kv.get('device') ? kv.get('device')! : '')
+        let found: Object = new EmptyRecord()
+        for (let i = 0; i < rates.length; i++) {
+          if (ApiClient.strOf(rates[i], 'iface') === dev) {
+            found = rates[i]
+            break
+          }
+        }
+        resp.code = 0
+        resp.data = found
+        return resp
+      }
+
+      case 'network_devices': {
+        const data: Object | null = await this.ubusCall('luci-rpc', 'getNetworkDevices', new EmptyRecord())
+        if (data) {
+          resp.code = 0
+          resp.data = data
+          return resp
+        }
+        return null
+      }
+
+      case 'network_wifi': {
+        resp.code = 0
+        resp.data = await this.buildWirelessData()
+        return resp
+      }
+
+      case 'dhcp_leases': {
+        const data: Object | null = await this.ubusCall('luci-rpc', 'getDHCPLeases', new EmptyRecord())
+        resp.code = 0
+        resp.data = this.buildDhcpLeases(data)
+        return resp
+      }
+
+      case 'storage_info': {
+        resp.code = 0
+        resp.data = await this.buildStorageInfo()
+        return resp
+      }
+
+      case 'processes': {
+        resp.code = 0
+        resp.data = await this.buildProcessList()
+        return resp
+      }
+
+      case 'route_table': {
+        resp.code = 0
+        resp.data = await this.buildRouteTable()
+        return resp
+      }
+
+      case 'startup_items': {
+        const data: Object | null = await this.ubusCall('rc', 'list', new VerboseParam())
+        resp.code = 0
+        resp.data = data ? data : new EmptyRecord()
+        return resp
+      }
+
+      case 'conntrack': {
+        resp.code = 0
+        resp.data = await this.buildConntrack()
+        return resp
+      }
+
+      case 'uci_get': {
+        const p: UciGetParam = new UciGetParam()
+        p.config = kv.get('config') ? kv.get('config')! : ''
+        p.section = kv.get('section') ? kv.get('section')! : ''
+        p.option = kv.get('option') ? kv.get('option')! : ''
+        const data: Object | null = await this.ubusCall('uci', 'get', p)
+        resp.code = 0
+        resp.data = data ? data : new EmptyRecord()
+        return resp
+      }
+
+      case 'uci_get_all': {
+        const p: UciGetParam = new UciGetParam()
+        p.config = kv.get('config') ? kv.get('config')! : ''
+        const data: Object | null = await this.ubusCall('uci', 'get', p)
+        resp.code = 0
+        resp.data = data ? data : new EmptyRecord()
+        return resp
+      }
+
+      case 'reboot': {
+        const ok: Object | null = await this.ubusCall('system', 'reboot', new EmptyRecord())
+        resp.code = ok !== null ? 0 : 1
+        resp.message = ok !== null ? 'reboot signal sent' : 'reboot failed'
+        return resp
+      }
+
+      case 'factory_reset': {
+        const out: string = await this.ubusExec('/sbin/firstboot', ['-r', '-y'])
+        resp.code = 0
+        resp.message = `factory reset initiated ${out}`
+        return resp
+      }
+
+      // ========== 家长控制（OAF 应用过滤） ==========
+      case 'oaf_status': {
+        resp.code = 0
+        resp.data = await this.unwrapOafData(await this.ubusCall('appfilter', 'get_oaf_status', new EmptyRecord()))
+        return resp
+      }
+      case 'appfilter_base': {
+        resp.code = 0
+        resp.data = await this.unwrapOafData(await this.ubusCall('appfilter', 'get_app_filter_base', new EmptyRecord()))
+        return resp
+      }
+      case 'appfilter_classes': {
+        const data: Object | null = await this.ubusCall('appfilter', 'class_list', new EmptyRecord())
+        resp.code = 0
+        resp.data = data ? data : new EmptyRecord()
+        return resp
+      }
+      case 'appfilter_time': {
+        resp.code = 0
+        resp.data = await this.unwrapOafData(await this.ubusCall('appfilter', 'get_app_filter_time', new EmptyRecord()))
+        return resp
+      }
+      case 'appfilter_user': {
+        resp.code = 0
+        resp.data = await this.unwrapOafData(await this.ubusCall('appfilter', 'get_app_filter_user', new EmptyRecord()))
+        return resp
+      }
+      case 'appfilter_adv': {
+        resp.code = 0
+        resp.data = await this.unwrapOafData(await this.ubusCall('appfilter', 'get_app_filter_adv', new EmptyRecord()))
+        return resp
+      }
+
+      // ========== iStore 应用列表（经 LuCI 网页通道调 iStore 商店接口） ==========
+      case 'istore_apps': {
+        resp.code = 0
+        resp.data = await this.buildIStoreApps()
+        return resp
+      }
+
+      // ========== Docker（优先 Docker Remote API，降级 dockerman 页面/ubus） ==========
+      case 'docker_overview': {
+        resp.code = 0
+        resp.data = await this.buildDockerOverview()
+        return resp
+      }
+      case 'docker_service': {
+        const p: RcInitParam = new RcInitParam()
+        p.name = 'dockerd'
+        p.action = kv.get('service_action') ? kv.get('service_action')! : 'restart'
+        const ok: Object | null = await this.ubusCall('rc', 'init', p)
+        resp.code = ok !== null ? 0 : 1
+        resp.message = ok !== null ? 'Docker service signal sent' : 'operation not permitted'
+        return resp
+      }
+      case 'docker_containers': {
+        resp.code = 0
+        resp.data = this.dockerApiBase ? await this.buildDockerContainersApi() : await this.buildDockerContainers()
+        return resp
+      }
+      case 'docker_stats': {
+        resp.code = 0
+        // 统计仅 Docker API 可用（dockerman 统计在 cgroup v2 系统上已损坏）
+        resp.data = this.dockerApiBase ? await this.buildDockerStatsApi() : [] as Object
+        return resp
+      }
+      case 'docker_container': {
+        const cname: string = kv.get('container') ? kv.get('container')! : ''
+        const caction: string = kv.get('container_action') ? kv.get('container_action')! : ''
+        let ok: boolean = false
+        if (this.dockerApiBase && (caction === 'start' || caction === 'stop' || caction === 'restart' || caction === 'kill')) {
+          ok = await this.dockerApiPost(`/containers/${encodeURIComponent(cname)}/${caction}`)
+        } else {
+          ok = await this.dockerContainerActionViaLuci(cname, caction)
+        }
+        resp.code = ok ? 0 : 501
+        resp.message = ok ? 'action sent' : '容器操作失败（设备无 dockerman 或不支持）'
+        return resp
+      }
+
+      default: {
+        resp.code = 404
+        resp.message = `unknown action: ${base}`
+        return resp
+      }
+    }
+  }
+
+  // ============================================================
+  //  ubus 数据构建辅助
+  // ============================================================
+
+  /** 获取 system board（带缓存） */
+  private async getBoard(): Promise<Object | null> {
+    if (this.boardCache) {
+      return this.boardCache
+    }
+    const data: Object | null = await this.ubusCall('system', 'board', new EmptyRecord())
+    if (data) {
+      this.boardCache = data
+    }
+    return data
+  }
+
+  /**
+   * 构建与旧脚本一致的 system_info 数据结构
+   * ubus system info 内存单位为字节（与 UI formatBytes 期望一致）
+   */
+  private buildSystemInfo(info: Object, cpuUsage: number): Object {
+    const rec = info as Record<string, Object>
+    const mem = rec['memory'] as Record<string, Object>
+    const loadArr = rec['load']
+    const data: Record<string, Object> = {}
+    data['uptime'] = ApiClient.numOf(rec, 'uptime', 0)
+    data['localtime'] = ApiClient.numOf(rec, 'localtime', 0)
+    data['cpu_usage'] = cpuUsage
+
+    // ubus load 为 65536 倍定点数，转换为常规负载值
+    const loadOut: number[] = []
+    if (Array.isArray(loadArr)) {
+      for (let i = 0; i < loadArr.length; i++) {
+        loadOut.push(Math.round(Number(loadArr[i]) / 65536 * 100) / 100)
+      }
+    }
+    data['load'] = loadOut as Object
+
+    const memOut: Record<string, Object> = {}
+    if (mem) {
+      memOut['total'] = ApiClient.numOf(mem, 'total', 0)
+      memOut['free'] = ApiClient.numOf(mem, 'free', 0)
+      memOut['available'] = ApiClient.numOf(mem, 'available', 0)
+      memOut['buffered'] = ApiClient.numOf(mem, 'buffered', 0)
+      memOut['buffers'] = ApiClient.numOf(mem, 'buffered', 0)
+      memOut['cached'] = ApiClient.numOf(mem, 'cached', 0)
+    }
+    data['memory'] = memOut as Object
+
+    if (rec['root']) {
+      data['root'] = rec['root'] as Object
+    }
+    if (rec['tmp']) {
+      data['tmp'] = rec['tmp'] as Object
+    }
+    return data as Object
+  }
+
+  /** 通过进程列表 %CPU 求和估算系统 CPU 使用率 */
+  private async getCpuUsageFromProcs(): Promise<number> {
+    const data: Object | null = await this.ubusCall('luci', 'getProcessList', new EmptyRecord())
+    if (!data) {
+      return 0
+    }
+    const procs = (data as Record<string, Object>)['result']
+    if (!Array.isArray(procs)) {
+      return 0
+    }
+    let total: number = 0
+    for (let i = 0; i < procs.length; i++) {
+      total += ApiClient.percentOf(procs[i] as Record<string, Object>, '%CPU')
+    }
+    return Math.min(100, Math.round(total))
+  }
+
+  /**
+   * 采样网络设备统计并计算实时速率（字节/秒）
+   * 首次调用间隔 1 秒采样两次，之后与上次快照做差值
+   * @param dump 可选的 network.interface dump，用于补充逻辑接口名别名
+   */
+  private async sampleRates(dump: Object | null): Promise<Object[]> {
+    if (this.ratesInFlight) {
+      return this.ratesInFlight
+    }
+    this.ratesInFlight = this.doSampleRates(dump)
+    const result: Object[] = await this.ratesInFlight
+    this.ratesInFlight = null
+    return result
+  }
+
+  private async doSampleRates(dump: Object | null): Promise<Object[]> {
+    const first: Map<string, number[]> = await this.fetchDevStats()
+    if (this.prevDevStats.size === 0 || this.prevStatsTime === 0) {
+      // 首次采样：等待 1 秒后再采一次
+      this.prevDevStats = first
+      this.prevStatsTime = Date.now()
+      await this.sleep(1000)
+    }
+    const second: Map<string, number[]> = await this.fetchDevStats()
+    const now: number = Date.now()
+    const elapsed: number = Math.max(now - this.prevStatsTime, 1)
+
+    const rates: Object[] = []
+    const prev = this.prevDevStats
+    second.forEach((cur: number[], name: string) => {
+      const old = prev.get(name)
+      const rxRate: number = old ? Math.max(0, Math.floor((cur[0] - old[0]) * 1000 / elapsed)) : 0
+      const txRate: number = old ? Math.max(0, Math.floor((cur[1] - old[1]) * 1000 / elapsed)) : 0
+      const item: Record<string, Object> = {}
+      item['iface'] = name
+      item['rx_bytes'] = cur[0]
+      item['tx_bytes'] = cur[1]
+      item['rx_rate'] = rxRate
+      item['tx_rate'] = txRate
+      rates.push(item as Object)
+    })
+
+    // 为逻辑接口名（lan/wan）补充别名，方便上层按接口名合并速率
+    if (dump) {
+      const ifaces = (dump as Record<string, Object>)['interface']
+      if (Array.isArray(ifaces)) {
+        for (let i = 0; i < ifaces.length; i++) {
+          const ifRec = ifaces[i] as Record<string, Object>
+          const logical: string = ApiClient.strOf(ifRec, 'interface')
+          const devName: string = ApiClient.strOf(ifRec, 'l3_device') || ApiClient.strOf(ifRec, 'device')
+          if (logical && devName && logical !== devName) {
+            for (let j = 0; j < rates.length; j++) {
+              if (ApiClient.strOf(rates[j], 'iface') === devName) {
+                const alias: Record<string, Object> = {}
+                alias['iface'] = logical
+                alias['rx_bytes'] = ApiClient.numOf(rates[j], 'rx_bytes', 0)
+                alias['tx_bytes'] = ApiClient.numOf(rates[j], 'tx_bytes', 0)
+                alias['rx_rate'] = ApiClient.numOf(rates[j], 'rx_rate', 0)
+                alias['tx_rate'] = ApiClient.numOf(rates[j], 'tx_rate', 0)
+                rates.push(alias as Object)
+                break
+              }
+            }
+          }
+        }
+      }
+    }
+
+    this.prevDevStats = second
+    this.prevStatsTime = now
+    return rates
+  }
+
+  /** 获取各网络设备的累计收发字节数 */
+  private async fetchDevStats(): Promise<Map<string, number[]>> {
+    const stats: Map<string, number[]> = new Map()
+    const data: Object | null = await this.ubusCall('luci-rpc', 'getNetworkDevices', new EmptyRecord())
+    if (!data) {
+      return stats
+    }
+    const rec = data as Record<string, Object>
+    const names = Object.keys(rec)
+    for (let i = 0; i < names.length; i++) {
+      const dev = rec[names[i]] as Record<string, Object>
+      if (!dev || typeof dev !== 'object') {
+        continue
+      }
+      const st = dev['stats'] as Record<string, Object>
+      if (!st || typeof st !== 'object') {
+        continue
+      }
+      stats.set(names[i], [ApiClient.numOf(st, 'rx_bytes', 0), ApiClient.numOf(st, 'tx_bytes', 0)])
+    }
+    return stats
+  }
+
+  /**
+   * 构建无线网络数据（WiFi 接口及已连接客户端）
+   * 无 WiFi 设备返回空结构
+   */
+  private async buildWirelessData(): Promise<Object> {
+    const interfaces: Object[] = []
+    const devices: Object[] = []
+
+    // 1. 收集候选无线设备名：hostapd.* ubus 对象
+    const candidates: string[] = []
+    const hostapd: string[] = await this.ubusList('hostapd.*')
+    for (let i = 0; i < hostapd.length; i++) {
+      const dev: string = hostapd[i].replace('hostapd.', '')
+      if (dev && candidates.indexOf(dev) < 0) {
+        candidates.push(dev)
+      }
+    }
+
+    // 2. 补充候选：luci-rpc getWirelessDevices
+    const wlDevs: Object | null = await this.ubusCall('luci-rpc', 'getWirelessDevices', new EmptyRecord())
+    if (wlDevs) {
+      const rec = wlDevs as Record<string, Object>
+      const keys = Object.keys(rec)
+      for (let i = 0; i < keys.length; i++) {
+        if (candidates.indexOf(keys[i]) < 0) {
+          candidates.push(keys[i])
+        }
+      }
+    }
+
+    // 3. 逐个设备获取信息与客户端列表
+    for (let i = 0; i < candidates.length; i++) {
+      const dev: string = candidates[i]
+      const dp: DeviceParam = new DeviceParam()
+      dp.device = dev
+
+      let ssid: string = ''
+      let channel: number = 0
+      let wifiMode: string = ''
+      const info: Object | null = await this.ubusCall('iwinfo', 'info', dp)
+      if (info) {
+        const infoRec = info as Record<string, Object>
+        ssid = ApiClient.strOf(infoRec, 'ssid') || ApiClient.strOf(infoRec, 'essid')
+        channel = ApiClient.numOf(infoRec, 'channel', 0)
+        wifiMode = ApiClient.strOf(infoRec, 'mode')
+      }
+
+      const clients: Object[] = []
+      const assoc: Object | null = await this.ubusCall('iwinfo', 'assoclist', dp)
+      if (assoc) {
+        const results = (assoc as Record<string, Object>)['results']
+        if (Array.isArray(results)) {
+          for (let j = 0; j < results.length; j++) {
+            clients.push(this.buildWifiClient(results[j] as Record<string, Object>, dev))
+          }
+        }
+      }
+
+      const ifItem: Record<string, Object> = {}
+      ifItem['interface'] = dev
+      ifItem['ifname'] = dev
+      ifItem['ssid'] = ssid
+      ifItem['channel'] = channel
+      ifItem['mode'] = wifiMode
+      ifItem['clients'] = clients as Object
+      interfaces.push(ifItem as Object)
+
+      const devIf: Record<string, Object> = {}
+      devIf['ssid'] = ssid
+      devIf['channel'] = channel
+      devIf['mode'] = wifiMode
+      const devItem: Record<string, Object> = {}
+      devItem['name'] = dev
+      devItem['interfaces'] = [devIf] as Object
+      devices.push(devItem as Object)
+    }
+
+    const data: Record<string, Object> = {}
+    data['interfaces'] = interfaces as Object
+    data['devices'] = devices as Object
+    return data as Object
+  }
+
+  /** 构建单个 WiFi 客户端条目 */
+  private buildWifiClient(c: Record<string, Object>, dev: string): Object {
+    const rx = c['rx'] as Record<string, Object>
+    const tx = c['tx'] as Record<string, Object>
+    const item: Record<string, Object> = {}
+    item['mac'] = ApiClient.strOf(c, 'mac')
+    item['hostname'] = ''
+    item['interface'] = dev
+    item['signal'] = ApiClient.numOf(c, 'signal', 0)
+    item['noise'] = ApiClient.numOf(c, 'noise', 0)
+    item['rx_rate'] = rx ? ApiClient.numOf(rx, 'rate', 0) : 0
+    item['tx_rate'] = tx ? ApiClient.numOf(tx, 'rate', 0) : 0
+    item['connected_time'] = ApiClient.numOf(c, 'connected_time', 0)
+    item['inactive_time'] = ApiClient.numOf(c, 'inactive_time', 0)
+    return item as Object
+  }
+
+  /** 构建 DHCP 租约列表（与旧脚本结构一致：mac/ip/name/expires 绝对时间戳） */
+  private buildDhcpLeases(data: Object | null): Object {
+    const list: Object[] = []
+    if (data) {
+      const leases = (data as Record<string, Object>)['dhcp_leases']
+      if (Array.isArray(leases)) {
+        const now: number = Math.floor(Date.now() / 1000)
+        for (let i = 0; i < leases.length; i++) {
+          const l = leases[i] as Record<string, Object>
+          const item: Record<string, Object> = {}
+          item['mac'] = ApiClient.strOf(l, 'macaddr')
+          item['ip'] = ApiClient.strOf(l, 'ipaddr')
+          item['name'] = ApiClient.strOf(l, 'hostname')
+          // luci-rpc 返回的 expires 为剩余秒数，转换为绝对时间戳
+          item['expires'] = now + ApiClient.numOf(l, 'expires', 0)
+          list.push(item as Object)
+        }
+      }
+    }
+    return list as Object
+  }
+
+  /** 构建存储挂载点信息（KB 单位，与旧脚本一致） */
+  private async buildStorageInfo(): Promise<Object> {
+    const list: Object[] = []
+
+    // 文件系统类型映射：dev -> type
+    const fsMap: Map<string, string> = new Map()
+    const blockDevs: Object | null = await this.ubusCall('luci', 'getBlockDevices', new EmptyRecord())
+    if (blockDevs) {
+      const rec = blockDevs as Record<string, Object>
+      const keys = Object.keys(rec)
+      for (let i = 0; i < keys.length; i++) {
+        const bd = rec[keys[i]] as Record<string, Object>
+        if (bd && typeof bd === 'object') {
+          const devPath: string = ApiClient.strOf(bd, 'dev')
+          const fsType: string = ApiClient.strOf(bd, 'type')
+          if (devPath && fsType) {
+            fsMap.set(devPath, fsType)
+          }
+        }
+      }
+    }
+
+    const mounts: Object | null = await this.ubusCall('luci', 'getMountPoints', new EmptyRecord())
+    if (mounts) {
+      const arr = (mounts as Record<string, Object>)['result']
+      if (Array.isArray(arr)) {
+        for (let i = 0; i < arr.length; i++) {
+          const m = arr[i] as Record<string, Object>
+          const devPath: string = ApiClient.strOf(m, 'device')
+          // 与旧脚本一致：仅统计 /dev/* 设备，过滤 tmpfs 和 docker overlay
+          if (!devPath.startsWith('/dev/')) {
+            continue
+          }
+          const size: number = ApiClient.numOf(m, 'size', 0)
+          const free: number = ApiClient.numOf(m, 'free', 0)
+          const avail: number = ApiClient.numOf(m, 'avail', 0)
+          const item: Record<string, Object> = {}
+          item['device'] = devPath
+          item['mount'] = ApiClient.strOf(m, 'mount')
+          item['fs'] = fsMap.get(devPath) ? fsMap.get(devPath)! : ''
+          item['total_kb'] = Math.floor(size / 1024)
+          item['used_kb'] = Math.floor((size - free) / 1024)
+          item['free_kb'] = Math.floor(avail / 1024)
+          list.push(item as Object)
+        }
+      }
+    }
+    return list as Object
+  }
+
+  /** 构建进程列表（解析 LuCI getProcessList 的 top 输出） */
+  private async buildProcessList(): Promise<Object> {
+    const list: Object[] = []
+    const data: Object | null = await this.ubusCall('luci', 'getProcessList', new EmptyRecord())
+    if (data) {
+      const procs = (data as Record<string, Object>)['result']
+      if (Array.isArray(procs)) {
+        for (let i = 0; i < procs.length; i++) {
+          const p = procs[i] as Record<string, Object>
+          const cmd: string = ApiClient.strOf(p, 'COMMAND')
+          const item: Record<string, Object> = {}
+          item['pid'] = ApiClient.numOf(p, 'PID', 0)
+          item['ppid'] = ApiClient.numOf(p, 'PPID', 0)
+          item['user'] = ApiClient.strOf(p, 'USER').trim()
+          item['status'] = ApiClient.strOf(p, 'STAT').trim()
+          item['rss_kb'] = ApiClient.parseSizeToKb(ApiClient.strOf(p, 'VSZ'))
+          item['cpu_percent'] = ApiClient.percentOf(p, '%CPU')
+          item['mem_percent'] = ApiClient.percentOf(p, '%MEM')
+          item['command'] = cmd
+          // comm 取命令首字段的文件名部分
+          const firstTok: string = cmd.split(' ')[0]
+          const slashIdx: number = firstTok.lastIndexOf('/')
+          item['comm'] = slashIdx >= 0 ? firstTok.substring(slashIdx + 1) : firstTok
+          list.push(item as Object)
+        }
+      }
+    }
+    return list as Object
+  }
+
+  /** 构建路由表（通过 ACL 放行的 ip route 命令） */
+  private async buildRouteTable(): Promise<Object> {
+    const list: Object[] = []
+    const out: string = await this.ubusExec('/sbin/ip', ['-4', 'route', 'show', 'table', 'all'])
+    if (out) {
+      const lines: string[] = out.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        const line: string = lines[i].trim()
+        if (!line) {
+          continue
+        }
+        const toks: string[] = line.split(/\s+/)
+        const first: string = toks[0]
+        // 仅保留主路由条目（目标网段或 default），过滤 broadcast/local 等噪音
+        if (first !== 'default' && first.indexOf('.') < 0 && first.indexOf(':') < 0) {
+          continue
+        }
+        const item: Record<string, Object> = {}
+        item['destination'] = first
+        item['gateway'] = ApiClient.tokenAfter(toks, 'via')
+        item['device'] = ApiClient.tokenAfter(toks, 'dev')
+        item['source'] = ApiClient.tokenAfter(toks, 'src')
+        item['table'] = ApiClient.tokenAfter(toks, 'table')
+        item['scope'] = ApiClient.tokenAfter(toks, 'scope')
+        item['flags'] = ''
+        list.push(item as Object)
+      }
+    }
+    return list as Object
+  }
+
+  /** 构建 NAT 连接跟踪统计 */
+  private async buildConntrack(): Promise<Object> {
+    const countStr: string = await this.ubusReadFile('/proc/sys/net/netfilter/nf_conntrack_count')
+    const maxStr: string = await this.ubusReadFile('/proc/sys/net/netfilter/nf_conntrack_max')
+    const data: Record<string, Object> = {}
+    data['count'] = parseInt(countStr.trim()) || 0
+    data['max'] = parseInt(maxStr.trim()) || 0
+    return data as Object
+  }
+
+  /** OAF 接口返回 {data:{...}} 嵌套结构，解包为内层数据 */
+  private async unwrapOafData(data: Object | null): Promise<Object> {
+    if (!data) {
+      return new EmptyRecord()
+    }
+    const inner = (data as Record<string, Object>)['data']
+    if (inner && typeof inner === 'object') {
+      return inner as Object
+    }
+    return data
+  }
+
+  /** 构建 Docker 概览（优先 Docker API /info，降级 ubus 服务状态 + dockerman 概览页） */
+  private async buildDockerOverview(): Promise<Object> {
+    const overview: Record<string, Object> = {}
+    overview['docker_version'] = ''
+    overview['daemon_status'] = 'stopped'
+    overview['containers_total'] = 0
+    overview['containers_running'] = 0
+    overview['images_total'] = 0
+    overview['disk_used'] = '0'
+    overview['mem_used_mb'] = '0'
+
+    // 1. Docker Remote API（最准确）
+    if (this.dockerApiBase) {
+      const info: Object | null = await this.dockerApiGet('/info')
+      if (info) {
+        const rec = info as Record<string, Object>
+        overview['docker_version'] = ApiClient.strOf(rec, 'ServerVersion')
+        overview['daemon_status'] = 'running'
+        overview['containers_total'] = ApiClient.numOf(rec, 'Containers', 0)
+        overview['containers_running'] = ApiClient.numOf(rec, 'ContainersRunning', 0)
+        overview['images_total'] = ApiClient.numOf(rec, 'Images', 0)
+        return overview as Object
+      }
+    }
+
+    // 2. ubus procd 服务状态判断守护进程
+    const p: ServiceListParam = new ServiceListParam()
+    p.name = 'dockerd'
+    const data: Object | null = await this.ubusCall('service', 'list', p)
+    if (data) {
+      const svc = (data as Record<string, Object>)['dockerd'] as Record<string, Object>
+      if (svc && typeof svc === 'object') {
+        const inst = svc['instances'] as Record<string, Object>
+        if (inst && typeof inst === 'object') {
+          const instKeys = Object.keys(inst)
+          for (let i = 0; i < instKeys.length; i++) {
+            const one = inst[instKeys[i]] as Record<string, Object>
+            if (one && typeof one === 'object' && one['running'] === true) {
+              overview['daemon_status'] = 'running'
+              break
+            }
+          }
+        }
+      }
+    }
+
+    // 3. dockerman 概览页补充：容器计数、镜像数、Docker 版本
+    const res: LuciHttpResult = await this.luciGet('admin/docker/overview')
+    if (res.status === 200 && res.body) {
+      const text: string = res.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+      const cm = text.match(/Containers\s+(\d+)\s*\/\s*(\d+)/)
+      if (cm) {
+        overview['containers_running'] = parseInt(cm[1]) || 0
+        overview['containers_total'] = parseInt(cm[2]) || 0
+        if (parseInt(cm[1]) > 0) {
+          overview['daemon_status'] = 'running'
+        }
+      }
+      const im = text.match(/Images\s+(\d+)\s*\/\s*(\d+)/)
+      if (im) {
+        overview['images_total'] = parseInt(im[2]) || parseInt(im[1]) || 0
+      }
+      const vm = res.body.match(/value="Docker Version"[\s\S]{0,600}?value="([^"]*)"/)
+      if (vm && vm[1]) {
+        overview['docker_version'] = vm[1]
+      }
+    }
+    return overview as Object
+  }
+
+  /**
+   * 获取 iStoreOS quickstart 系统状态（cpuTemperature/cpuUsage/内存百分比）
+   * 与 iStoreOS 网页首页同源接口；非 iStoreOS 系统返回 null（3 秒 TTL 缓存避免重复请求）
+   */
+  private async fetchIStoreSystemStatus(): Promise<Object | null> {
+    // 3 秒 TTL 缓存（system_info 与 cpu_info 在同一轮询周期内复用一次请求；null 也缓存）
+    if (this.iStoreStatusTime > 0 && Date.now() - this.iStoreStatusTime < 3000) {
+      return this.iStoreStatusCache
+    }
+    let result: Object | null = null
+    const res: LuciHttpResult = await this.luciGet('istore/system/status/')
+    if (res.status === 200 && res.body) {
+      try {
+        const parsed = JSON.parse(res.body) as Record<string, Object>
+        const inner = parsed['result']
+        if (inner && typeof inner === 'object') {
+          result = inner as Object
+        }
+      } catch (e) {
+        hilog.error(DOMAIN, TAG, `fetchIStoreSystemStatus parse error: ${e}`)
+      }
+    }
+    this.iStoreStatusCache = result
+    this.iStoreStatusTime = Date.now()
+    return result
+  }
+
+  /**
+   * 构建 iStore 已安装应用列表
+   * 经 LuCI 网页通道调用 iStore 商店接口（非 iStoreOS 系统返回空列表）
+   */
+  private async buildIStoreApps(): Promise<Object> {
+    const list: Object[] = []
+    const res: LuciHttpResult = await this.luciGet('admin/store/installed')
+    if (res.status === 200 && res.body) {
+      try {
+        const parsed = JSON.parse(res.body) as Object
+        if (Array.isArray(parsed)) {
+          const arr = parsed as Object[]
+          for (let i = 0; i < arr.length; i++) {
+            const a = arr[i] as Record<string, Object>
+            if (!a || typeof a !== 'object') {
+              continue
+            }
+            const name: string = ApiClient.strOf(a, 'name')
+            if (!name) {
+              continue
+            }
+            const item: Record<string, Object> = {}
+            item['name'] = name
+            item['title'] = ApiClient.strOf(a, 'title') || ApiClient.strOf(a, 'title_en')
+            item['version'] = ApiClient.strOf(a, 'version')
+            item['icon'] = `/luci-static/resources/app-icons/${name}.png`
+            item['link'] = ApiClient.strOf(a, 'entry')
+            list.push(item as Object)
+          }
+        }
+      } catch (e) {
+        hilog.error(DOMAIN, TAG, `buildIStoreApps parse error: ${e}`)
+      }
+    }
+    return list as Object
+  }
+
+  /** dockerman 容器行数据 */
+  private parseDockerRows(html: string): DockerRow[] {
+    const rows: DockerRow[] = []
+    const rowRe = /<tr class="tr cbi-section-table-row[^"]*" id="cbi-table-([0-9a-f]{64})"[\s\S]*?<\/tr>/g
+    let m: RegExpExecArray | null = rowRe.exec(html)
+    while (m !== null) {
+      const row: DockerRow = new DockerRow()
+      row.fullId = m[1]
+      const rowHtml: string = m[0]
+      row.shortId = ApiClient.dockerField(rowHtml, '_id') || row.fullId.substring(0, 12)
+      row.name = ApiClient.dockerField(rowHtml, '_name')
+      row.image = ApiClient.dockerField(rowHtml, '_image')
+      row.command = ApiClient.dockerField(rowHtml, '_command')
+      row.status = ApiClient.stripTags(ApiClient.dockerField(rowHtml, '_status')).trim()
+      row.running = row.status.startsWith('Up')
+      rows.push(row)
+      m = rowRe.exec(html)
+    }
+    return rows
+  }
+
+  /** 构建 Docker 容器列表（解析 dockerman 容器页表格） */
+  private async buildDockerContainers(): Promise<Object> {
+    const list: Object[] = []
+    const res: LuciHttpResult = await this.luciGet('admin/docker/containers')
+    if (res.status === 200 && res.body) {
+      const rows: DockerRow[] = this.parseDockerRows(res.body)
+      this.dockerIdMap.clear()
+      for (let i = 0; i < rows.length; i++) {
+        const r: DockerRow = rows[i]
+        this.dockerIdMap.set(r.name, r.fullId)
+        this.dockerIdMap.set(r.shortId, r.fullId)
+        const item: Record<string, Object> = {}
+        item['id'] = r.shortId
+        item['name'] = r.name
+        item['status'] = r.status
+        item['image'] = r.image
+        item['running'] = r.running
+        list.push(item as Object)
+      }
+    }
+    return list as Object
+  }
+
+  /**
+   * 容器操作（start/stop/restart/kill/remove）
+   * 复现 dockerman 表单：CSRF token + 勾选目标容器 + 动作按钮
+   */
+  private async dockerContainerActionViaLuci(name: string, action: string): Promise<boolean> {
+    const labels: Map<string, string> = new Map()
+    labels.set('start', 'Start')
+    labels.set('stop', 'Stop')
+    labels.set('restart', 'Restart')
+    labels.set('kill', 'Kill')
+    labels.set('remove', 'Remove')
+    const label: string = labels.has(action) ? labels.get(action)! : ''
+    if (!name || !label) {
+      return false
+    }
+
+    // 拉取容器页：解析目标容器完整 ID + CSRF token
+    const res: LuciHttpResult = await this.luciGet('admin/docker/containers')
+    if (res.status !== 200 || !res.body) {
+      return false
+    }
+    let fullId: string = this.dockerIdMap.has(name) ? this.dockerIdMap.get(name)! : ''
+    if (!fullId) {
+      const rows: DockerRow[] = this.parseDockerRows(res.body)
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i].name === name || rows[i].shortId === name) {
+          fullId = rows[i].fullId
+          break
+        }
+      }
+    }
+    if (!fullId) {
+      return false
+    }
+    const tm = res.body.match(/name="token" value="([0-9a-f]+)"/)
+    if (!tm || !tm[1]) {
+      return false
+    }
+
+    const body: string =
+      `token=${tm[1]}&cbi.submit=1` +
+      `&cbid.table.${fullId}._selected=1&cbi.cbe.table.${fullId}._selected=1` +
+      `&cbid.table.1._${action}=${encodeURIComponent(label)}`
+    const post: LuciHttpResult = await this.luciPostForm('admin/docker/containers', body)
+    return post.status === 200 || post.status === 302
+  }
+
+  /** 提取 dockerman 表格行内指定字段的隐藏 input 值（含 HTML 反转义） */
+  private static dockerField(rowHtml: string, field: string): string {
+    const re: RegExp = new RegExp(`data-name="${field}"[\\s\\S]{0,600}?value="([^"]*)"`)
+    const m = rowHtml.match(re)
+    if (!m || m.length < 2) {
+      return ''
+    }
+    return ApiClient.unescapeHtml(m[1])
+  }
+
+  /** HTML 反转义（数字实体 + 常见命名实体） */
+  private static unescapeHtml(s: string): string {
+    if (!s) {
+      return ''
+    }
+    return s
+      .replace(/&#(\d+);/g, (_m: string, code: string): string => String.fromCharCode(parseInt(code)))
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#x27;/g, "'")
+      .replace(/&amp;/g, '&')
+  }
+
+  /** 去除 HTML 标签 */
+  private static stripTags(s: string): string {
+    if (!s) {
+      return ''
+    }
+    return s.replace(/<[^>]+>/g, ' ')
+  }
+
+  // ============================================================
+  //  legacy 模式（旧 router-api CGI 脚本 + Token，向后兼容）
+  // ============================================================
+
+  /**
+   * legacy 连接测试：发送 system_board 请求验证 Token 有效性
+   */
+  private async legacyConnect(): Promise<boolean> {
+    try {
+      const result = await this.legacyRequest('system_board')
+      if (result && result.code === 0) {
+        return true
+      }
+      let msg: string = ''
+      if (result && result.message) {
+        msg = result.message
+      }
+      if (!msg && result) {
+        const code: number = result.code
+        if (code === 401 || code === 403) {
+          msg = `认证失败：${code === 401 ? 'Token 未提供' : 'Token 无效或已过期'}`
+        } else if (code !== 0) {
+          msg = `服务器返回错误 (${code})`
+        }
+      }
+      this.lastError = msg ? msg : '连接失败，请检查设备地址和 Token'
+      return false
+    } catch (e) {
+      this.lastError = '无法连接到设备，请检查网络和地址'
+      hilog.error(DOMAIN, TAG, `legacyConnect failed: ${e}`)
+      return false
+    }
+  }
+
+  /**
+   * legacy HTTP GET 请求（旧 router-api 脚本）
+   */
+  private async legacyRequest(action: string, device?: string): Promise<RouterApiResponse | null> {
+    let url = `${this.legacyUrl}?action=${action}&token=${encodeURIComponent(this.token)}`
     if (device) {
       url += `&device=${encodeURIComponent(device)}`
     }
-    hilog.info(DOMAIN, TAG, `Requesting: ${url}`)
+    hilog.info(DOMAIN, TAG, `Requesting(legacy): ${url}`)
 
     const req: http.HttpRequest = http.createHttp()
     try {
-      // 发送 GET 请求，设置超时和认证头
       const r: http.HttpResponse = await req.request(url, {
         method: http.RequestMethod.GET,
         header: {
           'Content-Type': 'application/json',
           'X-Auth-Token': this.token
         },
-        connectTimeout: 5000,   // 连接超时 5 秒
-        readTimeout: 10000      // 读取超时 10 秒
+        connectTimeout: 5000,
+        readTimeout: 10000
       })
 
       const code = r.responseCode
@@ -129,13 +1907,11 @@ export class ApiClient {
         const resultData = r.result as Object
         let parsed: RouterApiResponse
         if (typeof resultData === 'string') {
-          // 响应体是字符串，直接解析 JSON
           parsed = JSON.parse(resultData) as RouterApiResponse
           if (!parsed.message && parsed.msg) {
             parsed.message = parsed.msg
           }
         } else if (typeof resultData === 'object') {
-          // 响应体已被框架解析为对象，映射字段
           parsed = new RouterApiResponse()
           const obj = resultData as Record<string, Object>
           if (obj['code'] !== undefined) {
@@ -144,7 +1920,6 @@ export class ApiClient {
           if (typeof obj['message'] === 'string') {
             parsed.message = obj['message'] as string
           } else if (typeof obj['msg'] === 'string') {
-            // 兼容服务器返回 msg 字段
             parsed.message = obj['msg'] as string
           }
           if (obj['data'] !== undefined) {
@@ -154,10 +1929,9 @@ export class ApiClient {
             parsed.rates = obj['rates'] as Object
           }
         } else {
-          // 未知格式，返回空响应
           parsed = new RouterApiResponse()
         }
-        req.destroy()  // 释放 HTTP 资源
+        req.destroy()
         return parsed
       } else {
         req.destroy()
@@ -166,15 +1940,83 @@ export class ApiClient {
       }
     } catch (e) {
       req.destroy()
-      hilog.error(DOMAIN, TAG, `Request error: ${e}`)
+      hilog.error(DOMAIN, TAG, `legacyRequest error: ${e}`)
       this.lastError = `Request failed: ${String(e)}`
       return null
     }
   }
 
-  /** 直接请求任意 action 并返回完整响应（含 rates 等扩展字段） */
-  async requestDirect(action: string, device?: string): Promise<RouterApiResponse | null> {
-    return this.request(action, device)
+  // ============================================================
+  //  静态解析辅助
+  // ============================================================
+
+  /** 安全读取字符串字段 */
+  private static strOf(obj: Object, key: string): string {
+    if (!obj || typeof obj !== 'object') {
+      return ''
+    }
+    const v = (obj as Record<string, Object>)[key]
+    if (v === undefined || v === null) {
+      return ''
+    }
+    return String(v)
+  }
+
+  /** 安全读取数值字段 */
+  private static numOf(obj: Object, key: string, def: number): number {
+    if (!obj || typeof obj !== 'object') {
+      return def
+    }
+    const v = (obj as Record<string, Object>)[key]
+    if (v === undefined || v === null) {
+      return def
+    }
+    const n: number = Number(v)
+    return isNaN(n) ? def : n
+  }
+
+  /** 解析百分比字符串（如 "55%" → 55） */
+  private static percentOf(obj: Object, key: string): number {
+    const raw: string = ApiClient.strOf(obj, key).replace('%', '').trim()
+    const n: number = parseFloat(raw)
+    return isNaN(n) ? 0 : n
+  }
+
+  /** 解析带单位的容量字符串为 KB（如 "2169m" → 2221056，"512k" → 512） */
+  private static parseSizeToKb(raw: string): number {
+    if (!raw) {
+      return 0
+    }
+    const s: string = raw.trim().toLowerCase()
+    const n: number = parseFloat(s)
+    if (isNaN(n)) {
+      return 0
+    }
+    if (s.endsWith('g')) {
+      return Math.floor(n * 1024 * 1024)
+    }
+    if (s.endsWith('m')) {
+      return Math.floor(n * 1024)
+    }
+    return Math.floor(n)
+  }
+
+  /** 返回指定 key 之后的 token 值（用于解析 ip route 输出） */
+  private static tokenAfter(toks: string[], key: string): string {
+    for (let i = 0; i < toks.length - 1; i++) {
+      if (toks[i] === key) {
+        return toks[i + 1]
+      }
+    }
+    return ''
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        resolve()
+      }, ms)
+    })
   }
 
   // ========== 系统信息类 API ==========
@@ -471,7 +2313,20 @@ export class ApiClient {
     this.connected = false
     this.token = ''
     this.baseUrl = ''
+    this.ubusUrl = ''
+    this.legacyUrl = ''
     this.lastError = ''
+    this.mode = 'none'
+    this.sessionId = ''
+    this.sessionExpireAt = 0
+    this.prevDevStats.clear()
+    this.prevStatsTime = 0
+    this.boardCache = null
+    this.luciCookie = ''
+    this.dockerIdMap.clear()
+    this.dockerApiBase = ''
+    this.iStoreStatusCache = null
+    this.iStoreStatusTime = 0
   }
 
   /**
