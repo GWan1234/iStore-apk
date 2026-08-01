@@ -138,7 +138,7 @@ struct LoginPage {
     }
   }
 
-  /** 连接设备并进入主页面，支持 8 秒超时 */
+  /** 连接设备并进入主页面，SSH 自动授权约 3~5 秒 */
   async connectAndEnter(savedDevice?: SavedDevice): Promise<void> {
     // 优先使用已保存设备的参数，否则使用表单输入值
     const host: string = savedDevice ? savedDevice.host : this.host.trim()
@@ -162,7 +162,7 @@ struct LoginPage {
     this.connectingId = savedDevice ? savedDevice.id : ''
     let timedOut: boolean = false
 
-    // 启动 8 秒超时定时器
+    // 超时兜底（仅真正无响应时触发；正常设备 3~5s，QWRT 自动授权 ~10~60s）
     this.connectTimerId = setTimeout(() => {
       if (this.isConnecting) {
         timedOut = true
@@ -171,7 +171,7 @@ struct LoginPage {
         this.errorMessage = '连接超时，请检查设备地址和网络'
         setTimeout(() => { this.errorMessage = '' }, 4000)
       }
-    }, 8000)
+    }, 30000)
 
     try {
       // 如果没有保存设备，先创建新设备并持久化

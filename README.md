@@ -91,9 +91,17 @@ curl -X POST http://192.168.1.1/ubus -d '{
 | ----------- | ---- | ---------------------- |
 | OpenWrt     | ✅ 支持 | 账号密码登录（需 LuCI 网页管理界面）  |
 | iStoreOS    | ✅ 支持 | 账号密码登录（已实测）            |
-| QWRT        | ✅ 支持 | 账号密码登录（需 LuCI 网页管理界面）  |
+| QWRT        | ✅ 支持 | 账号密码登录（需一次 ACL 授权，见下）  |
 | ImmortalWrt | ✅ 支持 | 账号密码登录（需 LuCI 网页管理界面）  |
 | LEDE        | ✅ 支持 | 账号密码登录（需 LuCI 网页管理界面）  |
+
+> **QWRT 特别说明**：QWRT 固件精简了 rpcd 的 ACL 授权组，导致账号密码登录后接口无权限。需要在 QWRT 路由器上执行**一次**授权脚本（永久生效，重启不丢，可重复执行）：
+>
+> ```bash
+> wget -O- https://raw.githubusercontent.com/HWYWL/iStore/main/api/qwrt-setup.sh | sh
+> ```
+>
+> 执行完成后即可用账号密码正常登录。其他系统（iStoreOS / 官方 OpenWrt / ImmortalWrt / LEDE）无需任何操作。
 
 > ubus 模式下受 LuCI 标准 ACL 限制，Docker 容器列表/统计、iStore 应用列表暂不可用（Docker 守护进程状态与服务控制可用）；如需这些功能可继续使用旧版 Token 设备（已弃用，不再维护）。
 

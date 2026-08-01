@@ -17,6 +17,8 @@
 import { http } from '@kit.NetworkKit'
 import { ConnectionConfig } from '../models/Models'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import { connect, Client, DisconnectReason as SshDisconnectReason } from '@ohos-rs/ssh'
+
 
 const TAG = 'iStoreApi'
 const DOMAIN = 0x0001
@@ -231,7 +233,25 @@ export class ApiClient {
           await this.probeDockerApi()
           return true
         }
-        this.lastError = '登录成功，但该账号权限不足，请使用 root 账号'
+        // system board 被拒 → 尝试 QWRT 自动授权（crontab 注入 ACL 文件）
+        if (this.luciCookie || await this.ensureLuciCookie(true)) {
+          if (await this.qwrtAutoFix()) {
+            // 授权成功，重新 ubus 登录并验证
+            const reloginOk: boolean = await this.ensureSession(true)
+            if (reloginOk) {
+              const board2: Object | null = await this.ubusCall('system', 'board', new EmptyRecord())
+              if (board2) {
+                this.mode = 'ubus'
+                this.connected = true
+                this.lastError = ''
+                this.boardCache = board2
+                await this.probeDockerApi()
+                return true
+              }
+            }
+          }
+        }
+        this.lastError = '登录成功，但设备 API 权限受限：路由器的 rpcd 未授权 LuCI 基础接口（QWRT 等定制固件需在 /usr/share/rpcd/acl.d/ 添加授权文件）'
         return false
       }
       // ubus 接口存在但登录失败（密码错误等）→ 直接失败，不回退
@@ -852,6 +872,172 @@ export class ApiClient {
   }
 
   // ============================================================
+  //  QWRT 自动授权（crontab 注入 ACL 文件，无需 SSH）
+  // ============================================================
+
+  /** QWRT 的 rpcd ACL 授权 JSON（内联，避免依赖外部网络下载） */
+  private static readonly QWRT_ACL_JSON: string =
+    `{\n` +
+    `\t"istore-app": {\n` +
+    `\t\t"description": "iStore App / LuCI base access",\n` +
+    `\t\t"read": {\n` +
+    `\t\t\t"ubus": {\n` +
+    `\t\t\t\t"system": ["board", "info"],\n` +
+    `\t\t\t\t"network.interface": ["dump"],\n` +
+    `\t\t\t\t"network.device": ["status"],\n` +
+    `\t\t\t\t"network.wireless": ["status"],\n` +
+    `\t\t\t\t"luci": ["*"],\n` +
+    `\t\t\t\t"luci-rpc": ["*"],\n` +
+    `\t\t\t\t"iwinfo": ["*"],\n` +
+    `\t\t\t\t"rc": ["list"],\n` +
+    `\t\t\t\t"service": ["list"],\n` +
+    `\t\t\t\t"session": ["access", "login"],\n` +
+    `\t\t\t\t"file": ["read", "list", "stat", "md5"],\n` +
+    `\t\t\t\t"uci": ["get", "state", "configs", "changes"],\n` +
+    `\t\t\t\t"dhcp": ["ipv4leases", "ipv6leases"],\n` +
+    `\t\t\t\t"hostapd.*": ["del_client", "wps_status"]\n` +
+    `\t\t\t},\n` +
+    `\t\t\t"file": {\n` +
+    `\t\t\t\t"/proc/sys/net/netfilter/nf_conntrack_count": ["read"],\n` +
+    `\t\t\t\t"/proc/sys/net/netfilter/nf_conntrack_max": ["read"],\n` +
+    `\t\t\t\t"/proc/mounts": ["read"],\n` +
+    `\t\t\t\t"/proc/net/dev": ["read"],\n` +
+    `\t\t\t\t"/proc/meminfo": ["read"],\n` +
+    `\t\t\t\t"/proc/cpuinfo": ["read"],\n` +
+    `\t\t\t\t"/proc/loadavg": ["read"],\n` +
+    `\t\t\t\t"/proc/stat": ["read"],\n` +
+    `\t\t\t\t"/tmp/dhcp.leases": ["read"],\n` +
+    `\t\t\t\t"/sys/class/thermal/*": ["read"],\n` +
+    `\t\t\t\t"/etc/board.json": ["read"]\n` +
+    `\t\t\t}\n` +
+    `\t\t},\n` +
+    `\t\t"write": {\n` +
+    `\t\t\t"ubus": {\n` +
+    `\t\t\t\t"system": ["reboot"],\n` +
+    `\t\t\t\t"rc": ["list", "init"],\n` +
+    `\t\t\t\t"service": ["list", "state", "signal", "event"],\n` +
+    `\t\t\t\t"uci": ["get", "state", "configs", "set", "add", "delete", "rename", "order", "changes", "apply", "confirm", "rollback", "revert"],\n` +
+    `\t\t\t\t"file": ["read", "write", "list", "stat", "remove", "exec"],\n` +
+    `\t\t\t\t"appfilter": ["*"],\n` +
+    `\t\t\t\t"luci": ["setInitAction", "setLocaltime", "setPassword", "setBlockDetect"]\n` +
+    `\t\t\t},\n` +
+    `\t\t\t"uci": { "*": ["read", "write"] },\n` +
+    `\t\t\t"file": {\n` +
+    `\t\t\t\t"/etc/config/*": ["read", "write"],\n` +
+    `\t\t\t\t"/sbin/reboot": ["exec"],\n` +
+    `\t\t\t\t"/sbin/firstboot -r -y": ["exec"],\n` +
+    `\t\t\t\t"/sbin/ip -[46] route show table all": ["exec"],\n` +
+    `\t\t\t\t"/sbin/ip -[46] neigh show": ["exec"],\n` +
+    `\t\t\t\t"/bin/df": ["exec"],\n` +
+    `\t\t\t\t"/bin/ps": ["exec"],\n` +
+    `\t\t\t\t"/usr/bin/ps": ["exec"]\n` +
+    `\t\t\t}\n` +
+    `\t\t}\n` +
+    `\t}\n` +
+    `}\n`
+
+    /**
+   * QWRT 自动授权：通过 crontab CBI 表单注入 cron 任务写入 ACL 并重启 rpcd
+   * 等待 cron 触发（最多 60 秒），成功后自清理
+   */
+  /**
+   * QWRT 自动授权：通过 Rust SSH（@ohos-rs/ssh）直接写入 ACL 文件并重启 rpcd
+   * 纯异步，无回调，约 2~3 秒完成
+   */
+  private async qwrtAutoFix(): Promise<boolean> {
+    this.lastError = 'QWRT 自动授权中…'
+    let client: Client | null = null
+    try {
+      const host: string = this.getConfigHost()
+      client = await connect(`${host}:22`)
+
+      const authOk: boolean = await client.authenticatePassword(this.username, this.password)
+      if (!authOk) {
+        this.lastError = 'SSH 密码认证失败'
+        return false
+      }
+
+      const aclJson: string = ApiClient.getQwrtAclJson()
+      const escaped: string = ApiClient.shellEscape(aclJson)
+      const cmd: string = `printf '%s' '${escaped}' > /usr/share/rpcd/acl.d/istore-app.json && /etc/init.d/rpcd restart && echo FIX_OK`
+
+      const output = await client.exec(cmd)
+      client.disconnect(SshDisconnectReason.ByApplication, '', '')
+      client = null
+
+      // Decode ArrayBuffer to string
+      const bytes = new Uint8Array(output.output as ArrayBuffer)
+      let result = ''
+      for (let i = 0; i < bytes.length; i++) {
+        result += String.fromCharCode(bytes[i])
+      }
+
+      if (result.indexOf('FIX_OK') < 0) {
+        this.lastError = 'SSH 命令执行失败'
+        return false
+      }
+
+      // Verify ubus permissions
+      await this.sleep(2000)
+      const reOk: boolean = await this.ensureSession(true)
+      if (reOk) {
+        const board: Object | null = await this.ubusCall('system', 'board', new EmptyRecord())
+        if (board) {
+          this.lastError = ''
+          return true
+        }
+      }
+      this.lastError = '授权文件已写入但会话验证失败'
+      return false
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `qwrtAutoFix error: ${e}`)
+      this.lastError = 'SSH 连接失败，请确认路由器已开启 SSH（端口 22）'
+      return false
+    } finally {
+      if (client !== null) {
+        try { client.disconnect(SshDisconnectReason.ByApplication, '', '') } catch (_) {}
+      }
+    }
+  }
+
+  /** 从 baseUrl 中提取主机名/IP */
+  private getConfigHost(): string {
+    const protoSplit: string[] = this.baseUrl.split('://')
+    const hostPort: string = protoSplit.length > 1 ? protoSplit[1] : protoSplit[0]
+    return hostPort.split(':')[0]
+  }
+
+    private static shellEscape(s: string): string {
+    return (s.indexOf("'") >= 0) ? s.replace(/'/g, "'\\''") : s
+  }
+
+  /**
+   * \u8fd4\u56de QWRT ACL \u6388\u6743 JSON \u7684\u7d27\u51d1\u5355\u884c\u5f62\u5f0f
+   */
+  private static getQwrtAclJson(): string {
+    return '{"istore-app":{"description":"iStore App / LuCI base access","read":{"ubus":' +
+      '{"system":["board","info"],"network.interface":["dump"],"network.device":["status"],' +
+      '"network.wireless":["status"],"luci":["*"],"luci-rpc":["*"],"iwinfo":["*"],' +
+      '"rc":["list"],"service":["list"],"session":["access","login"],' +
+      '"file":["read","list","stat","md5"],"uci":["get","state","configs","changes"],' +
+      '"dhcp":["ipv4leases","ipv6leases"],"hostapd.*":["del_client","wps_status"]},' +
+      '"file":{"/proc/sys/net/netfilter/nf_conntrack_count":["read"],' +
+      '"/proc/sys/net/netfilter/nf_conntrack_max":["read"],"/proc/mounts":["read"],' +
+      '"/proc/net/dev":["read"],"/proc/meminfo":["read"],"/proc/cpuinfo":["read"],' +
+      '"/proc/loadavg":["read"],"/proc/stat":["read"],"/tmp/dhcp.leases":["read"],' +
+      '"/sys/class/thermal/*":["read"],"/etc/board.json":["read"]}},' +
+      '"write":{"ubus":{"system":["reboot"],"rc":["list","init"],' +
+      '"service":["list","state","signal","event"],' +
+      '"uci":["get","state","configs","set","add","delete","rename","order","changes","apply","confirm","rollback","revert"],' +
+      '"file":["read","write","list","stat","remove","exec"],"appfilter":["*"],' +
+      '"luci":["setInitAction","setLocaltime","setPassword","setBlockDetect"]},' +
+      '"uci":{"*":["read","write"]},"file":{"/etc/config/*":["read","write"],' +
+      '"/sbin/reboot":["exec"],"/sbin/firstboot -r -y":["exec"],' +
+      '"/sbin/ip -[46] route show table all":["exec"],' +
+      '"/sbin/ip -[46] neigh show":["exec"],"/bin/df":["exec"],' +
+      '"/bin/ps":["exec"],"/usr/bin/ps":["exec"]}}}}'
+  }
+// ============================================================
   //  统一 action 请求入口
   // ============================================================
 
@@ -914,11 +1100,8 @@ export class ApiClient {
         if (!info) {
           return null
         }
-        // CPU 使用率：优先 quickstart 真实值（iStoreOS），否则进程求和估算
-        const st: Object | null = await this.fetchIStoreSystemStatus()
-        const cpuUsage: number = st ? ApiClient.numOf(st, 'cpuUsage', 0) : await this.getCpuUsageFromProcs()
         resp.code = 0
-        resp.data = this.buildSystemInfo(info, cpuUsage)
+        resp.data = this.buildSystemInfo(info, await this.getCpuUsage())
         return resp
       }
 
@@ -926,11 +1109,11 @@ export class ApiClient {
         const st: Object | null = await this.fetchIStoreSystemStatus()
         const board: Object | null = await this.getBoard()
         const data: Record<string, Object> = {}
-        data['usage_percent'] = st ? ApiClient.numOf(st, 'cpuUsage', 0) : await this.getCpuUsageFromProcs()
+        data['usage_percent'] = await this.getCpuUsage()
         data['model'] = board ? ApiClient.strOf(board, 'system') : ''
         data['cores'] = 0
-        // CPU 温度：quickstart 接口（iStoreOS 网页端同源），其他系统无 HTTP 可达来源
-        data['cpu_temp'] = st ? ApiClient.numOf(st, 'cpuTemperature', 0) : 0
+        // CPU 温度：quickstart 接口（iStoreOS）或 /sys/class/thermal（ACL 授权的系统）
+        data['cpu_temp'] = st ? ApiClient.numOf(st, 'cpuTemperature', 0) : await this.getThermalTemp()
         resp.code = 0
         resp.data = data as Object
         return resp
@@ -1006,7 +1189,7 @@ export class ApiClient {
       case 'dhcp_leases': {
         const data: Object | null = await this.ubusCall('luci-rpc', 'getDHCPLeases', new EmptyRecord())
         resp.code = 0
-        resp.data = this.buildDhcpLeases(data)
+        resp.data = data ? this.buildDhcpLeases(data) : await this.buildDhcpLeasesFromFile()
         return resp
       }
 
@@ -1221,21 +1404,87 @@ export class ApiClient {
     return data as Object
   }
 
-  /** 通过进程列表 %CPU 求和估算系统 CPU 使用率 */
+  /** 获取 CPU 使用率（三级降级：quickstart → 进程求和 → /proc/stat 差值） */
+  private async getCpuUsage(): Promise<number> {
+    const st: Object | null = await this.fetchIStoreSystemStatus()
+    if (st) {
+      return ApiClient.numOf(st, 'cpuUsage', 0)
+    }
+    const fromProcs: number = await this.getCpuUsageFromProcs()
+    if (fromProcs >= 0) {
+      return fromProcs
+    }
+    return this.getCpuUsageFromProcStat()
+  }
+
+  /** 通过进程列表 %CPU 求和估算（luci getProcessList 不可用时返回 -1） */
   private async getCpuUsageFromProcs(): Promise<number> {
     const data: Object | null = await this.ubusCall('luci', 'getProcessList', new EmptyRecord())
     if (!data) {
-      return 0
+      return -1
     }
     const procs = (data as Record<string, Object>)['result']
     if (!Array.isArray(procs)) {
-      return 0
+      return -1
     }
     let total: number = 0
     for (let i = 0; i < procs.length; i++) {
       total += ApiClient.percentOf(procs[i] as Record<string, Object>, '%CPU')
     }
     return Math.min(100, Math.round(total))
+  }
+
+  /** 通过 /proc/stat 两次采样差值计算 CPU 使用率（间隔 1 秒） */
+  private async getCpuUsageFromProcStat(): Promise<number> {
+    const s1: string = await this.ubusReadFile('/proc/stat')
+    if (!s1) {
+      return 0
+    }
+    await this.sleep(1000)
+    const s2: string = await this.ubusReadFile('/proc/stat')
+    const a: number[] = ApiClient.parseProcStatCpu(s1)
+    const b: number[] = ApiClient.parseProcStatCpu(s2)
+    if (a.length === 0 || b.length === 0) {
+      return 0
+    }
+    const deltaTotal: number = b[0] - a[0]
+    const deltaIdle: number = b[1] - a[1]
+    if (deltaTotal <= 0) {
+      return 0
+    }
+    return Math.min(100, Math.round((deltaTotal - deltaIdle) * 100 / deltaTotal))
+  }
+
+  /** 解析 /proc/stat 首行，返回 [总时间, 空闲+iowait] */
+  private static parseProcStatCpu(text: string): number[] {
+    const firstNl: number = text.indexOf('\n')
+    const line: string = (firstNl > 0 ? text.substring(0, firstNl) : text).trim()
+    if (!line.startsWith('cpu')) {
+      return []
+    }
+    const toks: string[] = line.split(/\s+/).slice(1)
+    if (toks.length < 5) {
+      return []
+    }
+    let total: number = 0
+    for (let i = 0; i < toks.length; i++) {
+      total += parseInt(toks[i]) || 0
+    }
+    const idle: number = (parseInt(toks[3]) || 0) + (parseInt(toks[4]) || 0)
+    return [total, idle]
+  }
+
+  /** 读取 CPU 温度（/sys/class/thermal，受 ACL 授权限制） */
+  private async getThermalTemp(): Promise<number> {
+    const zones: string[] = ['thermal_zone0', 'thermal_zone1', 'thermal_zone2']
+    for (let i = 0; i < zones.length; i++) {
+      const raw: string = await this.ubusReadFile(`/sys/class/thermal/${zones[i]}/temp`)
+      const milli: number = parseInt(raw.trim()) || 0
+      if (milli > 0) {
+        return Math.round(milli / 100) / 10
+      }
+    }
+    return 0
   }
 
   /**
@@ -1311,25 +1560,46 @@ export class ApiClient {
     return rates
   }
 
-  /** 获取各网络设备的累计收发字节数 */
+  /** 获取各网络设备的累计收发字节数（luci-rpc 优先，降级 /proc/net/dev） */
   private async fetchDevStats(): Promise<Map<string, number[]>> {
     const stats: Map<string, number[]> = new Map()
     const data: Object | null = await this.ubusCall('luci-rpc', 'getNetworkDevices', new EmptyRecord())
-    if (!data) {
+    if (data) {
+      const rec = data as Record<string, Object>
+      const names = Object.keys(rec)
+      for (let i = 0; i < names.length; i++) {
+        const dev = rec[names[i]] as Record<string, Object>
+        if (!dev || typeof dev !== 'object') {
+          continue
+        }
+        const st = dev['stats'] as Record<string, Object>
+        if (!st || typeof st !== 'object') {
+          continue
+        }
+        stats.set(names[i], [ApiClient.numOf(st, 'rx_bytes', 0), ApiClient.numOf(st, 'tx_bytes', 0)])
+      }
+    }
+    if (stats.size > 0) {
       return stats
     }
-    const rec = data as Record<string, Object>
-    const names = Object.keys(rec)
-    for (let i = 0; i < names.length; i++) {
-      const dev = rec[names[i]] as Record<string, Object>
-      if (!dev || typeof dev !== 'object') {
-        continue
+
+    // 降级：解析 /proc/net/dev
+    const text: string = await this.ubusReadFile('/proc/net/dev')
+    if (text) {
+      const lines: string[] = text.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        const idx: number = lines[i].indexOf(':')
+        if (idx < 0) {
+          continue
+        }
+        const name: string = lines[i].substring(0, idx).trim()
+        const nums: string[] = lines[i].substring(idx + 1).trim().split(/\s+/)
+        if (name && nums.length >= 9) {
+          const rx: number = parseInt(nums[0]) || 0
+          const tx: number = parseInt(nums[8]) || 0
+          stats.set(name, [rx, tx])
+        }
       }
-      const st = dev['stats'] as Record<string, Object>
-      if (!st || typeof st !== 'object') {
-        continue
-      }
-      stats.set(names[i], [ApiClient.numOf(st, 'rx_bytes', 0), ApiClient.numOf(st, 'tx_bytes', 0)])
     }
     return stats
   }
@@ -1456,6 +1726,28 @@ export class ApiClient {
     return list as Object
   }
 
+  /** 降级：解析 /tmp/dhcp.leases 文件（expires 本身即绝对时间戳） */
+  private async buildDhcpLeasesFromFile(): Promise<Object> {
+    const list: Object[] = []
+    const text: string = await this.ubusReadFile('/tmp/dhcp.leases')
+    if (text) {
+      const lines: string[] = text.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        const toks: string[] = lines[i].trim().split(/\s+/)
+        if (toks.length < 4) {
+          continue
+        }
+        const item: Record<string, Object> = {}
+        item['expires'] = parseInt(toks[0]) || 0
+        item['mac'] = toks[1]
+        item['ip'] = toks[2]
+        item['name'] = toks[3] === '*' ? '' : toks[3]
+        list.push(item as Object)
+      }
+    }
+    return list as Object
+  }
+
   /** 构建存储挂载点信息（KB 单位，与旧脚本一致） */
   private async buildStorageInfo(): Promise<Object> {
     const list: Object[] = []
@@ -1503,10 +1795,79 @@ export class ApiClient {
         }
       }
     }
+    if (list.length > 0) {
+      return list as Object
+    }
+
+    // 降级：luci getMountPoints 不可用（无 luci-rpc 的系统），用 df -k + /proc/mounts
+    return this.buildStorageFromDf()
+  }
+
+  /** 降级：通过 df -k 与 /proc/mounts 构建存储挂载点信息 */
+  private async buildStorageFromDf(): Promise<Object> {
+    const list: Object[] = []
+
+    // mount -> 文件系统类型
+    const fsByMount: Map<string, string> = new Map()
+    const mountsText: string = await this.ubusReadFile('/proc/mounts')
+    if (mountsText) {
+      const mlines: string[] = mountsText.split('\n')
+      for (let i = 0; i < mlines.length; i++) {
+        const toks: string[] = mlines[i].trim().split(/\s+/)
+        if (toks.length >= 3) {
+          fsByMount.set(toks[1], toks[2])
+        }
+      }
+    }
+
+    const out: string = await this.ubusExec('/bin/df', ['-k'])
+    if (out) {
+      const rawLines: string[] = out.split('\n')
+      // 预处理：df 输出中长文件系统名单独占一行的，与下一行合并
+      const lines: string[] = []
+      for (let i = 0; i < rawLines.length; i++) {
+        const cur: string = rawLines[i].trim()
+        if (!cur) {
+          continue
+        }
+        const toks: string[] = cur.split(/\s+/)
+        if (toks.length === 1 && i + 1 < rawLines.length && rawLines[i + 1].trim()) {
+          lines.push(`${cur} ${rawLines[i + 1].trim()}`)
+          i++
+          continue
+        }
+        lines.push(cur)
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        const line: string = lines[i]
+        if (line.startsWith('Filesystem')) {
+          continue
+        }
+        const toks: string[] = line.split(/\s+/)
+        // 格式：文件系统 1K-blocks Used Available Use% 挂载点（共 6 列）
+        if (toks.length < 6) {
+          continue
+        }
+        const devPath: string = toks[0]
+        if (!devPath.startsWith('/dev/')) {
+          continue
+        }
+        const mountPoint: string = toks[toks.length - 1]
+        const item: Record<string, Object> = {}
+        item['device'] = devPath
+        item['mount'] = mountPoint
+        item['fs'] = fsByMount.get(mountPoint) ? fsByMount.get(mountPoint)! : ''
+        item['total_kb'] = parseInt(toks[1]) || 0
+        item['used_kb'] = parseInt(toks[2]) || 0
+        item['free_kb'] = parseInt(toks[3]) || 0
+        list.push(item as Object)
+      }
+    }
     return list as Object
   }
 
-  /** 构建进程列表（解析 LuCI getProcessList 的 top 输出） */
+  /** 构建进程列表（优先 LuCI getProcessList，降级 /bin/ps） */
   private async buildProcessList(): Promise<Object> {
     const list: Object[] = []
     const data: Object | null = await this.ubusCall('luci', 'getProcessList', new EmptyRecord())
@@ -1531,6 +1892,39 @@ export class ApiClient {
           item['comm'] = slashIdx >= 0 ? firstTok.substring(slashIdx + 1) : firstTok
           list.push(item as Object)
         }
+      }
+    }
+    if (list.length > 0) {
+      return list as Object
+    }
+
+    // 降级：解析 /bin/ps 输出（PID USER VSZ STAT COMMAND）
+    const out: string = await this.ubusExec('/bin/ps', [])
+    if (out) {
+      const lines: string[] = out.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        const line: string = lines[i].trim()
+        if (!line || line.startsWith('PID')) {
+          continue
+        }
+        const toks: string[] = line.split(/\s+/)
+        if (toks.length < 5) {
+          continue
+        }
+        const cmd: string = toks.slice(4).join(' ')
+        const firstTok: string = toks[4]
+        const slashIdx: number = firstTok.lastIndexOf('/')
+        const item: Record<string, Object> = {}
+        item['pid'] = parseInt(toks[0]) || 0
+        item['ppid'] = 0
+        item['user'] = toks[1]
+        item['status'] = toks[3]
+        item['rss_kb'] = parseInt(toks[2]) || 0
+        item['cpu_percent'] = 0
+        item['mem_percent'] = 0
+        item['command'] = cmd
+        item['comm'] = slashIdx >= 0 ? firstTok.substring(slashIdx + 1) : firstTok
+        list.push(item as Object)
       }
     }
     return list as Object

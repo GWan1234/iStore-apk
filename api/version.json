@@ -1,7 +1,7 @@
 {
-  "version": "2.0.0",
+  "version": "2.1.0",
   "versionCode": 2,
-  "description": "支持鸿蒙7",
+  "description": "优化安装包大小，兼容更多openwrt衍生版本",
   "releaseDate": "2026-07-31",
   "downloadUrl": "https://github.com/HWYWL/iStore/releases"
 }

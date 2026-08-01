@@ -1,0 +1,60 @@
+{
+	"istore-app": {
+		"description": "iStore App / LuCI base access",
+		"read": {
+			"ubus": {
+				"system": ["board", "info"],
+				"network.interface": ["dump"],
+				"network.device": ["status"],
+				"network.wireless": ["status"],
+				"luci": ["*"],
+				"luci-rpc": ["*"],
+				"iwinfo": ["*"],
+				"rc": ["list"],
+				"service": ["list"],
+				"session": ["access", "login"],
+				"file": ["read", "list", "stat", "md5"],
+				"uci": ["get", "state", "configs", "changes"],
+				"dhcp": ["ipv4leases", "ipv6leases"],
+				"hostapd.*": ["del_client", "wps_status"]
+			},
+			"file": {
+				"/proc/sys/net/netfilter/nf_conntrack_count": ["read"],
+				"/proc/sys/net/netfilter/nf_conntrack_max": ["read"],
+				"/proc/mounts": ["read"],
+				"/proc/net/dev": ["read"],
+				"/proc/meminfo": ["read"],
+				"/proc/cpuinfo": ["read"],
+				"/proc/loadavg": ["read"],
+				"/proc/stat": ["read"],
+				"/tmp/dhcp.leases": ["read"],
+				"/sys/class/thermal/*": ["read"],
+				"/etc/board.json": ["read"]
+			}
+		},
+		"write": {
+			"ubus": {
+				"system": ["reboot"],
+				"rc": ["list", "init"],
+				"service": ["list", "state", "signal", "event"],
+				"uci": ["get", "state", "configs", "set", "add", "delete", "rename", "order", "changes", "apply", "confirm", "rollback", "revert"],
+				"file": ["read", "write", "list", "stat", "remove", "exec"],
+				"appfilter": ["*"],
+				"luci": ["setInitAction", "setLocaltime", "setPassword", "setBlockDetect"]
+			},
+			"uci": {
+				"*": ["read", "write"]
+			},
+			"file": {
+				"/etc/config/*": ["read", "write"],
+				"/sbin/reboot": ["exec"],
+				"/sbin/firstboot -r -y": ["exec"],
+				"/sbin/ip -[46] route show table all": ["exec"],
+				"/sbin/ip -[46] neigh show": ["exec"],
+				"/bin/df": ["exec"],
+				"/bin/ps": ["exec"],
+				"/usr/bin/ps": ["exec"]
+			}
+		}
+	}
+}
