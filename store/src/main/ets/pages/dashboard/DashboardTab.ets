@@ -340,7 +340,7 @@ export struct DashboardTab {
             .justifyContent(FlexAlign.SpaceBetween)
             .margin({ top: 8 })
 
-            // ============ 第二行：CPU / 内存 / 温度 三个卡片 ============
+            // ============ 第二行：CPU / 内存% / 内存占用 / 温度 四个均分卡片 ============
             Row() {
               // CPU
               Column() {
@@ -349,10 +349,10 @@ export struct DashboardTab {
                   .fontColor(this.theme.textTertiary)
                   .margin({ bottom: 4 })
                 Text(FormatUtils.formatPercent(this.systemInfo.cpuUsage))
-                  .fontSize(18)
+                  .fontSize(16)
                   .fontColor(this.getCpuColor(this.systemInfo.cpuUsage))
                   .fontWeight(FontWeight.Bold)
-                  .margin({ bottom: 6 })
+                  .margin({ bottom: 4 })
 
                 Stack() {
                   Row()
@@ -375,28 +375,25 @@ export struct DashboardTab {
                 .width('100%')
                 .alignContent(Alignment.End)
               }
-              .width('30%')
-              .padding(12)
-              .borderRadius(14)
+              .layoutWeight(1)
+              .padding({ left: 8, right: 8, top: 10, bottom: 10 })
+              .borderRadius(12)
               .backgroundColor(this.theme.bgCard)
               .backdropBlur(20)
               .border({ width: 0.5, color: this.theme.borderGlass })
               .alignItems(HorizontalAlign.Start)
+              .margin({ left: 2, right: 2 })
 
-              // 内存
+              // 内存使用率
               Column() {
                 Text('内存')
                   .fontSize(11)
                   .fontColor(this.theme.textTertiary)
                   .margin({ bottom: 4 })
                 Text(`${this.getMemoryPct().toFixed(1)}%`)
-                  .fontSize(18)
+                  .fontSize(16)
                   .fontColor(this.getMemoryColor(this.getMemoryPct()))
                   .fontWeight(FontWeight.Bold)
-                  .margin({ bottom: 2 })
-                Text(`${FormatUtils.formatBytes(this.systemInfo.memoryUsed)} / ${FormatUtils.formatBytes(this.systemInfo.memoryTotal)}`)
-                  .fontSize(11)
-                  .fontColor(this.theme.textTertiary)
                   .margin({ bottom: 4 })
 
                 Stack() {
@@ -420,15 +417,61 @@ export struct DashboardTab {
                 .width('100%')
                 .alignContent(Alignment.End)
               }
-              .width('30%')
-              .padding(12)
-              .borderRadius(14)
+              .layoutWeight(1)
+              .padding({ left: 8, right: 8, top: 10, bottom: 10 })
+              .borderRadius(12)
               .backgroundColor(this.theme.bgCard)
               .backdropBlur(20)
               .border({ width: 0.5, color: this.theme.borderGlass })
               .alignItems(HorizontalAlign.Start)
+              .margin({ left: 2, right: 2 })
 
-              // 温度
+              // 内存占用
+              Column() {
+                Text('内存占用')
+                  .fontSize(11)
+                  .fontColor(this.theme.textTertiary)
+                  .margin({ bottom: 4 })
+                Text(`${FormatUtils.formatBytes(this.systemInfo.memoryUsed)} / ${FormatUtils.formatBytes(this.systemInfo.memoryTotal)}`)
+                  .fontSize(9)
+                  .fontColor(this.theme.textPrimary)
+                  .width('100%')
+
+                Row()
+                  .width('100%')
+                  .height(12)
+
+                Stack() {
+                  Row()
+                    .width('100%')
+                    .height(4)
+                    .borderRadius(2)
+                    .backgroundColor('rgba(255,255,255,0.1)')
+                  Row()
+                    .width(`${Math.max(0, Math.min(100, this.getMemoryPct()))}%`)
+                    .height(4)
+                    .borderRadius(2)
+                    .linearGradient({
+                      angle: 90,
+                      colors: [
+                        [this.getMemoryColor(this.getMemoryPct()), 0],
+                        [this.getMemoryColor(this.getMemoryPct()) + '44', 1]
+                      ]
+                    })
+                }
+                .width('100%')
+                .alignContent(Alignment.End)
+              }
+              .layoutWeight(1)
+              .padding({ left: 8, right: 8, top: 10, bottom: 10 })
+              .borderRadius(12)
+              .backgroundColor(this.theme.bgCard)
+              .backdropBlur(20)
+              .border({ width: 0.5, color: this.theme.borderGlass })
+              .alignItems(HorizontalAlign.Start)
+              .margin({ left: 2, right: 2 })
+
+              // CPU 温度
               Column() {
                 Text('CPU温度')
                   .fontSize(11)
@@ -436,7 +479,7 @@ export struct DashboardTab {
                   .margin({ bottom: 4 })
                 Row() {
                   Text(this.systemInfo.cpuTemp > 0 ? this.systemInfo.cpuTemp.toFixed(1) : '--')
-                    .fontSize(18)
+                    .fontSize(16)
                     .fontColor(this.getTempColor(this.systemInfo.cpuTemp))
                     .fontWeight(FontWeight.Bold)
                   Text('°C')
@@ -444,7 +487,7 @@ export struct DashboardTab {
                     .fontColor(this.theme.textTertiary)
                     .margin({ left: 2 })
                 }
-                .margin({ bottom: 6 })
+                .margin({ bottom: 4 })
 
                 Stack() {
                   Row()
@@ -467,13 +510,14 @@ export struct DashboardTab {
                 .width('100%')
                 .alignContent(Alignment.End)
               }
-              .width('30%')
-              .padding(12)
-              .borderRadius(14)
+              .layoutWeight(1)
+              .padding({ left: 8, right: 8, top: 10, bottom: 10 })
+              .borderRadius(12)
               .backgroundColor(this.theme.bgCard)
               .backdropBlur(20)
               .border({ width: 0.5, color: this.theme.borderGlass })
               .alignItems(HorizontalAlign.Start)
+              .margin({ left: 2, right: 2 })
             }
             .width('100%')
             .justifyContent(FlexAlign.SpaceBetween)
