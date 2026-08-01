@@ -1,7 +1,7 @@
 {
-  "version": "2.1.0",
+  "version": "2.1.1",
   "versionCode": 2,
-  "description": "优化安装包大小，兼容更多openwrt衍生版本",
-  "releaseDate": "2026-07-31",
+  "description": "修复底部导航栏挡住小艺唤醒条",
+  "releaseDate": "2026-08-01",
   "downloadUrl": "https://github.com/HWYWL/iStore/releases"
 }

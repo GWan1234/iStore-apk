@@ -16,7 +16,7 @@ struct MainPage {
   @State isDark: boolean = true
   @State deviceName: string = ''
   @State navHidden: boolean = false
-  @State bottomSafeArea: number = 0
+  @State bottomSafeArea: number = 20  // 默认 20vp，覆盖大部分设备的导航指示条高度
   private lastScrollOffset: number = 0
   private tabsController: HdsTabsController = new HdsTabsController()
 
@@ -35,13 +35,19 @@ struct MainPage {
       this.navHidden = AppState.getInstance().isNavHidden()
     })
 
-    // 获取系统底部导航指示条高度，避免 Tab 栏被遮挡（HarmonyOS 7+ 适配）
-    window.getLastWindow(this.getUIContext().getHostContext()).then((win: window.Window) => {
-      const avoidArea: window.AvoidArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
-      this.bottomSafeArea = px2vp(avoidArea.bottomRect.height)
-    }).catch(() => {
-      this.bottomSafeArea = 0
-    })
+    // 获取系统底部导航指示条 / 手势条高度（适配各机型）
+    try {
+      const ctx = this.getUIContext().getHostContext()
+      if (ctx) {
+        window.getLastWindow(ctx).then((win: window.Window) => {
+          const avoidArea: window.AvoidArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
+          const h: number = px2vp(avoidArea.bottomRect.height)
+          if (h > 0) {
+            this.bottomSafeArea = h
+          }
+        }).catch(() => { /* 保持默认值 */ })
+      }
+    } catch (_) { /* 保持默认值 20vp */ }
   }
 
   aboutToDisappear(): void {
@@ -137,7 +143,7 @@ struct MainPage {
         })
         .barFloatingStyle({
           barWidth: { smallWidth: 320, mediumWidth: 400, largeWidth: 480 },
-          barBottomMargin: this.navHidden ? -100 : (24 + this.bottomSafeArea),
+          barBottomMargin: this.navHidden ? -100 : (28 + this.bottomSafeArea),
           gradientMask: { maskColor: this.isDark ? '#22000000' : '#33E8ECF1', maskHeight: 88 },
           systemMaterialEffect: {
             materialType: hdsMaterial.MaterialType.IMMERSIVE,
@@ -149,6 +155,7 @@ struct MainPage {
       }
       .width('100%')
       .height('100%')
+      .padding({ bottom: '4%' })
     }
     .width('100%')
     .height('100%')
