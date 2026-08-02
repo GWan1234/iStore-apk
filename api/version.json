@@ -1,7 +1,7 @@
 {
-  "version": "2.3.1",
+  "version": "2.3.2",
   "versionCode": 2,
-  "description": "增加家长控制、流量排行、网口流量、物理网口等功能",
-  "releaseDate": "2026-08-01",
+  "description": "替换丑陋的设备图标",
+  "releaseDate": "2026-08-02",
   "downloadUrl": "https://github.com/HWYWL/iStore/releases"
 }

@@ -93,7 +93,7 @@ export struct DeviceTab {
       case 'watch':
         return '⌚'
       default:
-        return '📡'
+        return ''  // 无法识别 → 使用默认 SVG 图标
     }
   }
 
@@ -225,13 +225,20 @@ export struct DeviceTab {
             ForEach(this.getFilteredDevices(), (device: ConnectedDevice, index: number) => {
               Row() {
                 // 设备图标
-                Text(this.getDeviceEmoji(device.mac, device.hostname))
-                  .fontSize(28)
-                  .width(44)
-                  .height(44)
-                  .borderRadius(20)
-                  .backgroundColor(this.theme.bgGlassLight)
-                  .textAlign(TextAlign.Center)
+                Row() {
+                  if (this.getDeviceEmoji(device.mac, device.hostname)) {
+                    Text(this.getDeviceEmoji(device.mac, device.hostname))
+                      .fontSize(28)
+                  } else {
+                    Image($r('app.media.device'))
+                      .width(24).height(24).objectFit(ImageFit.Contain)
+                  }
+                }
+                .width(44)
+                .height(44)
+                .borderRadius(20)
+                .backgroundColor(this.theme.bgGlassLight)
+                .justifyContent(FlexAlign.Center)
 
                 // 设备信息
                 Column() {
