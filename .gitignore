@@ -11,3 +11,5 @@
 **/.test
 /.appanalyzer
 /build_debug.log
+/.workbuddy
+/.hvigor_bak
