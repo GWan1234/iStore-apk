@@ -93,17 +93,6 @@ export class FormatUtils {
   }
 
   /**
-   * 字符串截断（超出长度加省略号）
-   * @param str 原始字符串
-   * @param maxLength 最大长度
-   * @returns 截断后的字符串
-   */
-  static truncate(str: string, maxLength: number): string {
-    if (str.length <= maxLength) return str
-    return str.substring(0, maxLength - 3) + '...'
-  }
-
-  /**
    * 根据 MAC 地址前缀识别设备厂商
    * @param mac MAC 地址
    * @returns 厂商名称或 "Unknown"

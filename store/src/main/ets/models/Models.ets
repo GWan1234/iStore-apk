@@ -265,18 +265,7 @@ export interface TimeSlot {
  */
 export interface AppFilterUser {
   mode: 'auto' | 'manual'   // 模式：自动/手动
-  users: OafUser[]          // 用户列表
-}
-
-/**
- * OAF 用户 - 被管控的设备/用户
- */
-export interface OafUser {
-  id: string                // 用户 ID
-  name: string              // 用户名称
-  mac: string               // 设备 MAC 地址
-  ip: string                // 设备 IP 地址
-  selected: boolean         // 是否已选中（用于 UI 选择）
+  users: Object[]           // 用户列表
 }
 
 /**

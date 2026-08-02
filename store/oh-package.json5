@@ -1,12 +1,13 @@
 {
   "name": "store",
-  "version": "2.2.1",
+  "version": "2.3.1",
   "description": "Please describe the basic information.",
   "main": "",
   "author": "",
   "license": "",
   "dependencies": {
-    "@ohos-rs/ssh": "^0.0.1"
+    "@ohos-rs/ssh": "^0.0.1",
+    "@pura/harmony-utils": "^1.4.2"
   },
   "devDependencies": {},
   "dynamicDependencies": {}

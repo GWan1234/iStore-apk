@@ -227,10 +227,9 @@ export class ApiClient {
           this.connected = true
           this.lastError = ''
           this.boardCache = board
-          // 附带建立 LuCI 网页通道（iStore 应用 / Docker 容器等数据补充），失败不影响主连接
-          await this.ensureLuciCookie(true)
-          // 探测 Docker Remote API（2375），失败静默降级
-          await this.probeDockerApi()
+          // 后台异步建立 LuCI 通道 + 探测 Docker API，不阻塞登录流程
+          this.ensureLuciCookie(true)
+          this.probeDockerApi()
           return true
         }
         // system board 被拒 → 尝试 QWRT 自动授权（crontab 注入 ACL 文件）
@@ -245,7 +244,7 @@ export class ApiClient {
                 this.connected = true
                 this.lastError = ''
                 this.boardCache = board2
-                await this.probeDockerApi()
+                this.probeDockerApi()
                 return true
               }
             }
@@ -995,7 +994,7 @@ export class ApiClient {
       return false
     } finally {
       if (client !== null) {
-        try { client.disconnect(SshDisconnectReason.ByApplication, '', '') } catch (_) {}
+        try { client.disconnect(SshDisconnectReason.ByApplication, '', '') } catch (_e) {}
       }
     }
   }

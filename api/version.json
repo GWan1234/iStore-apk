@@ -1,7 +1,7 @@
 {
-  "version": "2.2.1",
+  "version": "2.3.1",
   "versionCode": 2,
-  "description": "拆分内存模块，分成两个，占用和用量",
+  "description": "增加家长控制、流量排行、网口流量、物理网口等功能",
   "releaseDate": "2026-08-01",
   "downloadUrl": "https://github.com/HWYWL/iStore/releases"
 }

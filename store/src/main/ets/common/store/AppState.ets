@@ -90,7 +90,7 @@ export class AppState {
     if (!this.navHidden) {
       this.navHidden = true
       for (const l of this.navListeners) {
-        try { l() } catch (_) {}
+        try { l() } catch (_e) {}
       }
     }
   }
@@ -99,7 +99,7 @@ export class AppState {
     if (this.navHidden) {
       this.navHidden = false
       for (const l of this.navListeners) {
-        try { l() } catch (_) {}
+        try { l() } catch (_e) {}
       }
     }
   }

@@ -9,12 +9,14 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import { http } from '@kit.NetworkKit'
 import { util } from '@kit.ArkTS'
 
+
 const VERSION_URL = 'https://raw.githubusercontent.com/HWYWL/iStore/main/api/version.json'
 
 interface ToolEntry {
   emoji: string
   name: string
   route: string
+  iconResource?: Resource  // 可选自定义图标
 }
 
 @Entry
@@ -24,7 +26,10 @@ struct AppsPage {
   @State theme: ThemePalette = DARK_THEME
   @State itemSlides: number[] = []
   private tools: ToolEntry[] = [
-    { emoji: '🗺', name: '路由表', route: 'pages/network/RouteTablePage' },
+    { emoji: '🛡️', name: '家长控制', route: 'pages/apps/OafPage' },
+    { emoji: '📊', name: '流量排行', route: 'pages/apps/TrafficRankPage' },
+    { emoji: '🔌', name: '网口流量', route: 'pages/apps/PortTrafficPage', iconResource: $r('app.media.flow_monitoring') },
+    { emoji: '🖧', name: '物理网口', route: 'pages/apps/EthPortPage' },
     { emoji: '⚙️', name: '系统进程', route: 'pages/process/ProcessListPage' },
     { emoji: '🚀', name: '启动项', route: 'pages/process/StartupPage' },
     { emoji: '🔄', name: '重启', route: 'pages/system/RebootPage' },
@@ -59,16 +64,16 @@ struct AppsPage {
         const body = JSON.parse(bodyStr) as Record<string, Object>
         ver = (body['version'] as string) || '未知'
       }
-    } catch (_) {
+    } catch (_e) {
     } finally {
-      try { req?.destroy() } catch (_) {}
+      try { req?.destroy() } catch (_e) {}
     }
     try {
       this.getUIContext().getRouter().pushUrl({
         url: 'pages/other/AboutPage',
         params: { latestVersion: ver }
       })
-    } catch (_) {}
+    } catch (_e) {}
   }
 
   aboutToAppear(): void {
@@ -97,6 +102,7 @@ struct AppsPage {
         })
       }, 60 * i)
     }
+
   }
 
   build() {
@@ -159,13 +165,20 @@ struct AppsPage {
             ForEach(this.tools, (tool: ToolEntry, index: number) => {
               GridItem() {
                 Column() {
-                  Text(tool.emoji)
-                    .fontSize(32)
-                    .width(56)
-                    .height(56)
-                    .borderRadius(16)
-                    .backgroundColor(this.theme.bgGlassLight)
-                    .textAlign(TextAlign.Center)
+                  Row() {
+                    if (tool.iconResource) {
+                      Image(tool.iconResource)
+                        .width(28).height(28)
+                        .objectFit(ImageFit.Contain)
+                    } else {
+                      Text(tool.emoji).fontSize(32)
+                    }
+                  }
+                  .width(56)
+                  .height(56)
+                  .borderRadius(16)
+                  .backgroundColor(this.theme.bgGlassLight)
+                  .justifyContent(FlexAlign.Center)
 
                   Row() {
                     Text(tool.name)

@@ -34,6 +34,7 @@ import {
 } from '../models/Models'
 import { ConnectionConfig } from '../models/Models'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import { ObjectUtil } from '@pura/harmony-utils'
 import { FormatUtils } from '../common/utils/FormatUtils'
 
 const TAG = 'ApiService'
@@ -44,83 +45,39 @@ type AppFilterMode = 'auto' | 'manual'
 class EmptyRecord {
 }
 
+/** 安全读取工具 — 委托给 @pura/harmony-utils 的 ObjectUtil */
 class ObjectHelper {
-  /** 安全读取字符串字段，缺失时返回默认值 */
   static getString(obj: Object, key: string, def: string): string {
-    if (!obj || typeof obj !== 'object') return def
-    const keys = Object.keys(obj)
-    for (let i = 0; i < keys.length; i++) {
-      if (keys[i] === key) {
-        const record = obj as Record<string, Object>
-        const v = record[key]
-        if (v === undefined || v === null) return def
-        return String(v)
-      }
-    }
-    return def
+    if (!obj || !ObjectUtil.has(obj, key)) return def
+    const v: Object = ObjectUtil.getValue(obj, key)
+    return (v !== undefined && v !== null) ? String(v) : def
   }
-
-  /** 安全读取数值字段，缺失时返回默认值 */
   static getNumber(obj: Object, key: string, def: number): number {
-    if (!obj || typeof obj !== 'object') return def
-    const keys = Object.keys(obj)
-    for (let i = 0; i < keys.length; i++) {
-      if (keys[i] === key) {
-        const record = obj as Record<string, Object>
-        const v = record[key]
-        if (v === undefined || v === null) return def
-        return Number(v)
-      }
-    }
-    return def
+    if (!obj || !ObjectUtil.has(obj, key)) return def
+    const v: Object = ObjectUtil.getValue(obj, key)
+    if (v === undefined || v === null) return def
+    const n: number = Number(v)
+    return isNaN(n) ? def : n
   }
-
-  /** 安全读取数组字段，缺失或非数组时返回空数组 */
   static getArray(obj: Object, key: string): Object[] {
-    if (!obj || typeof obj !== 'object') return []
-    const keys = Object.keys(obj)
-    for (let i = 0; i < keys.length; i++) {
-      if (keys[i] === key) {
-        const record = obj as Record<string, Object>
-        const v = record[key]
-        if (!v || !Array.isArray(v)) return []
-        return v as Object[]
-      }
-    }
-    return []
+    if (!obj || !ObjectUtil.has(obj, key)) return []
+    const v: Object = ObjectUtil.getValue(obj, key)
+    return (v !== undefined && v !== null && Array.isArray(v)) ? v as Object[] : []
   }
-
   static getBool(obj: Object, key: string): boolean {
-    if (!obj || typeof obj !== 'object') return false
-    const keys = Object.keys(obj)
-    for (let i = 0; i < keys.length; i++) {
-      if (keys[i] === key) {
-        const record = obj as Record<string, Object>
-        const v = record[key]
-        if (v === undefined || v === null) return false
-        return Boolean(v)
-      }
-    }
-    return false
+    if (!obj || !ObjectUtil.has(obj, key)) return false
+    const v: Object = ObjectUtil.getValue(obj, key)
+    return (v !== undefined && v !== null) ? Boolean(v) : false
   }
-
-  /** 安全读取嵌套对象字段，缺失时返回空对象 */
   static getObject(obj: Object, key: string): Object {
-    if (!obj || typeof obj !== 'object') return new EmptyRecord()
-    const record = obj as Record<string, Object>
-    const v = record[key]
-    if (!v || typeof v !== 'object') return new EmptyRecord()
-    return v
+    if (!obj || !ObjectUtil.has(obj, key)) return new EmptyRecord()
+    const v: Object = ObjectUtil.getValue(obj, key)
+    if (v === undefined || v === null) return new EmptyRecord()
+    return (typeof v === 'object') ? v : new EmptyRecord()
   }
-
-  /** 检查对象是否包含指定键 */
   static hasKey(obj: Object, key: string): boolean {
-    if (!obj || typeof obj !== 'object') return false
-    const keys = Object.keys(obj)
-    for (let i = 0; i < keys.length; i++) {
-      if (keys[i] === key) return true
-    }
-    return false
+    if (!obj) return false
+    return ObjectUtil.has(obj, key)
   }
 }
 
@@ -170,6 +127,26 @@ export class ApiService {
       }
     }
     this.rateMapCache = rateMap
+
+    // 同时缓存设备累计字节数（luci-rpc.getNetworkDevices stats 中才有 rx_bytes/tx_bytes）
+    const devResult = await this.client.requestDirect('network_devices')
+    this.statsCache.clear()
+    if (devResult && devResult.data) {
+      const devData = devResult.data as Record<string, Object>
+      const devNames = Object.keys(devData)
+      for (const dn of devNames) {
+        const dev = devData[dn] as Record<string, Object>
+        if (dev && typeof dev === 'object') {
+          const st = dev['stats'] as Record<string, Object>
+          if (st && typeof st === 'object') {
+            this.statsCache.set(dn, [
+              ObjectHelper.getNumber(st, 'rx_bytes', 0),
+              ObjectHelper.getNumber(st, 'tx_bytes', 0)
+            ])
+          }
+        }
+      }
+    }
   }
 
   configureConnection(config: ConnectionConfig): void {
@@ -416,8 +393,13 @@ export class ApiService {
         const netmask = ObjectHelper.getString(ObjectHelper.getArray(iface, 'ipv4-address')?.[0], 'mask', '0');
 
         const macAddress = ObjectHelper.getString(iface, 'mac_address', '')
-        const rxBytes = ObjectHelper.getNumber(iface, 'rx_bytes', 0)
-        const txBytes = ObjectHelper.getNumber(iface, 'tx_bytes', 0)
+        // 累计字节从 luci-rpc.getNetworkDevices 的 stats 子对象获取
+        // （network.interface dump 在 iStoreOS 上不含 rx_bytes/tx_bytes）
+        const lookupDev: string = ObjectHelper.getString(iface, 'device', '') || ''
+        const byteStats: number[] | undefined = this.statsCache.get(displayName) ||
+          this.statsCache.get(ifName) || this.statsCache.get(name) || this.statsCache.get(lookupDev)
+        const rxBytes: number = byteStats ? byteStats[0] : 0
+        const txBytes: number = byteStats ? byteStats[1] : 0
 
         // 速率优先从 rateMap 查找（真实计算值），fallback 到 ubus 返回的字段
         const devName = ObjectHelper.getString(iface, 'device', '') || ''
@@ -467,6 +449,16 @@ export class ApiService {
         leaseArray = ObjectHelper.getArray(leases, 'leases')
       }
 
+      // 构建 WiFi 客户端查找表（MAC → 信号/速率），合并到 DHCP 设备中
+      const wifiMap: Map<string, WirelessClient> = new Map()
+      try {
+        const wClients: WirelessClient[] = await this.fetchWirelessClients()
+        for (const wc of wClients) {
+          const wmac: string = (wc.mac || '').toUpperCase()
+          if (wmac) wifiMap.set(wmac, wc)
+        }
+      } catch (_e) { /* WiFi 数据获取失败不阻塞主流程 */ }
+
       const now = Math.floor(Date.now() / 1000)
       const list: ConnectedDevice[] = []
 
@@ -496,6 +488,12 @@ export class ApiService {
         const expiresTime = expiresNum > 0 ? this.formatTimestamp(expiresNum) : ''
         const displayOnlineTime = onlineTimeStr || expiresTime
 
+        // 从 WiFi 客户端数据中合并信号强度和速率
+        const wc: WirelessClient | undefined = wifiMap.get(mac.toUpperCase())
+        const signalStrength: number = wc ? (wc.signal || 0) : 0
+        const rxRate: number = wc ? (wc.rxRate || 0) : 0
+        const txRate: number = wc ? (wc.txRate || 0) : 0
+
         const item: ConnectedDevice = {
           mac: mac,
           ip: ip,
@@ -503,9 +501,9 @@ export class ApiService {
           vendor: FormatUtils.getVendorName(mac),
           interface: interfaceName,
           onlineTime: displayOnlineTime,
-          signalStrength: 0,
-          rxRate: 0,
-          txRate: 0,
+          signalStrength: signalStrength,
+          rxRate: rxRate,
+          txRate: txRate,
           isOnline: isOnline
         }
         list.push(item)
@@ -554,6 +552,10 @@ export class ApiService {
   }
 
   /** 将 Unix 时间戳转换为可读的日期时间字符串 */
+  async fetchEthPortStatuses(): Promise<Object> {
+    return this.client.networkDeviceStatus()
+  }
+
   private formatTimestamp(ts: number): string {
     const d: Date = new Date(ts * 1000)
     const pad = (n: number): string => n.toString().padStart(2, '0')

@@ -54,7 +54,7 @@ struct WebViewPage {
         this.pageTitle = 'iStore 应用'
         return
       }
-    } catch (_) {}
+    } catch (_e) {}
 
     const activeDevice: SavedDevice | undefined = AppState.getInstance().getActiveDevice()
     if (!activeDevice) {
@@ -210,7 +210,7 @@ struct WebViewPage {
           if (isAlreadyLoggedIn(iframeDoc)) { return; }
           pw = findPasswordInput(iframeDoc);
           if (pw) { ROOT = iframeDoc; break; }
-        } catch(e) {}
+        } catch (e) {}
       }
       if (!pw) {
         setTimeout(doLogin, INTERVAL);

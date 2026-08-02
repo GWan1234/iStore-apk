@@ -11,6 +11,10 @@
     "pages/system/FactoryResetPage",
     "pages/other/AboutPage",
     "pages/other/HelpPage",
-    "pages/apps/WebViewPage"
+    "pages/apps/WebViewPage",
+    "pages/apps/OafPage",
+    "pages/apps/TrafficRankPage",
+    "pages/apps/PortTrafficPage",
+    "pages/apps/EthPortPage"
   ]
 }

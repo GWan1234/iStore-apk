@@ -193,9 +193,13 @@ export struct DockerTab {
     Refresh({ refreshing: $$this.isRefreshing }) {
       Scroll() {
         Column() {
-          Text('🐳 Docker')
-            .fontSize(24).fontWeight(FontWeight.Bold)
-          .fontColor(this.theme.textPrimary).width('100%').margin({ top: 12 })
+          Row() {
+            Image($r('app.media.icon_docker')).width(28).height(28).margin({ right: 8 })
+            Text('Docker')
+              .fontSize(24).fontWeight(FontWeight.Bold)
+              .fontColor(this.theme.textPrimary)
+          }
+          .width('100%').margin({ top: 12 })
 
         if (this.isLoading) {
           Column() {
@@ -338,8 +342,13 @@ export struct DockerTab {
                       if (this.actionContainer === c.name) {
                         LoadingProgress().width(18).height(18).color(this.theme.primary)
                       } else {
-                        Image(this.containerIconUrl(c.image))
-                          .width(40).height(40).objectFit(ImageFit.Cover).borderRadius(12)
+                        if (this.containerIconUrl(c.image)) {
+                          Image(this.containerIconUrl(c.image))
+                            .width(40).height(40).objectFit(ImageFit.Cover).borderRadius(12)
+                        } else {
+                          Image($r('app.media.icon_docker'))
+                            .width(24).height(24).objectFit(ImageFit.Contain)
+                        }
                       }
                     }
                     .width(40).height(40).borderRadius(12)

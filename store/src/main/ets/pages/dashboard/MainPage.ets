@@ -47,7 +47,7 @@ struct MainPage {
           }
         }).catch(() => { /* 保持默认值 */ })
       }
-    } catch (_) { /* 保持默认值 20vp */ }
+    } catch (_e) { /* 保持默认值 20vp */ }
   }
 
   aboutToDisappear(): void {
