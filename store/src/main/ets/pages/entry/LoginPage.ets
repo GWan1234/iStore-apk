@@ -12,7 +12,7 @@ import { ConnectionConfig } from '../../models/Models'
 import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
 import { common } from '@kit.AbilityKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
-import { pasteboard } from '@kit.BasicServicesKit'
+import { pasteboard, deviceInfo } from '@kit.BasicServicesKit'
 
 @Entry
 @Component
@@ -334,6 +334,17 @@ struct LoginPage {
     }
   }
 
+  @Builder
+  specBadge(text: string) {
+    Text(text)
+      .fontSize(10).fontColor(this.theme.textTertiary)
+      .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+      .borderRadius(8)
+      .backgroundColor('rgba(128,128,255,0.08)')
+      .border({ width: 0.5, color: 'rgba(128,128,255,0.2)' })
+      .margin({ right: 6 })
+  }
+
   build() {
     Stack() {
       Column() {
@@ -368,6 +379,35 @@ struct LoginPage {
         }
         .alignItems(HorizontalAlign.Center)
         .margin({ bottom: 20 })
+
+        // 本机信息卡片
+        Column() {
+          Row() {
+            Image($r('app.media.device'))
+              .width(40).height(40).objectFit(ImageFit.Contain)
+              .margin({ right: 14 })
+
+            Column() {
+              Text(deviceInfo.productModel || deviceInfo.marketName || '本机')
+                .fontSize(15).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Medium)
+                .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text(deviceInfo.manufacture || '本机信息')
+                .fontSize(12).fontColor(this.theme.textSecondary).margin({ top: 2 })
+
+              Row() {
+                this.specBadge(`OS ${deviceInfo.distributionOSVersion || deviceInfo.osFullName || '-'}`)
+                this.specBadge(`API ${deviceInfo.sdkApiVersion}`)
+                if (deviceInfo.marketName && deviceInfo.marketName !== (deviceInfo.productModel || '')) {
+                  this.specBadge(deviceInfo.marketName)
+                }
+              }.margin({ top: 6 })
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+          }
+          .width('100%').padding(20).borderRadius(20)
+          .backgroundColor(this.theme.bgCard).backdropBlur(20)
+          .border({ width: 0.5, color: this.theme.borderGlass })
+        }
+        .width('100%').padding({ left: 16, right: 16 }).margin({ bottom: 12 })
 
         Scroll() {
           Column() {
