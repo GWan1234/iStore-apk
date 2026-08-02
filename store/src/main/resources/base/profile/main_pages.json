@@ -15,6 +15,7 @@
     "pages/apps/OafPage",
     "pages/apps/TrafficRankPage",
     "pages/apps/PortTrafficPage",
-    "pages/apps/EthPortPage"
+    "pages/apps/EthPortPage",
+    "pages/apps/ConntrackRankPage"
   ]
 }

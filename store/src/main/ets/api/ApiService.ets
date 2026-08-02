@@ -637,6 +637,15 @@ export class ApiService {
   async fetchConntrack(): Promise<ConntrackInfo> {
     return this.fetchConntrackInfo()
   }
+  async fetchConntrackList(): Promise<Object[]> {
+    try {
+      return await this.client.getConntrackList()
+    } catch (e) {
+      return []
+    }
+  }
+
+
 
   async fetchProcessList(): Promise<ProcessInfo[]> {
     try {

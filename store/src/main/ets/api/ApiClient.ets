@@ -2643,6 +2643,19 @@ export class ApiClient {
 
   // ========== 家长控制类 API ==========
 
+  /** 获取所有 conntrack 连接条目（用于按 IP 统计连接数） */
+  async getConntrackList(): Promise<Object[]> {
+    const data: Object | null = await this.ubusCall('luci', 'getConntrackList', new EmptyRecord())
+    if (data) {
+      const rec: Record<string, Object> = data as Record<string, Object>
+      const result: Object = rec['result']
+      if (result && Array.isArray(result)) {
+        return result as Object[]
+      }
+    }
+    return []
+  }
+
   /** 获取 OAF（应用过滤引擎）运行状态 */
   async getOafStatus(): Promise<Object> {
     const result = await this.request('oaf_status')
