@@ -71,6 +71,18 @@ class ObjectHelper {
     const v: Object = ObjectUtil.getValue(obj, key)
     return (v !== undefined && v !== null) ? Boolean(v) : false
   }
+
+  /** 解析 disabled 开关值：'1'/1/true → true；'0'/0/false/无 → false */
+  static parseDisabled(v: Object): boolean {
+    if (v === undefined || v === null) return false
+    if (typeof v === 'boolean') return v as boolean
+    if (typeof v === 'number') return (v as number) !== 0
+    if (typeof v === 'string') {
+      const s: string = (v as string).trim().toLowerCase()
+      return s === '1' || s === 'true' || s === 'yes' || s === 'on'
+    }
+    return false
+  }
   static getObject(obj: Object, key: string): Object {
     if (!obj || !ObjectUtil.has(obj, key)) return new EmptyRecord()
     const v: Object = ObjectUtil.getValue(obj, key)
@@ -872,7 +884,7 @@ export class ApiService {
           signal: signal,
           quality: quality,
           mode: mode,
-          up: false,
+          up: !ObjectHelper.parseDisabled(ObjectUtil.getValue(device, 'disabled')),
           hwmode: '',
           protocol: ''
         }
@@ -893,9 +905,29 @@ export class ApiService {
   async fetchWifiApList(): Promise<WifiApInfo[]> {
     try {
       const devices = await this.fetchWirelessDevices()
+      // 读取 wireless 配置，获取每个无线接口的 disabled 状态（接口名为 key）
+      const disabledMap: Map<string, boolean> = new Map()
+      try {
+        const wlConfig: Object = await this.client.getWirelessConfig()
+        const configRec = wlConfig as Record<string, Object>
+        const ifaceNames: string[] = Object.keys(configRec)
+        for (let i = 0; i < ifaceNames.length; i++) {
+          const ifaceRec = configRec[ifaceNames[i]] as Record<string, Object>
+          if (!ifaceRec) continue
+          const disabledVal = ifaceRec['disabled']
+          disabledMap.set(ifaceNames[i], ObjectHelper.parseDisabled(disabledVal))
+        }
+      } catch (e) {
+        hilog.error(DOMAIN, TAG, 'fetchWifiApList config err')
+      }
       const list: WifiApInfo[] = []
       for (let i = 0; i < devices.length; i++) {
         const dev = devices[i]
+        // 优先用 wireless 配置的 disabled（key 匹配），缺失时回退 dev.up
+        let disabled: boolean = disabledMap.get(dev.name) ?? false
+        if (!disabledMap.has(dev.name)) {
+          disabled = !dev.up
+        }
         list.push({
           device: dev.name,
           ssid: dev.ssid,
@@ -906,10 +938,10 @@ export class ApiService {
           quality: dev.quality,
           hwmode: dev.hwmode,
           mode: dev.mode,
-          up: dev.up,
+          up: !disabled,
           clientCount: 0,
           bandwidth: dev.bandwidth,
-          disabled: !dev.up
+          disabled: disabled
         })
       }
       // 补充客户端数

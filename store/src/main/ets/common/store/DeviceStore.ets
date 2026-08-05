@@ -6,6 +6,7 @@
 import { preferences } from '@kit.ArkData'
 import { ConnectionConfig } from '../../models/Models'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import { encrypt, decrypt } from '../utils/SecureStorage'
 
 const TAG = 'DeviceStore'
 const DOMAIN = 0x0001
@@ -66,6 +67,11 @@ export class DeviceStore {
     try {
       const json: string = this.prefs.getSync('device_list', '[]') as string
       const list: SavedDevice[] = JSON.parse(json) as SavedDevice[]
+      // 解密敏感字段（兼容旧版明文数据：非 enc: 前缀的原样返回）
+      for (let i = 0; i < list.length; i++) {
+        list[i].password = decrypt(list[i].password)
+        list[i].token = decrypt(list[i].token)
+      }
       // 按最近连接时间降序排列（最近连接的排在前面）
       list.sort((a: SavedDevice, b: SavedDevice) => b.lastConnected - a.lastConnected)
       return list
@@ -135,7 +141,24 @@ export class DeviceStore {
   private async writeList(list: SavedDevice[]): Promise<void> {
     if (!this.prefs) return
     try {
-      await this.prefs.put('device_list', JSON.stringify(list))
+      // 加密敏感字段后落盘（encrypt 内部已防重复加密）
+      const encList: SavedDevice[] = []
+      for (let i = 0; i < list.length; i++) {
+        const d: SavedDevice = {
+          id: list[i].id,
+          label: list[i].label,
+          host: list[i].host,
+          port: list[i].port,
+          token: encrypt(list[i].token),
+          useHttps: list[i].useHttps,
+          lastConnected: list[i].lastConnected,
+          version: list[i].version,
+          username: list[i].username,
+          password: encrypt(list[i].password)
+        }
+        encList.push(d)
+      }
+      await this.prefs.put('device_list', JSON.stringify(encList))
       await this.prefs.flush()  // 确保数据写入磁盘
     } catch (e) {
       hilog.error(DOMAIN, TAG, `Write failed: ${JSON.stringify(e)}`)

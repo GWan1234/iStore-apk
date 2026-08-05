@@ -18,6 +18,7 @@ import { http } from '@kit.NetworkKit'
 import { ConnectionConfig } from '../models/Models'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { connect, Client, DisconnectReason as SshDisconnectReason } from '@ohos-rs/ssh'
+import { ApiUtils } from './ApiUtils'
 
 
 const TAG = 'iStoreApi'
@@ -388,8 +389,8 @@ export class ApiClient {
         const errObj = parsed['error']
         if (errObj && typeof errObj === 'object') {
           resp.hasError = true
-          resp.errorCode = ApiClient.numOf(errObj, 'code', 0)
-          resp.errorMessage = ApiClient.strOf(errObj, 'message')
+          resp.errorCode = ApiUtils.numOf(errObj, 'code', 0)
+          resp.errorMessage = ApiUtils.strOf(errObj, 'message')
         }
         const resultVal = parsed['result']
         if (resultVal !== undefined && resultVal !== null) {
@@ -444,7 +445,7 @@ export class ApiClient {
       const data = arr[1] as Record<string, Object>
       const sid = data['ubus_rpc_session']
       this.sessionId = (typeof sid === 'string') ? sid : ''
-      const timeoutSec: number = ApiClient.numOf(data, 'timeout', 300)
+      const timeoutSec: number = ApiUtils.numOf(data, 'timeout', 300)
       // 预留 30 秒余量，会话为滑动过期（每次调用自动续期）
       this.sessionExpireAt = Date.now() + Math.max(timeoutSec - 30, 30) * 1000
       if (!this.sessionId) {
@@ -552,7 +553,7 @@ export class ApiClient {
     p.path = path
     const data: Object | null = await this.ubusCall('file', 'read', p)
     if (data) {
-      return ApiClient.strOf(data, 'data')
+      return ApiUtils.strOf(data, 'data')
     }
     return ''
   }
@@ -564,7 +565,7 @@ export class ApiClient {
     p.params = args
     const data: Object | null = await this.ubusCall('file', 'exec', p)
     if (data) {
-      return ApiClient.strOf(data, 'stdout')
+      return ApiUtils.strOf(data, 'stdout')
     }
     return ''
   }
@@ -793,7 +794,7 @@ export class ApiClient {
       return false
     }
     // 等待 dockerd 完成重启后再探测
-    await this.sleep(10000)
+    await ApiUtils.sleep(10000)
     await this.probeDockerApi()
     return this.dockerApiBase !== ''
   }
@@ -857,7 +858,7 @@ export class ApiClient {
         if (!c || typeof c !== 'object') {
           continue
         }
-        const id: string = ApiClient.strOf(c, 'Id')
+        const id: string = ApiUtils.strOf(c, 'Id')
         let name: string = ''
         const names = c['Names']
         if (Array.isArray(names) && names.length > 0) {
@@ -866,9 +867,9 @@ export class ApiClient {
         const item: Record<string, Object> = {}
         item['id'] = id.length > 12 ? id.substring(0, 12) : id
         item['name'] = name
-        item['image'] = ApiClient.strOf(c, 'Image')
-        item['status'] = ApiClient.strOf(c, 'Status')
-        item['running'] = ApiClient.strOf(c, 'State') === 'running'
+        item['image'] = ApiUtils.strOf(c, 'Image')
+        item['status'] = ApiUtils.strOf(c, 'Status')
+        item['running'] = ApiUtils.strOf(c, 'State') === 'running'
         list.push(item as Object)
       }
     }
@@ -886,7 +887,7 @@ export class ApiClient {
     const jobs: Promise<Object | null>[] = []
     for (let i = 0; i < arr.length; i++) {
       const c = arr[i] as Record<string, Object>
-      const id: string = ApiClient.strOf(c, 'Id')
+      const id: string = ApiUtils.strOf(c, 'Id')
       if (id) {
         jobs.push(this.fetchOneContainerStat(id))
       }
@@ -915,20 +916,20 @@ export class ApiClient {
     }
     const curUsage = (cpuStats['cpu_usage'] as Record<string, Object>)
     const preUsage = (preStats['cpu_usage'] as Record<string, Object>)
-    const cpuDelta: number = ApiClient.numOf(curUsage, 'total_usage', 0) - ApiClient.numOf(preUsage, 'total_usage', 0)
-    const sysDelta: number = ApiClient.numOf(cpuStats, 'system_cpu_usage', 0) - ApiClient.numOf(preStats, 'system_cpu_usage', 0)
-    const onlineCpus: number = ApiClient.numOf(cpuStats, 'online_cpus', 0)
+    const cpuDelta: number = ApiUtils.numOf(curUsage, 'total_usage', 0) - ApiUtils.numOf(preUsage, 'total_usage', 0)
+    const sysDelta: number = ApiUtils.numOf(cpuStats, 'system_cpu_usage', 0) - ApiUtils.numOf(preStats, 'system_cpu_usage', 0)
+    const onlineCpus: number = ApiUtils.numOf(cpuStats, 'online_cpus', 0)
     let cpuPercent: number = 0
     if (sysDelta > 0 && cpuDelta >= 0 && onlineCpus > 0) {
       cpuPercent = (cpuDelta / sysDelta) * onlineCpus * 100
     }
-    const memUsage: number = ApiClient.numOf(memStats, 'usage', 0)
-    const memLimit: number = ApiClient.numOf(memStats, 'limit', 0)
+    const memUsage: number = ApiUtils.numOf(memStats, 'usage', 0)
+    const memLimit: number = ApiUtils.numOf(memStats, 'limit', 0)
     const memPercent: number = memLimit > 0 ? (memUsage / memLimit) * 100 : 0
 
     const item: Record<string, Object> = {}
     item['id'] = id.length > 12 ? id.substring(0, 12) : id
-    item['name'] = ApiClient.strOf(j, 'name').replace(/^\//, '')
+    item['name'] = ApiUtils.strOf(j, 'name').replace(/^\//, '')
     item['cpu_percent'] = Math.round(cpuPercent * 100) / 100
     item['mem_usage'] = `${ApiClient.fmtBytes(memUsage)} / ${ApiClient.fmtBytes(memLimit)}`
     item['mem_percent'] = Math.round(memPercent * 100) / 100
@@ -988,7 +989,7 @@ export class ApiClient {
       }
 
       // Verify ubus permissions
-      await this.sleep(2000)
+      await ApiUtils.sleep(2000)
       const reOk: boolean = await this.ensureSession(true)
       if (reOk) {
         const board: Object | null = await this.ubusCall('system', 'board', new EmptyRecord())
@@ -1120,10 +1121,10 @@ export class ApiClient {
         const board: Object | null = await this.getBoard()
         const data: Record<string, Object> = {}
         data['usage_percent'] = await this.getCpuUsage()
-        data['model'] = board ? ApiClient.strOf(board, 'system') : ''
+        data['model'] = board ? ApiUtils.strOf(board, 'system') : ''
         data['cores'] = 0
         // CPU 温度：quickstart 接口（iStoreOS）或 /sys/class/thermal（ACL 授权的系统）
-        data['cpu_temp'] = st ? ApiClient.numOf(st, 'cpuTemperature', 0) : await this.getThermalTemp()
+        data['cpu_temp'] = st ? ApiUtils.numOf(st, 'cpuTemperature', 0) : await this.getThermalTemp()
         resp.code = 0
         resp.data = data as Object
         return resp
@@ -1137,12 +1138,12 @@ export class ApiClient {
         const mem = (info as Record<string, Object>)['memory'] as Record<string, Object>
         const data: Record<string, Object> = {}
         if (mem) {
-          data['total_kb'] = Math.floor(ApiClient.numOf(mem, 'total', 0) / 1024)
-          data['free_kb'] = Math.floor(ApiClient.numOf(mem, 'free', 0) / 1024)
-          data['available_kb'] = Math.floor(ApiClient.numOf(mem, 'available', 0) / 1024)
-          data['used_kb'] = Math.floor((ApiClient.numOf(mem, 'total', 0) - ApiClient.numOf(mem, 'available', 0)) / 1024)
-          data['buffers_kb'] = Math.floor(ApiClient.numOf(mem, 'buffered', 0) / 1024)
-          data['cached_kb'] = Math.floor(ApiClient.numOf(mem, 'cached', 0) / 1024)
+          data['total_kb'] = Math.floor(ApiUtils.numOf(mem, 'total', 0) / 1024)
+          data['free_kb'] = Math.floor(ApiUtils.numOf(mem, 'free', 0) / 1024)
+          data['available_kb'] = Math.floor(ApiUtils.numOf(mem, 'available', 0) / 1024)
+          data['used_kb'] = Math.floor((ApiUtils.numOf(mem, 'total', 0) - ApiUtils.numOf(mem, 'available', 0)) / 1024)
+          data['buffers_kb'] = Math.floor(ApiUtils.numOf(mem, 'buffered', 0) / 1024)
+          data['cached_kb'] = Math.floor(ApiUtils.numOf(mem, 'cached', 0) / 1024)
         }
         resp.code = 0
         resp.data = data as Object
@@ -1170,7 +1171,7 @@ export class ApiClient {
         const dev: string = device ? device : (kv.get('device') ? kv.get('device')! : '')
         let found: Object = new EmptyRecord()
         for (let i = 0; i < rates.length; i++) {
-          if (ApiClient.strOf(rates[i], 'iface') === dev) {
+          if (ApiUtils.strOf(rates[i], 'iface') === dev) {
             found = rates[i]
             break
           }
@@ -1381,8 +1382,8 @@ export class ApiClient {
     const mem = rec['memory'] as Record<string, Object>
     const loadArr = rec['load']
     const data: Record<string, Object> = {}
-    data['uptime'] = ApiClient.numOf(rec, 'uptime', 0)
-    data['localtime'] = ApiClient.numOf(rec, 'localtime', 0)
+    data['uptime'] = ApiUtils.numOf(rec, 'uptime', 0)
+    data['localtime'] = ApiUtils.numOf(rec, 'localtime', 0)
     data['cpu_usage'] = cpuUsage
 
     // ubus load 为 65536 倍定点数，转换为常规负载值
@@ -1396,12 +1397,12 @@ export class ApiClient {
 
     const memOut: Record<string, Object> = {}
     if (mem) {
-      memOut['total'] = ApiClient.numOf(mem, 'total', 0)
-      memOut['free'] = ApiClient.numOf(mem, 'free', 0)
-      memOut['available'] = ApiClient.numOf(mem, 'available', 0)
-      memOut['buffered'] = ApiClient.numOf(mem, 'buffered', 0)
-      memOut['buffers'] = ApiClient.numOf(mem, 'buffered', 0)
-      memOut['cached'] = ApiClient.numOf(mem, 'cached', 0)
+      memOut['total'] = ApiUtils.numOf(mem, 'total', 0)
+      memOut['free'] = ApiUtils.numOf(mem, 'free', 0)
+      memOut['available'] = ApiUtils.numOf(mem, 'available', 0)
+      memOut['buffered'] = ApiUtils.numOf(mem, 'buffered', 0)
+      memOut['buffers'] = ApiUtils.numOf(mem, 'buffered', 0)
+      memOut['cached'] = ApiUtils.numOf(mem, 'cached', 0)
     }
     data['memory'] = memOut as Object
 
@@ -1418,7 +1419,7 @@ export class ApiClient {
   private async getCpuUsage(): Promise<number> {
     const st: Object | null = await this.fetchIStoreSystemStatus()
     if (st) {
-      return ApiClient.numOf(st, 'cpuUsage', 0)
+      return ApiUtils.numOf(st, 'cpuUsage', 0)
     }
     const fromProcs: number = await this.getCpuUsageFromProcs()
     if (fromProcs >= 0) {
@@ -1439,7 +1440,7 @@ export class ApiClient {
     }
     let total: number = 0
     for (let i = 0; i < procs.length; i++) {
-      total += ApiClient.percentOf(procs[i] as Record<string, Object>, '%CPU')
+      total += ApiUtils.percentOf(procs[i] as Record<string, Object>, '%CPU')
     }
     return Math.min(100, Math.round(total))
   }
@@ -1450,10 +1451,10 @@ export class ApiClient {
     if (!s1) {
       return 0
     }
-    await this.sleep(1000)
+    await ApiUtils.sleep(1000)
     const s2: string = await this.ubusReadFile('/proc/stat')
-    const a: number[] = ApiClient.parseProcStatCpu(s1)
-    const b: number[] = ApiClient.parseProcStatCpu(s2)
+    const a: number[] = ApiUtils.parseProcStatCpu(s1)
+    const b: number[] = ApiUtils.parseProcStatCpu(s2)
     if (a.length === 0 || b.length === 0) {
       return 0
     }
@@ -1463,25 +1464,6 @@ export class ApiClient {
       return 0
     }
     return Math.min(100, Math.round((deltaTotal - deltaIdle) * 100 / deltaTotal))
-  }
-
-  /** 解析 /proc/stat 首行，返回 [总时间, 空闲+iowait] */
-  private static parseProcStatCpu(text: string): number[] {
-    const firstNl: number = text.indexOf('\n')
-    const line: string = (firstNl > 0 ? text.substring(0, firstNl) : text).trim()
-    if (!line.startsWith('cpu')) {
-      return []
-    }
-    const toks: string[] = line.split(/\s+/).slice(1)
-    if (toks.length < 5) {
-      return []
-    }
-    let total: number = 0
-    for (let i = 0; i < toks.length; i++) {
-      total += parseInt(toks[i]) || 0
-    }
-    const idle: number = (parseInt(toks[3]) || 0) + (parseInt(toks[4]) || 0)
-    return [total, idle]
   }
 
   /** 读取 CPU 温度（/sys/class/thermal，受 ACL 授权限制） */
@@ -1518,7 +1500,7 @@ export class ApiClient {
       // 首次采样：等待 1 秒后再采一次
       this.prevDevStats = first
       this.prevStatsTime = Date.now()
-      await this.sleep(1000)
+      await ApiUtils.sleep(1000)
     }
     const second: Map<string, number[]> = await this.fetchDevStats()
     const now: number = Date.now()
@@ -1545,17 +1527,17 @@ export class ApiClient {
       if (Array.isArray(ifaces)) {
         for (let i = 0; i < ifaces.length; i++) {
           const ifRec = ifaces[i] as Record<string, Object>
-          const logical: string = ApiClient.strOf(ifRec, 'interface')
-          const devName: string = ApiClient.strOf(ifRec, 'l3_device') || ApiClient.strOf(ifRec, 'device')
+          const logical: string = ApiUtils.strOf(ifRec, 'interface')
+          const devName: string = ApiUtils.strOf(ifRec, 'l3_device') || ApiUtils.strOf(ifRec, 'device')
           if (logical && devName && logical !== devName) {
             for (let j = 0; j < rates.length; j++) {
-              if (ApiClient.strOf(rates[j], 'iface') === devName) {
+              if (ApiUtils.strOf(rates[j], 'iface') === devName) {
                 const alias: Record<string, Object> = {}
                 alias['iface'] = logical
-                alias['rx_bytes'] = ApiClient.numOf(rates[j], 'rx_bytes', 0)
-                alias['tx_bytes'] = ApiClient.numOf(rates[j], 'tx_bytes', 0)
-                alias['rx_rate'] = ApiClient.numOf(rates[j], 'rx_rate', 0)
-                alias['tx_rate'] = ApiClient.numOf(rates[j], 'tx_rate', 0)
+                alias['rx_bytes'] = ApiUtils.numOf(rates[j], 'rx_bytes', 0)
+                alias['tx_bytes'] = ApiUtils.numOf(rates[j], 'tx_bytes', 0)
+                alias['rx_rate'] = ApiUtils.numOf(rates[j], 'rx_rate', 0)
+                alias['tx_rate'] = ApiUtils.numOf(rates[j], 'tx_rate', 0)
                 rates.push(alias as Object)
                 break
               }
@@ -1586,7 +1568,7 @@ export class ApiClient {
         if (!st || typeof st !== 'object') {
           continue
         }
-        stats.set(names[i], [ApiClient.numOf(st, 'rx_bytes', 0), ApiClient.numOf(st, 'tx_bytes', 0)])
+        stats.set(names[i], [ApiUtils.numOf(st, 'rx_bytes', 0), ApiUtils.numOf(st, 'tx_bytes', 0)])
       }
     }
     if (stats.size > 0) {
@@ -1621,6 +1603,31 @@ export class ApiClient {
   private async buildWirelessData(): Promise<Object> {
     const interfaces: Object[] = []
     const devices: Object[] = []
+
+    // 0. 读取 wireless 配置，获取各无线接口的 disabled 状态（key 为 radio0 等接口名）
+    const disabledMap: Map<string, boolean> = new Map()
+    try {
+      const wlCfgRaw: Object | null = await this.ubusCall('network.wireless', 'status', new EmptyRecord())
+      if (wlCfgRaw) {
+        let cfgRec = wlCfgRaw as Record<string, Object>
+        // ubus 响应含 data 包装层
+        const inner = cfgRec['data']
+        if (inner && typeof inner === 'object') {
+          cfgRec = inner as Record<string, Object>
+        }
+        const cfgKeys: string[] = Object.keys(cfgRec)
+        for (let i = 0; i < cfgKeys.length; i++) {
+          const ifaceRec = cfgRec[cfgKeys[i]] as Record<string, Object>
+          if (!ifaceRec) continue
+          const disabledVal = ifaceRec['disabled']
+          const disabled: boolean = disabledVal === 1 || disabledVal === '1' ||
+            disabledVal === true || disabledVal === 'true'
+          disabledMap.set(cfgKeys[i], disabled)
+        }
+      }
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'buildWirelessData config err')
+    }
 
     // 1. 收集候选无线设备名：hostapd.* ubus 对象
     const candidates: string[] = []
@@ -1661,14 +1668,14 @@ export class ApiClient {
       const info: Object | null = await this.ubusCall('iwinfo', 'info', dp)
       if (info) {
         const infoRec = info as Record<string, Object>
-        ssid = ApiClient.strOf(infoRec, 'ssid') || ApiClient.strOf(infoRec, 'essid')
-        channel = ApiClient.numOf(infoRec, 'channel', 0)
-        wifiMode = ApiClient.strOf(infoRec, 'mode')
-        frequency = ApiClient.numOf(infoRec, 'frequency', 0)
-        txpower = ApiClient.numOf(infoRec, 'txpower', 0)
-        encryption = ApiClient.strOf(infoRec, 'encryption')
-        quality = ApiClient.numOf(infoRec, 'quality', 0)
-        hwmode = ApiClient.strOf(infoRec, 'hwmode')
+        ssid = ApiUtils.strOf(infoRec, 'ssid') || ApiUtils.strOf(infoRec, 'essid')
+        channel = ApiUtils.numOf(infoRec, 'channel', 0)
+        wifiMode = ApiUtils.strOf(infoRec, 'mode')
+        frequency = ApiUtils.numOf(infoRec, 'frequency', 0)
+        txpower = ApiUtils.numOf(infoRec, 'txpower', 0)
+        encryption = ApiUtils.strOf(infoRec, 'encryption')
+        quality = ApiUtils.numOf(infoRec, 'quality', 0)
+        hwmode = ApiUtils.strOf(infoRec, 'hwmode')
       }
 
       const clients: Object[] = []
@@ -1707,6 +1714,7 @@ export class ApiClient {
       devIf['hwmode'] = hwmode
       const devItem: Record<string, Object> = {}
       devItem['name'] = dev
+      devItem['disabled'] = (disabledMap.get(dev) ?? false) as Object
       devItem['interfaces'] = [devIf] as Object
       devices.push(devItem as Object)
     }
@@ -1722,15 +1730,15 @@ export class ApiClient {
     const rx = c['rx'] as Record<string, Object>
     const tx = c['tx'] as Record<string, Object>
     const item: Record<string, Object> = {}
-    item['mac'] = ApiClient.strOf(c, 'mac')
+    item['mac'] = ApiUtils.strOf(c, 'mac')
     item['hostname'] = ''
     item['interface'] = dev
-    item['signal'] = ApiClient.numOf(c, 'signal', 0)
-    item['noise'] = ApiClient.numOf(c, 'noise', 0)
-    item['rx_rate'] = rx ? ApiClient.numOf(rx, 'rate', 0) : 0
-    item['tx_rate'] = tx ? ApiClient.numOf(tx, 'rate', 0) : 0
-    item['connected_time'] = ApiClient.numOf(c, 'connected_time', 0)
-    item['inactive_time'] = ApiClient.numOf(c, 'inactive_time', 0)
+    item['signal'] = ApiUtils.numOf(c, 'signal', 0)
+    item['noise'] = ApiUtils.numOf(c, 'noise', 0)
+    item['rx_rate'] = rx ? ApiUtils.numOf(rx, 'rate', 0) : 0
+    item['tx_rate'] = tx ? ApiUtils.numOf(tx, 'rate', 0) : 0
+    item['connected_time'] = ApiUtils.numOf(c, 'connected_time', 0)
+    item['inactive_time'] = ApiUtils.numOf(c, 'inactive_time', 0)
     return item as Object
   }
 
@@ -1744,11 +1752,11 @@ export class ApiClient {
         for (let i = 0; i < leases.length; i++) {
           const l = leases[i] as Record<string, Object>
           const item: Record<string, Object> = {}
-          item['mac'] = ApiClient.strOf(l, 'macaddr')
-          item['ip'] = ApiClient.strOf(l, 'ipaddr')
-          item['name'] = ApiClient.strOf(l, 'hostname')
+          item['mac'] = ApiUtils.strOf(l, 'macaddr')
+          item['ip'] = ApiUtils.strOf(l, 'ipaddr')
+          item['name'] = ApiUtils.strOf(l, 'hostname')
           // luci-rpc 返回的 expires 为剩余秒数，转换为绝对时间戳
-          item['expires'] = now + ApiClient.numOf(l, 'expires', 0)
+          item['expires'] = now + ApiUtils.numOf(l, 'expires', 0)
           list.push(item as Object)
         }
       }
@@ -1791,8 +1799,8 @@ export class ApiClient {
       for (let i = 0; i < keys.length; i++) {
         const bd = rec[keys[i]] as Record<string, Object>
         if (bd && typeof bd === 'object') {
-          const devPath: string = ApiClient.strOf(bd, 'dev')
-          const fsType: string = ApiClient.strOf(bd, 'type')
+          const devPath: string = ApiUtils.strOf(bd, 'dev')
+          const fsType: string = ApiUtils.strOf(bd, 'type')
           if (devPath && fsType) {
             fsMap.set(devPath, fsType)
           }
@@ -1806,17 +1814,17 @@ export class ApiClient {
       if (Array.isArray(arr)) {
         for (let i = 0; i < arr.length; i++) {
           const m = arr[i] as Record<string, Object>
-          const devPath: string = ApiClient.strOf(m, 'device')
+          const devPath: string = ApiUtils.strOf(m, 'device')
           // 与旧脚本一致：仅统计 /dev/* 设备，过滤 tmpfs 和 docker overlay
           if (!devPath.startsWith('/dev/')) {
             continue
           }
-          const size: number = ApiClient.numOf(m, 'size', 0)
-          const free: number = ApiClient.numOf(m, 'free', 0)
-          const avail: number = ApiClient.numOf(m, 'avail', 0)
+          const size: number = ApiUtils.numOf(m, 'size', 0)
+          const free: number = ApiUtils.numOf(m, 'free', 0)
+          const avail: number = ApiUtils.numOf(m, 'avail', 0)
           const item: Record<string, Object> = {}
           item['device'] = devPath
-          item['mount'] = ApiClient.strOf(m, 'mount')
+          item['mount'] = ApiUtils.strOf(m, 'mount')
           item['fs'] = fsMap.get(devPath) ? fsMap.get(devPath)! : ''
           item['total_kb'] = Math.floor(size / 1024)
           item['used_kb'] = Math.floor((size - free) / 1024)
@@ -1906,15 +1914,15 @@ export class ApiClient {
       if (Array.isArray(procs)) {
         for (let i = 0; i < procs.length; i++) {
           const p = procs[i] as Record<string, Object>
-          const cmd: string = ApiClient.strOf(p, 'COMMAND')
+          const cmd: string = ApiUtils.strOf(p, 'COMMAND')
           const item: Record<string, Object> = {}
-          item['pid'] = ApiClient.numOf(p, 'PID', 0)
-          item['ppid'] = ApiClient.numOf(p, 'PPID', 0)
-          item['user'] = ApiClient.strOf(p, 'USER').trim()
-          item['status'] = ApiClient.strOf(p, 'STAT').trim()
-          item['rss_kb'] = ApiClient.parseSizeToKb(ApiClient.strOf(p, 'VSZ'))
-          item['cpu_percent'] = ApiClient.percentOf(p, '%CPU')
-          item['mem_percent'] = ApiClient.percentOf(p, '%MEM')
+          item['pid'] = ApiUtils.numOf(p, 'PID', 0)
+          item['ppid'] = ApiUtils.numOf(p, 'PPID', 0)
+          item['user'] = ApiUtils.strOf(p, 'USER').trim()
+          item['status'] = ApiUtils.strOf(p, 'STAT').trim()
+          item['rss_kb'] = ApiUtils.parseSizeToKb(ApiUtils.strOf(p, 'VSZ'))
+          item['cpu_percent'] = ApiUtils.percentOf(p, '%CPU')
+          item['mem_percent'] = ApiUtils.percentOf(p, '%MEM')
           item['command'] = cmd
           // comm 取命令首字段的文件名部分
           const firstTok: string = cmd.split(' ')[0]
@@ -1979,11 +1987,11 @@ export class ApiClient {
         }
         const item: Record<string, Object> = {}
         item['destination'] = first
-        item['gateway'] = ApiClient.tokenAfter(toks, 'via')
-        item['device'] = ApiClient.tokenAfter(toks, 'dev')
-        item['source'] = ApiClient.tokenAfter(toks, 'src')
-        item['table'] = ApiClient.tokenAfter(toks, 'table')
-        item['scope'] = ApiClient.tokenAfter(toks, 'scope')
+        item['gateway'] = ApiUtils.tokenAfter(toks, 'via')
+        item['device'] = ApiUtils.tokenAfter(toks, 'dev')
+        item['source'] = ApiUtils.tokenAfter(toks, 'src')
+        item['table'] = ApiUtils.tokenAfter(toks, 'table')
+        item['scope'] = ApiUtils.tokenAfter(toks, 'scope')
         item['flags'] = ''
         list.push(item as Object)
       }
@@ -2029,11 +2037,11 @@ export class ApiClient {
       const info: Object | null = await this.dockerApiGet('/info')
       if (info) {
         const rec = info as Record<string, Object>
-        overview['docker_version'] = ApiClient.strOf(rec, 'ServerVersion')
+        overview['docker_version'] = ApiUtils.strOf(rec, 'ServerVersion')
         overview['daemon_status'] = 'running'
-        overview['containers_total'] = ApiClient.numOf(rec, 'Containers', 0)
-        overview['containers_running'] = ApiClient.numOf(rec, 'ContainersRunning', 0)
-        overview['images_total'] = ApiClient.numOf(rec, 'Images', 0)
+        overview['containers_total'] = ApiUtils.numOf(rec, 'Containers', 0)
+        overview['containers_running'] = ApiUtils.numOf(rec, 'ContainersRunning', 0)
+        overview['images_total'] = ApiUtils.numOf(rec, 'Images', 0)
         return overview as Object
       }
     }
@@ -2127,16 +2135,16 @@ export class ApiClient {
             if (!a || typeof a !== 'object') {
               continue
             }
-            const name: string = ApiClient.strOf(a, 'name')
+            const name: string = ApiUtils.strOf(a, 'name')
             if (!name) {
               continue
             }
             const item: Record<string, Object> = {}
             item['name'] = name
-            item['title'] = ApiClient.strOf(a, 'title') || ApiClient.strOf(a, 'title_en')
-            item['version'] = ApiClient.strOf(a, 'version')
+            item['title'] = ApiUtils.strOf(a, 'title') || ApiUtils.strOf(a, 'title_en')
+            item['version'] = ApiUtils.strOf(a, 'version')
             item['icon'] = `/luci-static/resources/app-icons/${name}.png`
-            item['link'] = ApiClient.strOf(a, 'entry')
+            item['link'] = ApiUtils.strOf(a, 'entry')
             list.push(item as Object)
           }
         }
@@ -2156,11 +2164,11 @@ export class ApiClient {
       const row: DockerRow = new DockerRow()
       row.fullId = m[1]
       const rowHtml: string = m[0]
-      row.shortId = ApiClient.dockerField(rowHtml, '_id') || row.fullId.substring(0, 12)
-      row.name = ApiClient.dockerField(rowHtml, '_name')
-      row.image = ApiClient.dockerField(rowHtml, '_image')
-      row.command = ApiClient.dockerField(rowHtml, '_command')
-      row.status = ApiClient.stripTags(ApiClient.dockerField(rowHtml, '_status')).trim()
+      row.shortId = ApiUtils.dockerField(rowHtml, '_id') || row.fullId.substring(0, 12)
+      row.name = ApiUtils.dockerField(rowHtml, '_name')
+      row.image = ApiUtils.dockerField(rowHtml, '_image')
+      row.command = ApiUtils.dockerField(rowHtml, '_command')
+      row.status = ApiUtils.stripTags(ApiUtils.dockerField(rowHtml, '_status')).trim()
       row.running = row.status.startsWith('Up')
       rows.push(row)
       m = rowRe.exec(html)
@@ -2236,38 +2244,6 @@ export class ApiClient {
       `&cbid.table.1._${action}=${encodeURIComponent(label)}`
     const post: LuciHttpResult = await this.luciPostForm('admin/docker/containers', body)
     return post.status === 200 || post.status === 302
-  }
-
-  /** 提取 dockerman 表格行内指定字段的隐藏 input 值（含 HTML 反转义） */
-  private static dockerField(rowHtml: string, field: string): string {
-    const re: RegExp = new RegExp(`data-name="${field}"[\\s\\S]{0,600}?value="([^"]*)"`)
-    const m = rowHtml.match(re)
-    if (!m || m.length < 2) {
-      return ''
-    }
-    return ApiClient.unescapeHtml(m[1])
-  }
-
-  /** HTML 反转义（数字实体 + 常见命名实体） */
-  private static unescapeHtml(s: string): string {
-    if (!s) {
-      return ''
-    }
-    return s
-      .replace(/&#(\d+);/g, (_m: string, code: string): string => String.fromCharCode(parseInt(code)))
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#x27;/g, "'")
-      .replace(/&amp;/g, '&')
-  }
-
-  /** 去除 HTML 标签 */
-  private static stripTags(s: string): string {
-    if (!s) {
-      return ''
-    }
-    return s.replace(/<[^>]+>/g, ' ')
   }
 
   // ============================================================
@@ -2368,79 +2344,6 @@ export class ApiClient {
       this.lastError = `Request failed: ${String(e)}`
       return null
     }
-  }
-
-  // ============================================================
-  //  静态解析辅助
-  // ============================================================
-
-  /** 安全读取字符串字段 */
-  private static strOf(obj: Object, key: string): string {
-    if (!obj || typeof obj !== 'object') {
-      return ''
-    }
-    const v = (obj as Record<string, Object>)[key]
-    if (v === undefined || v === null) {
-      return ''
-    }
-    return String(v)
-  }
-
-  /** 安全读取数值字段 */
-  private static numOf(obj: Object, key: string, def: number): number {
-    if (!obj || typeof obj !== 'object') {
-      return def
-    }
-    const v = (obj as Record<string, Object>)[key]
-    if (v === undefined || v === null) {
-      return def
-    }
-    const n: number = Number(v)
-    return isNaN(n) ? def : n
-  }
-
-  /** 解析百分比字符串（如 "55%" → 55） */
-  private static percentOf(obj: Object, key: string): number {
-    const raw: string = ApiClient.strOf(obj, key).replace('%', '').trim()
-    const n: number = parseFloat(raw)
-    return isNaN(n) ? 0 : n
-  }
-
-  /** 解析带单位的容量字符串为 KB（如 "2169m" → 2221056，"512k" → 512） */
-  private static parseSizeToKb(raw: string): number {
-    if (!raw) {
-      return 0
-    }
-    const s: string = raw.trim().toLowerCase()
-    const n: number = parseFloat(s)
-    if (isNaN(n)) {
-      return 0
-    }
-    if (s.endsWith('g')) {
-      return Math.floor(n * 1024 * 1024)
-    }
-    if (s.endsWith('m')) {
-      return Math.floor(n * 1024)
-    }
-    return Math.floor(n)
-  }
-
-  /** 返回指定 key 之后的 token 值（用于解析 ip route 输出） */
-  private static tokenAfter(toks: string[], key: string): string {
-    for (let i = 0; i < toks.length - 1; i++) {
-      if (toks[i] === key) {
-        return toks[i + 1]
-      }
-    }
-    return ''
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        resolve()
-      }, ms)
-    })
   }
 
   // ========== 系统信息类 API ==========
@@ -2687,9 +2590,9 @@ export class ApiClient {
       const rec = data as Record<string, Object>
       const values = rec['values'] as Record<string, Object>
       if (values) {
-        return ApiClient.strOf(values, option)
+        return ApiUtils.strOf(values, option)
       }
-      return ApiClient.strOf(rec, 'value') || ApiClient.strOf(rec, option)
+      return ApiUtils.strOf(rec, 'value') || ApiUtils.strOf(rec, option)
     }
     return ''
   }

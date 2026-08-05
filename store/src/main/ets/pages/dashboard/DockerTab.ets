@@ -21,13 +21,34 @@ export struct DockerTab {
   private api: ApiService = new ApiService()
   private lastScrollY: number = 0
   private refreshTimer: number = -1
-  private statsTimer: number = -1
+  private isVisible: boolean = false
+  private tabChangeListener: ((tab: number) => void) | null = null
 
   aboutToAppear(): void {
     this.apiAvailable = this.api.hasDockerApi()
+    // 前台感知：仅当本 Tab（Docker index 4）可见时轮询
+    this.isVisible = AppState.getInstance().getCurrentTab() === 4
+    this.tabChangeListener = (tab: number) => {
+      const visible: boolean = tab === 4
+      if (visible && !this.isVisible) {
+        this.isVisible = true
+        this.loadData()
+        if (this.refreshTimer === -1) {
+          this.refreshTimer = setInterval(() => { this.refreshSilently() }, 5000)
+        }
+      } else if (!visible && this.isVisible) {
+        this.isVisible = false
+        if (this.refreshTimer !== -1) {
+          clearInterval(this.refreshTimer)
+          this.refreshTimer = -1
+        }
+      }
+    }
+    AppState.getInstance().onTabChange(this.tabChangeListener)
     this.loadData()
-    this.refreshTimer = setInterval(() => { this.refreshSilently() }, 5000)
-    this.statsTimer = setInterval(() => { this.fetchStats() }, 5000)
+    if (this.isVisible) {
+      this.refreshTimer = setInterval(() => { this.refreshSilently() }, 5000)
+    }
   }
 
   aboutToDisappear(): void {
@@ -35,9 +56,9 @@ export struct DockerTab {
       clearInterval(this.refreshTimer)
       this.refreshTimer = -1
     }
-    if (this.statsTimer !== -1) {
-      clearInterval(this.statsTimer)
-      this.statsTimer = -1
+    if (this.tabChangeListener) {
+      AppState.getInstance().offTabChange(this.tabChangeListener)
+      this.tabChangeListener = null
     }
   }
 

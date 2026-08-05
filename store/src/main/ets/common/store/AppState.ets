@@ -86,6 +86,40 @@ export class AppState {
   private navHidden: boolean = false
   private navListeners: (() => void)[] = []
 
+  // ========== 当前主 Tab 索引（用于前台感知轮询）==========
+  private currentTab: number = 0
+  private tabListeners: ((tab: number) => void)[] = []
+
+  /** 设置当前主 Tab 索引（MainPage 切换时调用） */
+  setCurrentTab(tab: number): void {
+    if (this.currentTab !== tab) {
+      this.currentTab = tab
+      for (const l of this.tabListeners) {
+        try { l(tab) } catch (_e) {}
+      }
+    }
+  }
+
+  /** 获取当前主 Tab 索引 */
+  getCurrentTab(): number {
+    return this.currentTab
+  }
+
+  /** 订阅主 Tab 切换 */
+  onTabChange(listener: (tab: number) => void): void {
+    if (!this.tabListeners.includes(listener)) {
+      this.tabListeners.push(listener)
+    }
+  }
+
+  /** 取消订阅主 Tab 切换 */
+  offTabChange(listener: (tab: number) => void): void {
+    const idx: number = this.tabListeners.indexOf(listener)
+    if (idx >= 0) {
+      this.tabListeners.splice(idx, 1)
+    }
+  }
+
   hideNav(): void {
     if (!this.navHidden) {
       this.navHidden = true
@@ -117,6 +151,40 @@ export class AppState {
   offNavChange(listener: () => void): void {
     const idx = this.navListeners.indexOf(listener)
     if (idx >= 0) this.navListeners.splice(idx, 1)
+  }
+
+  // ========== 相册子视图状态（供 MainPage 拦截返回手势） ==========
+
+  private albumSubViewActive: boolean = false
+  private albumBackListeners: (() => void)[] = []
+
+  /** 设置相册是否处于子视图（相册详情/全部照片） */
+  setAlbumSubView(active: boolean): void {
+    this.albumSubViewActive = active
+  }
+
+  /** 相册是否处于子视图 */
+  isAlbumSubView(): boolean {
+    return this.albumSubViewActive
+  }
+
+  /** 注册相册返回回调（返回 true 表示已处理，阻止默认返回） */
+  onAlbumBack(listener: () => void): void {
+    if (!this.albumBackListeners.includes(listener)) {
+      this.albumBackListeners.push(listener)
+    }
+  }
+
+  offAlbumBack(listener: () => void): void {
+    const idx: number = this.albumBackListeners.indexOf(listener)
+    if (idx >= 0) this.albumBackListeners.splice(idx, 1)
+  }
+
+  /** 通知相册退出子视图（由 MainPage 的 onBackPress 触发） */
+  notifyAlbumBack(): void {
+    for (const l of this.albumBackListeners) {
+      try { l() } catch (_e) {}
+    }
   }
 
   // ========== 主题管理 ==========

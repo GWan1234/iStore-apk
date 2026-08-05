@@ -8,6 +8,7 @@
  */
 import { AppState } from '../../common/store/AppState'
 import { SavedDevice } from '../../common/store/DeviceStore'
+import { ImmichStore } from '../../common/store/ImmichStore'
 import { ConnectionConfig } from '../../models/Models'
 import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
 import { common } from '@kit.AbilityKit'
@@ -44,6 +45,12 @@ struct LoginPage {
   async aboutToAppear(): Promise<void> {
     const ctx: common.Context = this.getUIContext().getHostContext() as common.Context
     await this.appState.init(ctx)
+    try {
+      const immichStore = ImmichStore.getInstance()
+      await immichStore.init(ctx)
+    } catch (e) {
+      hilog.error(0x0001, 'LoginPage', `immich store init failed: ${e}`)
+    }
     this.savedDevices = this.appState.devices
     this.isDark = this.appState.isDarkMode
     this.theme = this.appState.getTheme()

@@ -24,18 +24,47 @@ export struct DashboardTab {
   @State onlineClientCount: number = 0
   private lastScrollY: number = 0
   private timerId: number = -1
+  private isVisible: boolean = false
+  private tabChangeListener: ((tab: number) => void) | null = null
+
   aboutToAppear(): void {
+    // 前台感知：仅当本 Tab（首页 index 0）可见时轮询
+    this.isVisible = AppState.getInstance().getCurrentTab() === 0
+    this.tabChangeListener = (tab: number) => {
+      const visible: boolean = tab === 0
+      if (visible && !this.isVisible) {
+        this.isVisible = true
+        // 回到本 Tab 时立即刷新一次，然后恢复轮询
+        this.refreshData()
+        if (this.timerId === -1) {
+          this.timerId = setInterval(() => { this.refreshData() }, 5000)
+        }
+      } else if (!visible && this.isVisible) {
+        this.isVisible = false
+        if (this.timerId !== -1) {
+          clearInterval(this.timerId)
+          this.timerId = -1
+        }
+      }
+    }
+    AppState.getInstance().onTabChange(this.tabChangeListener)
     // 首次加载数据，然后启动 5 秒轮询刷新
     this.loadData()
-    this.timerId = setInterval(() => {
-      this.refreshData()
-    }, 5000)
+    if (this.isVisible) {
+      this.timerId = setInterval(() => {
+        this.refreshData()
+      }, 5000)
+    }
   }
 
   aboutToDisappear(): void {
     if (this.timerId !== -1) {
       clearInterval(this.timerId)
       this.timerId = -1
+    }
+    if (this.tabChangeListener) {
+      AppState.getInstance().offTabChange(this.tabChangeListener)
+      this.tabChangeListener = null
     }
   }
 

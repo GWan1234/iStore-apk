@@ -7,7 +7,7 @@ import { DashboardTab } from './DashboardTab'
 import { DeviceTab } from './DeviceTab'
 import { IStoreTabView } from './IStoreTabView'
 import { DockerTab } from './DockerTab'
-import { NetworkTab } from './NetworkTab'
+import { AlbumTab } from './AlbumTab'
 
 @Entry
 @Component
@@ -25,6 +25,8 @@ struct MainPage {
     this.theme = AppState.getInstance().getTheme()
     const device = AppState.getInstance().getActiveDevice()
     this.deviceName = device ? (device.label || device.host) : '未连接'
+    // 初始 Tab 为首页，广播给子页做前台感知
+    AppState.getInstance().setCurrentTab(0)
 
     AppState.getInstance().onThemeChange(() => {
       this.isDark = AppState.getInstance().isDarkMode
@@ -52,6 +54,18 @@ struct MainPage {
 
   aboutToDisappear(): void {
     AppState.getInstance().offNavChange(() => {})
+  }
+
+  /**
+   * 拦截系统返回（含侧滑返回手势）
+   * 当相册处于子视图（相册详情/全部照片/全屏查看）时，先返回相册列表，不退出应用
+   */
+  onBackPress(): boolean {
+    if (AppState.getInstance().isAlbumSubView()) {
+      AppState.getInstance().notifyAlbumBack()
+      return true
+    }
+    return false
   }
 
   build() {
@@ -89,12 +103,12 @@ struct MainPage {
           }, '设备'))
 
           TabContent() {
-            NetworkTab({ theme: this.theme })
+            AlbumTab({ theme: this.theme })
           }
           .tabBar(new BottomTabBarStyle({
-            normal: new SymbolGlyphModifier($r('sys.symbol.wifi_router_fill')),
-            selected: new SymbolGlyphModifier($r('sys.symbol.wifi_router_fill'))
-          }, '网络'))
+            normal: new SymbolGlyphModifier($r('sys.symbol.archivebox_fill')),
+            selected: new SymbolGlyphModifier($r('sys.symbol.archivebox_fill'))
+          }, '相册'))
 
           TabContent() {
             IStoreTabView({ theme: this.theme })
@@ -139,6 +153,10 @@ struct MainPage {
               hilog.error(0x0001, 'MainPage', `pushUrl failed: ${e}`)
             }
             this.tabsController.changeIndex(0)
+            AppState.getInstance().setCurrentTab(0)
+          } else {
+            // 广播当前 Tab，供各子页做前台感知（暂停/恢复轮询）
+            AppState.getInstance().setCurrentTab(index)
           }
         })
         .barFloatingStyle({

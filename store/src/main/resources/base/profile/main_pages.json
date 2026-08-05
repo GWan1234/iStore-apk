@@ -5,6 +5,7 @@
     "pages/devices/ClientDetailPage",
     "pages/apps/AppsPage",
     "pages/apps/WifiPage",
+    "pages/apps/NetworkPage",
     "pages/network/RouteTablePage",
     "pages/process/ProcessListPage",
     "pages/process/StartupPage",

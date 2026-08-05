@@ -28,6 +28,7 @@ export interface ThemePalette {
   bgCardHover: string       // 卡片悬停/按下背景
   bgGlass: string           // 毛玻璃面板背景
   bgGlassLight: string      // 浅色毛玻璃背景
+  bgCardSolid: string       // 不透明卡片背景（弹窗/浮层用，保证内容清晰）
 
   // --- 文本颜色 ---
   textPrimary: string       // 主要文本（标题、正文）
@@ -60,6 +61,7 @@ export const DARK_THEME: ThemePalette = {
   bgCardHover: 'rgba(255, 255, 255, 0.12)',
   bgGlass: 'rgba(18, 22, 55, 0.7)',
   bgGlassLight: 'rgba(255, 255, 255, 0.08)',
+  bgCardSolid: '#1B2140',
 
   textPrimary: '#FFFFFF',
   textSecondary: 'rgba(255, 255, 255, 0.7)',
@@ -90,6 +92,7 @@ export const LIGHT_THEME: ThemePalette = {
   bgCardHover: 'rgba(0, 0, 0, 0.06)',
   bgGlass: 'rgba(255, 255, 255, 0.85)',
   bgGlassLight: 'rgba(0, 0, 0, 0.03)',
+  bgCardSolid: '#FFFFFF',
 
   textPrimary: '#1F1F1F',
   textSecondary: 'rgba(0, 0, 0, 0.6)',
