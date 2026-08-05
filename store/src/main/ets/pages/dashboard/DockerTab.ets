@@ -218,7 +218,7 @@ export struct DockerTab {
               Text('Daemon')
                 .fontSize(12).fontColor(this.theme.textTertiary)
               Row() {
-                Circle({ width: 8, height: 8 }).fill(this.getStatusColor())
+                Circle({ width: 8, height: 8 }).foregroundColor(this.getStatusColor())
                 Text(this.getStatusText())
                   .fontSize(20).fontColor(this.getStatusColor()).fontWeight(FontWeight.Bold)
                   .margin({ left: 6 })
@@ -361,7 +361,7 @@ export struct DockerTab {
                         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                       Row() {
                         Circle({ width: 6, height: 6 })
-                          .fill(c.running ? '#4CAF50' : '#9E9E9E')
+                          .foregroundColor(c.running ? '#4CAF50' : '#9E9E9E')
                         Text(this.actionContainer === c.name ? '操作中...' : c.status)
                           .fontSize(11).fontColor(this.theme.textTertiary)
                           .margin({ left: 5 })

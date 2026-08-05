@@ -150,7 +150,7 @@ struct EthPortPage {
 
                     Row() {
                       Circle({ width: 8, height: 8 })
-                        .fill(port.up ? '#00E676' : '#757575')
+                        .foregroundColor(port.up ? '#00E676' : '#757575')
                         .margin({ right: 6 })
                       Text(port.up ? '已连接' : '未连接')
                         .fontSize(12).fontColor(port.up ? '#00E676' : '#757575')

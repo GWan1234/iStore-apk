@@ -2,23 +2,36 @@
   "app": {
     "signingConfigs": [
       {
-        "name": "default",
+        "name": "debug",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_RZRZz8JgZ7c07AsL653SAdBYYr9lkz1aTEseqMAFvqs=.cer",
+          "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_JVsaF1FOT4EpNziw1_A8WYJuPhAdrKAY7zUQ8mwWAIc=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B3EA849F72AA291AB947343929DB4C8CEE1F782E85C2394C1415E59811659D21AC94DD9B942078D",
-          "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_RZRZz8JgZ7c07AsL653SAdBYYr9lkz1aTEseqMAFvqs=.p7b",
+          "keyPassword": "0000001BA45F4C950D0FE468ED5D0A3C95D1C27BED42C1A9B50A783529C125A45F56048338BE4E8EB39BD7",
+          "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_JVsaF1FOT4EpNziw1_A8WYJuPhAdrKAY7zUQ8mwWAIc=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_RZRZz8JgZ7c07AsL653SAdBYYr9lkz1aTEseqMAFvqs=.p12",
-          "storePassword": "0000001B9984CD71A4F14859DF43937F485A4340CBA3ED01A9D0701B68BCE172715530F8A0B2DC32FE019A"
+          "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_JVsaF1FOT4EpNziw1_A8WYJuPhAdrKAY7zUQ8mwWAIc=.p12",
+          "storePassword": "0000001B88F7E41E6C1FDEDC058BBB647A8875B0B5F91A1957F30F4FDFAB93598337F2AAE46697CD894669"
+        }
+      },
+      {
+        "name": "release",
+        "type": "HarmonyOS",
+        "material": {
+          "storeFile": "C:/Users/Administrator/.ohos/release/iStore-release.p12",
+          "storePassword": "0000002257B79DF62E57163CE964D24C661AC5A72C5FE1C3C816D3A783EF5492369F22E63D9034C73631F87EF65C08836F2D",
+          "keyAlias": "releaseKey",
+          "keyPassword": "00000022E4DADCB9E18EE4F94E9B50258AAD5E1C6AE358382040BF73AE5C750FCE6A1A6997EE38794954C270AF0D7B567172",
+          "signAlg": "SHA256withECDSA",
+          "profile": "C:/Users/Administrator/.ohos/release/ReleaseRelease.p7b",
+          "certpath": "C:/Users/Administrator/.ohos/release/Release.cer"
         }
       }
     ],
     "products": [
       {
         "name": "default",
-        "signingConfig": "default",
+        "signingConfig": "debug",
         "targetSdkVersion": "6.1.0(23)",
         "compatibleSdkVersion": "6.1.0(23)",
         "runtimeOS": "HarmonyOS",

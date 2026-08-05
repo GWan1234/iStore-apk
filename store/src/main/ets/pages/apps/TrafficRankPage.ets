@@ -167,7 +167,7 @@ struct TrafficRankPage {
                       .fontFamily('monospace').margin({ right: 12 })
                     Row() {
                       Circle({ width: 6, height: 6 })
-                        .fill(dev.isOnline ? '#00E676' : '#9E9E9E')
+                        .foregroundColor(dev.isOnline ? '#00E676' : '#9E9E9E')
                       Text(dev.isOnline ? ' 在线' : ' 离线')
                         .fontSize(10).fontColor(dev.isOnline ? '#00E676' : '#9E9E9E')
                     }

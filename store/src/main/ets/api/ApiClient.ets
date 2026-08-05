@@ -89,6 +89,82 @@ class VerboseParam {
   verbose: boolean = true
 }
 
+// ========== OAF 应用过滤写操作参数（appfilter set_* 接口） ==========
+
+/** uci add/delete 参数 */
+class UciSectionParam {
+  config: string = ''
+  section: string = ''
+}
+
+/** network.wireless reload 参数 */
+class WirelessReloadParam {
+  rollback: boolean = false
+}
+
+/** hostapd 踢客户端参数 */
+class DelClientParam {
+  mac: string = ''
+}
+
+/** AppFilterBaseSetParam 前补：uci 通用单值 set 参数 */
+
+/** set_app_filter_base 参数 */
+class AppFilterBaseSetParam {
+  enable: number = 0
+  work_mode: number = 0
+  record_enable: number = 0
+  disable_quic: number = 0
+  app_filter_mode: number = 0
+}
+
+/** set_app_filter 参数（管控应用 ID 列表） */
+class AppFilterSetParam {
+  app_list: number[] = []
+}
+
+/** 时间段条目 {start, end}（HH:MM 字符串） */
+class AppFilterTimeItemParam {
+  start: string = ''
+  end: string = ''
+}
+
+/** set_app_filter_time 参数 */
+class AppFilterTimeSetParam {
+  mode: number = 0              // 0=固定时段 1=动态时长
+  weekday_list: number[] = []
+  time_list: AppFilterTimeItemParam[] = []
+  deny_time: number = 0
+  allow_time: number = 0
+  start_time: string = ''
+  end_time: string = ''
+}
+
+/** set_app_filter_user 参数（user_mode） */
+class AppFilterUserSetParam {
+  mode: number = 0
+}
+
+/** set_app_filter_adv 参数 */
+class AppFilterAdvSetParam {
+  tcp_rst: number = 0
+  lan_ifname: string = ''
+  disable_hnat: number = 0
+  auto_load_engine: number = 0
+}
+
+/** get_all_users / dev_visit_list 分页参数 */
+class UsersPageParam {
+  flag: number = 3
+  page: number = 1
+  page_size: number = 50
+}
+
+/** MAC 查询参数 */
+class MacParam {
+  mac: string = ''
+}
+
 class UciSetParam {
   config: string = ''
   section: string = ''
@@ -871,74 +947,9 @@ export class ApiClient {
   }
 
   // ============================================================
-  //  QWRT 自动授权（crontab 注入 ACL 文件，无需 SSH）
+  //  QWRT 自动授权（Rust SSH 写入 ACL 文件）
   // ============================================================
 
-  /** QWRT 的 rpcd ACL 授权 JSON（内联，避免依赖外部网络下载） */
-  private static readonly QWRT_ACL_JSON: string =
-    `{\n` +
-    `\t"istore-app": {\n` +
-    `\t\t"description": "iStore App / LuCI base access",\n` +
-    `\t\t"read": {\n` +
-    `\t\t\t"ubus": {\n` +
-    `\t\t\t\t"system": ["board", "info"],\n` +
-    `\t\t\t\t"network.interface": ["dump"],\n` +
-    `\t\t\t\t"network.device": ["status"],\n` +
-    `\t\t\t\t"network.wireless": ["status"],\n` +
-    `\t\t\t\t"luci": ["*"],\n` +
-    `\t\t\t\t"luci-rpc": ["*"],\n` +
-    `\t\t\t\t"iwinfo": ["*"],\n` +
-    `\t\t\t\t"rc": ["list"],\n` +
-    `\t\t\t\t"service": ["list"],\n` +
-    `\t\t\t\t"session": ["access", "login"],\n` +
-    `\t\t\t\t"file": ["read", "list", "stat", "md5"],\n` +
-    `\t\t\t\t"uci": ["get", "state", "configs", "changes"],\n` +
-    `\t\t\t\t"dhcp": ["ipv4leases", "ipv6leases"],\n` +
-    `\t\t\t\t"hostapd.*": ["del_client", "wps_status"]\n` +
-    `\t\t\t},\n` +
-    `\t\t\t"file": {\n` +
-    `\t\t\t\t"/proc/sys/net/netfilter/nf_conntrack_count": ["read"],\n` +
-    `\t\t\t\t"/proc/sys/net/netfilter/nf_conntrack_max": ["read"],\n` +
-    `\t\t\t\t"/proc/mounts": ["read"],\n` +
-    `\t\t\t\t"/proc/net/dev": ["read"],\n` +
-    `\t\t\t\t"/proc/meminfo": ["read"],\n` +
-    `\t\t\t\t"/proc/cpuinfo": ["read"],\n` +
-    `\t\t\t\t"/proc/loadavg": ["read"],\n` +
-    `\t\t\t\t"/proc/stat": ["read"],\n` +
-    `\t\t\t\t"/tmp/dhcp.leases": ["read"],\n` +
-    `\t\t\t\t"/sys/class/thermal/*": ["read"],\n` +
-    `\t\t\t\t"/etc/board.json": ["read"]\n` +
-    `\t\t\t}\n` +
-    `\t\t},\n` +
-    `\t\t"write": {\n` +
-    `\t\t\t"ubus": {\n` +
-    `\t\t\t\t"system": ["reboot"],\n` +
-    `\t\t\t\t"rc": ["list", "init"],\n` +
-    `\t\t\t\t"service": ["list", "state", "signal", "event"],\n` +
-    `\t\t\t\t"uci": ["get", "state", "configs", "set", "add", "delete", "rename", "order", "changes", "apply", "confirm", "rollback", "revert"],\n` +
-    `\t\t\t\t"file": ["read", "write", "list", "stat", "remove", "exec"],\n` +
-    `\t\t\t\t"appfilter": ["*"],\n` +
-    `\t\t\t\t"luci": ["setInitAction", "setLocaltime", "setPassword", "setBlockDetect"]\n` +
-    `\t\t\t},\n` +
-    `\t\t\t"uci": { "*": ["read", "write"] },\n` +
-    `\t\t\t"file": {\n` +
-    `\t\t\t\t"/etc/config/*": ["read", "write"],\n` +
-    `\t\t\t\t"/sbin/reboot": ["exec"],\n` +
-    `\t\t\t\t"/sbin/firstboot -r -y": ["exec"],\n` +
-    `\t\t\t\t"/sbin/ip -[46] route show table all": ["exec"],\n` +
-    `\t\t\t\t"/sbin/ip -[46] neigh show": ["exec"],\n` +
-    `\t\t\t\t"/bin/df": ["exec"],\n` +
-    `\t\t\t\t"/bin/ps": ["exec"],\n` +
-    `\t\t\t\t"/usr/bin/ps": ["exec"]\n` +
-    `\t\t\t}\n` +
-    `\t\t}\n` +
-    `\t}\n` +
-    `}\n`
-
-    /**
-   * QWRT 自动授权：通过 crontab CBI 表单注入 cron 任务写入 ACL 并重启 rpcd
-   * 等待 cron 触发（最多 60 秒），成功后自清理
-   */
   /**
    * QWRT 自动授权：通过 Rust SSH（@ohos-rs/ssh）直接写入 ACL 文件并重启 rpcd
    * 纯异步，无回调，约 2~3 秒完成
@@ -1006,7 +1017,7 @@ export class ApiClient {
     return hostPort.split(':')[0]
   }
 
-    private static shellEscape(s: string): string {
+  private static shellEscape(s: string): string {
     return (s.indexOf("'") >= 0) ? s.replace(/'/g, "'\\''") : s
   }
 
@@ -1642,12 +1653,22 @@ export class ApiClient {
       let ssid: string = ''
       let channel: number = 0
       let wifiMode: string = ''
+      let frequency: number = 0
+      let txpower: number = 0
+      let encryption: string = ''
+      let quality: number = 0
+      let hwmode: string = ''
       const info: Object | null = await this.ubusCall('iwinfo', 'info', dp)
       if (info) {
         const infoRec = info as Record<string, Object>
         ssid = ApiClient.strOf(infoRec, 'ssid') || ApiClient.strOf(infoRec, 'essid')
         channel = ApiClient.numOf(infoRec, 'channel', 0)
         wifiMode = ApiClient.strOf(infoRec, 'mode')
+        frequency = ApiClient.numOf(infoRec, 'frequency', 0)
+        txpower = ApiClient.numOf(infoRec, 'txpower', 0)
+        encryption = ApiClient.strOf(infoRec, 'encryption')
+        quality = ApiClient.numOf(infoRec, 'quality', 0)
+        hwmode = ApiClient.strOf(infoRec, 'hwmode')
       }
 
       const clients: Object[] = []
@@ -1667,6 +1688,11 @@ export class ApiClient {
       ifItem['ssid'] = ssid
       ifItem['channel'] = channel
       ifItem['mode'] = wifiMode
+      ifItem['frequency'] = frequency
+      ifItem['txpower'] = txpower
+      ifItem['encryption'] = encryption
+      ifItem['quality'] = quality
+      ifItem['hwmode'] = hwmode
       ifItem['clients'] = clients as Object
       interfaces.push(ifItem as Object)
 
@@ -1674,6 +1700,11 @@ export class ApiClient {
       devIf['ssid'] = ssid
       devIf['channel'] = channel
       devIf['mode'] = wifiMode
+      devIf['frequency'] = frequency
+      devIf['txpower'] = txpower
+      devIf['encryption'] = encryption
+      devIf['quality'] = quality
+      devIf['hwmode'] = hwmode
       const devItem: Record<string, Object> = {}
       devItem['name'] = dev
       devItem['interfaces'] = [devIf] as Object
@@ -2593,6 +2624,90 @@ export class ApiClient {
     return new EmptyRecord()
   }
 
+  // ========== WiFi 管理操作 ==========
+
+  /**
+   * 读取 wireless 配置（network.wireless status）
+   * 返回各无线接口的配置：ssid/encryption/key/disabled/channel/htmode 等
+   */
+  async getWirelessConfig(): Promise<Object> {
+    const data: Object | null = await this.ubusCall('network.wireless', 'status', new EmptyRecord())
+    if (data) {
+      const inner = (data as Record<string, Object>)['data']
+      if (inner && typeof inner === 'object') {
+        return inner as Object
+      }
+      return data
+    }
+    return new EmptyRecord()
+  }
+
+  /**
+   * 修改 wireless 配置（uci set wireless.<section>.<option>=value）
+   * @param section 配置段（radio0 / default_radio0 等）
+   * @param option 选项名（ssid/key/disabled/channel/htmode 等）
+   * @param value 新值
+   */
+  async setWifiConfig(section: string, option: string, value: string): Promise<boolean> {
+    const p: UciSetParam = new UciSetParam()
+    p.config = 'wireless'
+    p.section = section
+    const values: Record<string, Object> = {}
+    values[option] = value as Object
+    p.values = values as Object
+    const data: Object | null = await this.ubusCall('uci', 'set', p)
+    return data !== null
+  }
+
+  /** 提交并应用 wireless 配置变更（uci commit wireless + network.wireless reload） */
+  async applyWifiConfig(): Promise<boolean> {
+    const commitOk: Object | null = await this.ubusCall('uci', 'commit', this.buildUciConfigParam('wireless'))
+    if (commitOk === null) {
+      return false
+    }
+    const p: WirelessReloadParam = new WirelessReloadParam()
+    p.rollback = false
+    const reloadOk: Object | null = await this.ubusCall('network.wireless', 'reload', p)
+    return reloadOk !== null
+  }
+
+  /**
+   * 读取 UCI 配置（uci get 单段/选项）
+   * @param config 配置名（wireless）
+   * @param section 段（radio0 / default_radio0 等）
+   * @param option 选项（ssid/key 等）
+   */
+  async getUciOption(config: string, section: string, option: string): Promise<string> {
+    const p: UciGetParam = new UciGetParam()
+    p.config = config
+    p.section = section
+    p.option = option
+    const data: Object | null = await this.ubusCall('uci', 'get', p)
+    if (data) {
+      const rec = data as Record<string, Object>
+      const values = rec['values'] as Record<string, Object>
+      if (values) {
+        return ApiClient.strOf(values, option)
+      }
+      return ApiClient.strOf(rec, 'value') || ApiClient.strOf(rec, option)
+    }
+    return ''
+  }
+
+  /** 踢下线指定无线客户端（hostapd.<dev> del_client） */
+  async kickWifiClient(dev: string, mac: string): Promise<boolean> {
+    const p: DelClientParam = new DelClientParam()
+    p.mac = mac
+    const data: Object | null = await this.ubusCall(`hostapd.${dev}`, 'del_client', p)
+    return data !== null
+  }
+
+  private buildUciConfigParam(config: string): Object {
+    const p: Record<string, Object> = {}
+    p['config'] = config
+    return p as Object
+  }
+
   async getIStoreApps(): Promise<Object[]> {
     const result = await this.request('istore_apps')
     if (result && result.data && Array.isArray(result.data)) {
@@ -2706,6 +2821,126 @@ export class ApiClient {
     const result = await this.request('appfilter_adv')
     if (result && result.data) {
       return result.data
+    }
+    return new EmptyRecord()
+  }
+
+  // ========== OAF 写操作（appfilter set_* 接口） ==========
+
+  /**
+   * 保存应用过滤基础配置（总开关/工作模式/日志）
+   * @param enable 总开关
+   * @param workMode 工作模式（true=旁路 bypass，false=网关 gateway）
+   * @param recordEnable 日志开关
+   * @returns 是否成功
+   */
+  async setAppFilterBase(enable: boolean, workMode: boolean, recordEnable: boolean): Promise<boolean> {
+    const p: AppFilterBaseSetParam = new AppFilterBaseSetParam()
+    p.enable = enable ? 1 : 0
+    p.work_mode = workMode ? 1 : 0
+    p.record_enable = recordEnable ? 1 : 0
+    const data: Object | null = await this.ubusCall('appfilter', 'set_app_filter_base', p)
+    return data !== null
+  }
+
+  /**
+   * 保存应用管控规则（set_app_filter）
+   * @param appIds 受管控的应用 ID 列表（写满即视为需要管控，未列出视为放行）
+   * @returns 是否成功
+   */
+  async setAppFilter(appIds: number[]): Promise<boolean> {
+    const p: AppFilterSetParam = new AppFilterSetParam()
+    p.app_list = appIds
+    const data: Object | null = await this.ubusCall('appfilter', 'set_app_filter', p)
+    return data !== null
+  }
+
+  /**
+   * 保存时间段配置（set_app_filter_time）
+   * @param mode 0=固定时段 1=动态时长
+   * @param weekdays 生效星期（0-6，0=周日）
+   * @param fixedTimes 固定时段 [{start:"HH:MM", end:"HH:MM"}]
+   * @param dynamicMinutes 动态时长分钟数（mode=1 时有效）
+   * @param dynStart 动态开始 "HH:MM"
+   * @param dynEnd 动态结束 "HH:MM"
+   */
+  async setAppFilterTime(mode: number, weekdays: number[], fixedTimes: Object[], dynamicMinutes: number,
+    dynStart: string, dynEnd: string): Promise<boolean> {
+    const p: AppFilterTimeSetParam = new AppFilterTimeSetParam()
+    p.mode = mode
+    p.weekday_list = weekdays
+    p.time_list = fixedTimes as AppFilterTimeItemParam[]
+    p.allow_time = dynamicMinutes
+    p.start_time = dynStart
+    p.end_time = dynEnd
+    const data: Object | null = await this.ubusCall('appfilter', 'set_app_filter_time', p)
+    return data !== null
+  }
+
+  /** 保存用户管控模式（0=auto 自动，1=manual 手动） */
+  async setAppFilterUser(userMode: number): Promise<boolean> {
+    const p: AppFilterUserSetParam = new AppFilterUserSetParam()
+    p.mode = userMode
+    const data: Object | null = await this.ubusCall('appfilter', 'set_app_filter_user', p)
+    return data !== null
+  }
+
+  /** 保存高级配置（tcp_rst/lan_ifname/disable_hnat/auto_load_engine） */
+  async setAppFilterAdv(tcpRst: number, lanIfname: string, disableHnat: number, autoLoadEngine: number): Promise<boolean> {
+    const p: AppFilterAdvSetParam = new AppFilterAdvSetParam()
+    p.tcp_rst = tcpRst
+    p.lan_ifname = lanIfname
+    p.disable_hnat = disableHnat
+    p.auto_load_engine = autoLoadEngine
+    const data: Object | null = await this.ubusCall('appfilter', 'set_app_filter_adv', p)
+    return data !== null
+  }
+
+  /**
+   * 获取所有用户/设备列表（get_all_users）
+   * @param flag 数据详细程度：0=仅 mac/在线状态 1=+ip 2=+hostname/白名单 3=+常用应用/流量
+   * @returns {list: [...], total, page, page_size, total_pages}
+   */
+  async getAllUsers(flag: number = 3): Promise<Object> {
+    const p: UsersPageParam = new UsersPageParam()
+    p.flag = flag
+    const data: Object | null = await this.ubusCall('appfilter', 'get_all_users', p)
+    if (data) {
+      const inner = (data as Record<string, Object>)['data']
+      if (inner && typeof inner === 'object') {
+        return inner as Object
+      }
+      return data
+    }
+    return new EmptyRecord()
+  }
+
+  /** 获取设备应用使用时长统计（dev_visit_time） */
+  async getDeviceVisitTime(mac: string): Promise<Object> {
+    const p: MacParam = new MacParam()
+    p.mac = mac
+    const data: Object | null = await this.ubusCall('appfilter', 'dev_visit_time', p)
+    if (data) {
+      const inner = (data as Record<string, Object>)['data']
+      if (inner && typeof inner === 'object') {
+        return inner as Object
+      }
+      return data
+    }
+    return new EmptyRecord()
+  }
+
+  /** 获取设备访问记录（dev_visit_list） */
+  async getDeviceVisitList(mac: string): Promise<Object> {
+    const p: MacParam = new MacParam()
+    p.mac = mac
+    const data: Object | null = await this.ubusCall('appfilter', 'dev_visit_list', p)
+    if (data) {
+      const inner = (data as Record<string, Object>)['data']
+      if (inner && typeof inner === 'object') {
+        return inner as Object
+      }
+      return data
     }
     return new EmptyRecord()
   }

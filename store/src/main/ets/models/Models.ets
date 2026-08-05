@@ -198,6 +198,40 @@ export interface WirelessDevice {
 }
 
 /**
+ * WiFi 接入点完整信息（管理页展示 + 编辑用）
+ */
+export interface WifiApInfo {
+  device: string            // 无线设备名（radio0/radio1）
+  ssid: string              // 网络名称
+  channel: number           // 当前信道
+  frequency: number         // 频率（MHz）
+  txpower: number           // 发射功率（dBm）
+  encryption: string        // 加密方式（如 WPA2-PSK/WPA3）
+  quality: number           // 信号质量（%）
+  hwmode: string            // 硬件模式（11g/11n/11ac/11ax）
+  mode: string              // 工作模式（ap）
+  up: boolean               // 是否启用
+  clientCount: number       // 已连接客户端数
+  bandwidth: string         // 带宽（HT20/HT40/VHT80 等）
+  disabled: boolean         // 配置中是否禁用
+}
+
+/**
+ * WiFi 客户端详细信息（管理页客户端列表）
+ */
+export interface WifiClientDetail {
+  mac: string               // MAC 地址
+  hostname: string          // 主机名
+  device: string            // 所属无线设备（radio0 等）
+  signal: number            // 信号（dBm）
+  noise: number             // 噪声（dBm）
+  rxRate: number            // 接收速率（Mbps）
+  txRate: number            // 发送速率（Mbps）
+  connectedTime: number     // 连接时长（秒）
+  inactiveTime: number      // 空闲时间（秒）
+}
+
+/**
  * OAF（应用过滤引擎）运行状态
  */
 export interface OafStatus {

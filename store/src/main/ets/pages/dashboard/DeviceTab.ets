@@ -277,7 +277,7 @@ export struct DeviceTab {
                 Circle()
                   .width(8)
                   .height(8)
-                  .fill(device.isOnline ? this.theme.success : this.theme.textTertiary)
+                  .foregroundColor(device.isOnline ? this.theme.success : this.theme.textTertiary)
                   .margin({ left: 8 })
               }
               .width('100%')

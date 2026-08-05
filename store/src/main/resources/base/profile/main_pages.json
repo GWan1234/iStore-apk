@@ -4,6 +4,7 @@
     "pages/dashboard/MainPage",
     "pages/devices/ClientDetailPage",
     "pages/apps/AppsPage",
+    "pages/apps/WifiPage",
     "pages/network/RouteTablePage",
     "pages/process/ProcessListPage",
     "pages/process/StartupPage",

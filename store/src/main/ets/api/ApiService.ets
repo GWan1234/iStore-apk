@@ -17,6 +17,8 @@ import {
   RouteEntry,
   WirelessClient,
   WirelessDevice,
+  WifiApInfo,
+  WifiClientDetail,
   IStoreApp,
   DockerOverview,
   DockerContainer,
@@ -883,6 +885,145 @@ export class ApiService {
     return []
   }
 
+  // ========== WiFi 管理 ==========
+
+  /**
+   * 获取所有 WiFi 接入点信息（含客户端数，用于管理页展示）
+   */
+  async fetchWifiApList(): Promise<WifiApInfo[]> {
+    try {
+      const devices = await this.fetchWirelessDevices()
+      const list: WifiApInfo[] = []
+      for (let i = 0; i < devices.length; i++) {
+        const dev = devices[i]
+        list.push({
+          device: dev.name,
+          ssid: dev.ssid,
+          channel: dev.channel,
+          frequency: dev.frequency,
+          txpower: 0,
+          encryption: dev.encryption,
+          quality: dev.quality,
+          hwmode: dev.hwmode,
+          mode: dev.mode,
+          up: dev.up,
+          clientCount: 0,
+          bandwidth: dev.bandwidth,
+          disabled: !dev.up
+        })
+      }
+      // 补充客户端数
+      const clients = await this.fetchWifiClients()
+      for (let i = 0; i < list.length; i++) {
+        let cnt: number = 0
+        for (let j = 0; j < clients.length; j++) {
+          if (clients[j].device === list[i].device) {
+            cnt++
+          }
+        }
+        list[i].clientCount = cnt
+      }
+      return list
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'fetchWifiApList err')
+    }
+    return []
+  }
+
+  /**
+   * 获取所有 WiFi 客户端详情（含信号/速率/时长）
+   */
+  async fetchWifiClients(): Promise<WifiClientDetail[]> {
+    try {
+      const raw = await this.client.getWirelessStatus()
+      const list: WifiClientDetail[] = []
+      const topClients = ObjectHelper.getArray(raw, 'clients')
+      if (topClients.length > 0) {
+        for (let i = 0; i < topClients.length; i++) {
+          list.push(this.parseWifiClientDetail(topClients[i], topClients[i]))
+        }
+        return list
+      }
+      const interfaces = ObjectHelper.getArray(raw, 'interfaces')
+      for (let i = 0; i < interfaces.length; i++) {
+        const iface = interfaces[i]
+        const clients = ObjectHelper.getArray(iface, 'clients')
+        for (let j = 0; j < clients.length; j++) {
+          list.push(this.parseWifiClientDetail(clients[j], iface))
+        }
+      }
+      return list
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'fetchWifiClients err')
+    }
+    return []
+  }
+
+  private parseWifiClientDetail(client: Object, iface: Object): WifiClientDetail {
+    return {
+      mac: ObjectHelper.getString(client, 'mac', '') || ObjectHelper.getString(client, 'macaddr', ''),
+      hostname: ObjectHelper.getString(client, 'hostname', '') || ObjectHelper.getString(client, 'name', ''),
+      device: ObjectHelper.getString(client, 'interface', '') ||
+        ObjectHelper.getString(iface, 'interface', '') ||
+        ObjectHelper.getString(iface, 'ifname', '') ||
+        ObjectHelper.getString(iface, 'name', ''),
+      signal: ObjectHelper.getNumber(client, 'signal', 0),
+      noise: ObjectHelper.getNumber(client, 'noise', 0) || ObjectHelper.getNumber(client, 'signal_noise', 0),
+      rxRate: ObjectHelper.getNumber(client, 'rx_rate', 0) ||
+        ObjectHelper.getNumber(client, 'rx', 0),
+      txRate: ObjectHelper.getNumber(client, 'tx_rate', 0) ||
+        ObjectHelper.getNumber(client, 'tx', 0),
+      connectedTime: ObjectHelper.getNumber(client, 'connected_time', 0) ||
+        ObjectHelper.getNumber(client, 'assoc_time', 0),
+      inactiveTime: ObjectHelper.getNumber(client, 'inactive_time', 0)
+    }
+  }
+
+  /**
+   * 修改 WiFi 配置（SSID/密码/信道/频宽/开关等）
+   * @param device 无线设备段（radio0 等）
+   * @param option 配置项（ssid/key/disabled/channel/htmode 等）
+   * @param value 新值
+   */
+  async updateWifiConfig(device: string, option: string, value: string): Promise<boolean> {
+    try {
+      const ok: boolean = await this.client.setWifiConfig(device, option, value)
+      if (!ok) {
+        return false
+      }
+      return await this.client.applyWifiConfig()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'updateWifiConfig err')
+    }
+    return false
+  }
+
+  /**
+   * 踢下线 WiFi 客户端
+   * @param device 无线设备名（radio0）
+   * @param mac 客户端 MAC
+   */
+  async kickWifiClient(device: string, mac: string): Promise<boolean> {
+    try {
+      return await this.client.kickWifiClient(device, mac)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'kickWifiClient err')
+    }
+    return false
+  }
+
+  /**
+   * 读取 WiFi 配置项（uci get wireless.<device>.<option>）
+   */
+  async getWifiOption(device: string, option: string): Promise<string> {
+    try {
+      return await this.client.getUciOption('wireless', device, option)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'getWifiOption err')
+    }
+    return ''
+  }
+
   async fetchOafStatus(): Promise<OafStatus> {
     try {
       // 获取 OAF（应用过滤引擎）各组件版本和运行状态
@@ -1172,43 +1313,173 @@ export class ApiService {
   }
 
   async fetchAllOafUsers(): Promise<Object[]> {
+    try {
+      const data: Object = await this.client.getAllUsers(3)
+      const list = ObjectHelper.getArray(data, 'list')
+      return list
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `fetchAllOafUsers err: ${String(e)}`)
+    }
     return []
   }
 
   async fetchUserList(): Promise<UserListItem[]> {
+    try {
+      const data: Object = await this.client.getAllUsers(3)
+      const list = ObjectHelper.getArray(data, 'list')
+      const result: UserListItem[] = []
+      for (let i = 0; i < list.length; i++) {
+        const u = list[i]
+        const appList = ObjectHelper.getArray(u, 'applist')
+        const commonApps: number[] = []
+        for (let j = 0; j < appList.length; j++) {
+          const id = ObjectHelper.getNumber(appList[j], 'id', 0)
+          if (id > 0) commonApps.push(id)
+        }
+        result.push({
+          hostname: ObjectHelper.getString(u, 'hostname', '') || ObjectHelper.getString(u, 'nickname', ''),
+          mac: ObjectHelper.getString(u, 'mac', ''),
+          ip: ObjectHelper.getString(u, 'ip', ''),
+          currentApp: ObjectHelper.getString(u, 'app', ''),
+          currentUrl: ObjectHelper.getString(u, 'url', ''),
+          commonApps: commonApps
+        })
+      }
+      return result
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `fetchUserList err: ${String(e)}`)
+    }
     return []
   }
 
-  async fetchDeviceVisitTime(_mac: string): Promise<DeviceVisitTime[]> {
+  async fetchDeviceVisitTime(mac: string): Promise<DeviceVisitTime[]> {
+    try {
+      const data: Object = await this.client.getDeviceVisitTime(mac)
+      const list = ObjectHelper.getArray(data, 'list')
+      const result: DeviceVisitTime[] = []
+      for (let i = 0; i < list.length; i++) {
+        const v = list[i]
+        const totalSec: number = ObjectHelper.getNumber(v, 't', 0)
+        result.push({
+          appId: ObjectHelper.getNumber(v, 'id', 0),
+          appName: ObjectHelper.getString(v, 'name', ''),
+          totalSeconds: totalSec,
+          percent: 0
+        })
+      }
+      // 计算占比
+      let sum: number = 0
+      for (let i = 0; i < result.length; i++) {
+        sum += result[i].totalSeconds
+      }
+      if (sum > 0) {
+        for (let i = 0; i < result.length; i++) {
+          result[i].percent = Math.round(result[i].totalSeconds * 100 / sum)
+        }
+      }
+      return result
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `fetchDeviceVisitTime err: ${String(e)}`)
+    }
     return []
   }
 
-  async fetchDeviceVisitList(_mac: string): Promise<DeviceVisitRecord[]> {
+  async fetchDeviceVisitList(mac: string): Promise<DeviceVisitRecord[]> {
+    try {
+      const data: Object = await this.client.getDeviceVisitList(mac)
+      const list = ObjectHelper.getArray(data, 'list')
+      const result: DeviceVisitRecord[] = []
+      for (let i = 0; i < list.length; i++) {
+        const v = list[i]
+        result.push({
+          appId: ObjectHelper.getNumber(v, 'id', 0),
+          appName: ObjectHelper.getString(v, 'name', ''),
+          startTime: this.formatTimestamp(ObjectHelper.getNumber(v, 'ft', 0)),
+          duration: ObjectHelper.getNumber(v, 'tt', 0)
+        })
+      }
+      return result
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `fetchDeviceVisitList err: ${String(e)}`)
+    }
     return []
   }
 
-  async saveAppFilterBase(_base: AppFilterBase): Promise<boolean> {
-    // TODO: 暂未实现后端保存 API
+  async saveAppFilterBase(base: AppFilterBase): Promise<boolean> {
+    try {
+      const workModeBypass: boolean = base.workMode === 'bypass'
+      return await this.client.setAppFilterBase(base.appFilterEnabled, workModeBypass, base.appLogEnabled)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `saveAppFilterBase err: ${String(e)}`)
+    }
     return false
   }
 
-  async saveAppFilter(_classes: AppClass[]): Promise<boolean> {
-    // TODO: 暂未实现后端保存 API
+  async saveAppFilter(classes: AppClass[]): Promise<boolean> {
+    try {
+      // 收集所有启用的应用 ID
+      const appIds: number[] = []
+      for (let i = 0; i < classes.length; i++) {
+        const cls = classes[i]
+        for (let j = 0; j < cls.apps.length; j++) {
+          if (cls.apps[j].enabled) {
+            appIds.push(cls.apps[j].id)
+          }
+        }
+      }
+      return await this.client.setAppFilter(appIds)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `saveAppFilter err: ${String(e)}`)
+    }
     return false
   }
 
-  async saveAppFilterTime(_time: AppFilterTime): Promise<boolean> {
-    // TODO: 暂未实现后端保存 API
+  async saveAppFilterTime(time: AppFilterTime): Promise<boolean> {
+    try {
+      // mode: 0=固定时段（有固定时段时），1=动态时长（有动态时长时）
+      let mode: number = 0
+      if (time.dynamicMinutes > 0) {
+        mode = 1
+      }
+      const fixedTimes: Object[] = []
+      for (let i = 0; i < time.fixedTimes.length; i++) {
+        const slot = time.fixedTimes[i]
+        const item: Record<string, Object> = {}
+        item['start'] = `${String(slot.startHour).padStart(2, '0')}:${String(slot.startMin).padStart(2, '0')}`
+        item['end'] = `${String(slot.endHour).padStart(2, '0')}:${String(slot.endMin).padStart(2, '0')}`
+        fixedTimes.push(item as Object)
+      }
+      const dynStart: string = `${String(time.dynamicStartHour).padStart(2, '0')}:${String(time.dynamicStartMin).padStart(2, '0')}`
+      const dynEnd: string = `${String(time.dynamicEndHour).padStart(2, '0')}:${String(time.dynamicEndMin).padStart(2, '0')}`
+      return await this.client.setAppFilterTime(mode, time.weekdays, fixedTimes,
+        time.dynamicMinutes, dynStart, dynEnd)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `saveAppFilterTime err: ${String(e)}`)
+    }
     return false
   }
 
-  async saveAppFilterUser(_user: AppFilterUser): Promise<boolean> {
-    // TODO: 暂未实现后端保存 API
+  async saveAppFilterUser(user: AppFilterUser): Promise<boolean> {
+    try {
+      const mode: number = user.mode === 'manual' ? 1 : 0
+      return await this.client.setAppFilterUser(mode)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `saveAppFilterUser err: ${String(e)}`)
+    }
     return false
   }
 
-  async saveAppFilterAdv(_adv: Object): Promise<boolean> {
-    // TODO: 暂未实现后端保存 API
+  async saveAppFilterAdv(adv: Object): Promise<boolean> {
+    try {
+      const rec = adv as Record<string, Object>
+      const tcpRst: number = Number(rec['tcp_rst']) || 0
+      const lanIfname: string = String(rec['lan_ifname'] || '')
+      const disableHnat: number = Number(rec['disable_hnat']) || 0
+      const autoLoadEngine: number = Number(rec['auto_load_engine']) || 0
+      return await this.client.setAppFilterAdv(tcpRst, lanIfname, disableHnat, autoLoadEngine)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `saveAppFilterAdv err: ${String(e)}`)
+    }
     return false
   }
 

@@ -13,6 +13,7 @@ import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
 import { common } from '@kit.AbilityKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { pasteboard, deviceInfo } from '@kit.BasicServicesKit'
+import { window } from '@kit.ArkUI'
 
 @Entry
 @Component
@@ -35,6 +36,7 @@ struct LoginPage {
   @State formVersion: number = 0
   @State isDark: boolean = true
   @State theme: ThemePalette = DARK_THEME
+  @State topSafeArea: number = 44  // 状态栏高度（默认 44vp，覆盖大部分设备）
   private appState: AppState = AppState.getInstance()
   private connectTimerId: number = -1  // 连接超时定时器 ID
 
@@ -45,6 +47,21 @@ struct LoginPage {
     this.savedDevices = this.appState.devices
     this.isDark = this.appState.isDarkMode
     this.theme = this.appState.getTheme()
+
+    // 获取状态栏高度（避免顶部按钮被遮挡）
+    try {
+      const hostCtx: common.Context = this.getUIContext().getHostContext() as common.Context
+      if (hostCtx) {
+        const win: window.Window = await window.getLastWindow(hostCtx)
+        const avoidArea: window.AvoidArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
+        const h: number = px2vp(avoidArea.topRect.height)
+        if (h > 0) {
+          this.topSafeArea = h
+        }
+      }
+    } catch (e) {
+      // 保持默认 44vp
+    }
 
     this.appState.onThemeChange(() => {
       this.isDark = this.appState.isDarkMode
@@ -360,7 +377,7 @@ struct LoginPage {
           .onClick(() => {
             this.appState.toggleTheme()
           })
-          .margin({ right: 16, top: 8 })
+          .margin({ right: 16, top: this.topSafeArea + 4 })
         }
         .width('100%')
 
@@ -448,16 +465,16 @@ struct LoginPage {
                     }
                     .margin({ left: 10 }).alignItems(HorizontalAlign.Start).layoutWeight(1)
 
-                    Text('✏️')
-                      .fontSize(16).fontColor(this.theme.textTertiary).padding(8)
+                    SymbolGlyph($r('sys.symbol.square_and_pencil'))
+                      .fontSize(16).fontColor([this.theme.textTertiary]).padding(8)
                       .onClick(() => { this.fillForm(device) })
 
                     Text('📋')
                       .fontSize(16).fontColor(this.theme.textTertiary).padding(8)
                       .onClick(() => { this.shareDevice(device) })
 
-                    Text('🗑')
-                      .fontSize(16).fontColor(this.theme.textTertiary).padding(8)
+                    SymbolGlyph($r('sys.symbol.trash'))
+                      .fontSize(16).fontColor([this.theme.textTertiary]).padding(8)
                       .onClick(() => { this.deleteDevice(device.id) })
                   }
                   .width('100%')
@@ -536,6 +553,7 @@ struct LoginPage {
                 Row() {
                   TextInput({ placeholder: '密码（路由器管理密码）', text: this.password })
                     .type(this.showPassword ? InputType.Normal : InputType.Password)
+                    .showPasswordIcon(false)
                     .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
                     .backgroundColor('transparent')
                     .onChange((v: string) => { this.password = v })

@@ -1,7 +1,7 @@
 {
-  "version": "2.5.2",
+  "version": "2.6.2",
   "versionCode": 2,
-  "description": "增加登录页本机卡片信息",
-  "releaseDate": "2026-08-02",
+  "description": "优化登录界面和图标，增加WiFi管理",
+  "releaseDate": "2026-08-05",
   "downloadUrl": "https://github.com/HWYWL/iStore/releases"
 }

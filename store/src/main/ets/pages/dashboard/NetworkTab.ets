@@ -209,7 +209,7 @@ export struct NetworkTab {
                     Circle()
                       .width(8)
                       .height(8)
-                      .fill(iface.status === 'up' ? this.theme.success : this.theme.danger)
+                      .foregroundColor(iface.status === 'up' ? this.theme.success : this.theme.danger)
                     Text(iface.status === 'up' ? '已连接' : '断开')
                       .fontSize(10)
                       .fontColor(iface.status === 'up' ? this.theme.success : this.theme.textTertiary)

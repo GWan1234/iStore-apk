@@ -20,6 +20,13 @@ struct OafPage {
   @State appTime: AppFilterTime | null = null
   @State appUser: AppFilterUser | null = null
   @State expandedClasses: Set<number> = new Set()
+  // 编辑状态（基础配置）
+  @State baseEnabled: boolean = false
+  @State baseLog: boolean = false
+  @State baseBypass: boolean = false
+  @State isSaving: boolean = false
+  @State saveMessage: string = ''
+  @State saveError: string = ''
 
   aboutToAppear(): void {
     this.isDark = AppState.getInstance().isDarkMode
@@ -48,10 +55,87 @@ struct OafPage {
       this.appClasses = results[2]
       this.appTime = results[3]
       this.appUser = results[4]
+      // 同步本地编辑状态
+      if (this.appBase) {
+        this.baseEnabled = this.appBase.appFilterEnabled
+        this.baseLog = this.appBase.appLogEnabled
+        this.baseBypass = this.appBase.workMode === 'bypass'
+      }
+      this.saveMessage = ''
+      this.saveError = ''
     } catch (e) {
       this.errorText = '加载数据失败'
     }
     this.isLoading = false
+  }
+
+  /** 保存基础配置（总开关/工作模式/日志） */
+  async saveBase(): Promise<void> {
+    if (this.isSaving) return
+    this.isSaving = true
+    this.saveMessage = ''
+    this.saveError = ''
+    try {
+      const api = new ApiService()
+      const base: AppFilterBase = {
+        appFilterEnabled: this.baseEnabled,
+        appLogEnabled: this.baseLog,
+        workMode: this.baseBypass ? 'bypass' : 'gateway'
+      }
+      const ok: boolean = await api.saveAppFilterBase(base)
+      if (ok) {
+        this.saveMessage = '基础配置已保存'
+        // 刷新状态
+        await this.loadData()
+      } else {
+        this.saveError = '保存失败：设备不支持或接口无权限'
+      }
+    } catch (e) {
+      this.saveError = '保存异常，请重试'
+    }
+    this.isSaving = false
+  }
+
+  /** 切换某个应用的管控状态（本地编辑，不立即提交） */
+  toggleAppEnabled(clsId: number, appId: number): void {
+    const next: AppClass[] = []
+    for (let i = 0; i < this.appClasses.length; i++) {
+      const cls = this.appClasses[i]
+      const apps: AppItem[] = []
+      for (let j = 0; j < cls.apps.length; j++) {
+        const app = cls.apps[j]
+        if (cls.id === clsId && app.id === appId) {
+          apps.push({ id: app.id, name: app.name, enabled: !app.enabled })
+        } else {
+          apps.push({ id: app.id, name: app.name, enabled: app.enabled })
+        }
+      }
+      next.push({ id: cls.id, name: cls.name, apps: apps })
+    }
+    this.appClasses = next
+    this.saveMessage = ''
+    this.saveError = ''
+  }
+
+  /** 保存应用管控规则 */
+  async saveApps(): Promise<void> {
+    if (this.isSaving) return
+    this.isSaving = true
+    this.saveMessage = ''
+    this.saveError = ''
+    try {
+      const api = new ApiService()
+      const ok: boolean = await api.saveAppFilter(this.appClasses)
+      if (ok) {
+        this.saveMessage = '应用管控已保存'
+        await this.loadData()
+      } else {
+        this.saveError = '保存失败：设备不支持或接口无权限'
+      }
+    } catch (e) {
+      this.saveError = '保存异常，请重试'
+    }
+    this.isSaving = false
   }
 
   toggleClassExpand(clsId: number): void {
@@ -152,18 +236,27 @@ struct OafPage {
 
               // ======== 基础配置卡片 ========
               Column() {
-                Text('⚙️ 基础配置')
-                  .fontSize(14).fontColor(this.theme.textPrimary)
-                  .fontWeight(FontWeight.Medium).margin({ bottom: 10 })
                 Row() {
-                  this.configBadge('总开关', this.appBase?.appFilterEnabled === true, '#00E676', '#FF5252')
-                  this.configBadge('工作模式',
-                    this.appBase?.workMode === 'gateway', '#448AFF', '#FF9800',
-                    this.appBase?.workMode === 'gateway' ? '网关' : '旁路')
-                  this.configBadge('日志', this.appBase?.appLogEnabled === true, '#00E676', '#9E9E9E')
+                  Text('⚙️ 基础配置')
+                    .fontSize(14).fontColor(this.theme.textPrimary)
+                    .fontWeight(FontWeight.Medium)
+                  Blank()
+                  Text(this.isSaving ? '保存中…' : '保存')
+                    .fontSize(12).fontColor(this.isSaving ? this.theme.textTertiary : this.theme.primary)
+                    .padding({ left: 14, right: 14, top: 5, bottom: 5 })
+                    .borderRadius(12)
+                    .backgroundColor(this.theme.bgGlassLight)
+                    .border({ width: 0.5, color: this.theme.borderGlass })
+                    .onClick(() => {
+                      if (!this.isSaving) this.saveBase()
+                    })
                 }
                 .width('100%')
-                .justifyContent(FlexAlign.SpaceEvenly)
+                .margin({ bottom: 10 })
+
+                this.configToggle('总开关', this.baseEnabled, (v: boolean) => this.baseEnabled = v)
+                this.configToggle('工作模式（网关/旁路）', this.baseBypass, (v: boolean) => this.baseBypass = v, '旁路', '网关')
+                this.configToggle('记录日志', this.baseLog, (v: boolean) => this.baseLog = v)
               }
               .width('100%').padding(16).borderRadius(14).margin({ top: 10, left: 16, right: 16 })
               .backgroundColor(this.theme.bgCard).backdropBlur(20)
@@ -177,6 +270,16 @@ struct OafPage {
                     .fontWeight(FontWeight.Medium)
                   Text(`  ${this.appClasses.length} 类`)
                     .fontSize(11).fontColor(this.theme.textTertiary)
+                  Blank()
+                  Text(this.isSaving ? '保存中…' : '保存')
+                    .fontSize(12).fontColor(this.isSaving ? this.theme.textTertiary : this.theme.primary)
+                    .padding({ left: 14, right: 14, top: 5, bottom: 5 })
+                    .borderRadius(12)
+                    .backgroundColor(this.theme.bgGlassLight)
+                    .border({ width: 0.5, color: this.theme.borderGlass })
+                    .onClick(() => {
+                      if (!this.isSaving) this.saveApps()
+                    })
                 }
                 .margin({ bottom: 10 })
 
@@ -214,7 +317,8 @@ struct OafPage {
                                 .backgroundColor(app.enabled ? 'rgba(0,230,118,0.12)' : 'rgba(158,158,158,0.12)')
                             }
                             .width('100%')
-                            .padding({ top: 4, bottom: 4 })
+                            .padding({ top: 6, bottom: 6 })
+                            .onClick(() => this.toggleAppEnabled(cls.id, app.id))
                           })
                         }
                         .width('100%')
@@ -227,6 +331,16 @@ struct OafPage {
                     .border({ width: 0.5, color: this.theme.borderGlass })
                     .margin({ bottom: idx < this.appClasses.length - 1 ? 8 : 0 })
                   })
+                }
+
+                // 保存结果提示
+                if (this.saveMessage) {
+                  Text('✓ ' + this.saveMessage)
+                    .fontSize(12).fontColor('#00E676').margin({ top: 10 }).width('100%')
+                }
+                if (this.saveError) {
+                  Text('⚠ ' + this.saveError)
+                    .fontSize(12).fontColor(this.theme.danger).margin({ top: 10 }).width('100%')
                 }
               }
               .width('100%').padding(16).borderRadius(14).margin({ top: 10, left: 16, right: 16 })
@@ -318,15 +432,27 @@ struct OafPage {
   }
 
   @Builder
-  configBadge(label: string, active: boolean, onColor: string, offColor: string, altText?: string): void {
-    Column() {
+  configToggle(label: string, value: boolean, onChange: (v: boolean) => void, onText?: string, offText?: string): void {
+    Row() {
       Text(label)
-        .fontSize(10).fontColor(this.theme.textTertiary).margin({ bottom: 4 })
-      Text(altText ? altText : (active ? '开启' : '关闭'))
-        .fontSize(11).fontColor(active ? onColor : offColor)
-        .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-        .borderRadius(8)
-        .backgroundColor(active ? onColor + '18' : offColor + '18')
+        .fontSize(12).fontColor(this.theme.textTertiary).layoutWeight(1)
+      Toggle({ type: ToggleType.Switch, isOn: value })
+        .selectedColor(this.theme.primary)
+        .onChange((isOn: boolean) => {
+          onChange(isOn)
+        })
+      if (onText) {
+        Text(value ? onText : offText)
+          .fontSize(11)
+          .fontColor(value ? '#00E676' : '#9E9E9E')
+          .margin({ left: 8 })
+      }
     }
+    .width('100%')
+    .padding({ top: 7, bottom: 7 })
+    .border({
+      width: { bottom: 0.5 },
+      color: this.theme.borderGlass
+    })
   }
 }
