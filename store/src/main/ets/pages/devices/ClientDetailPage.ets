@@ -8,6 +8,7 @@ import { AppState } from '../../common/store/AppState'
 import { ApiService } from '../../api/ApiService'
 import { FormatUtils } from '../../common/utils/FormatUtils'
 import { DeviceVisitTime, DeviceVisitRecord, ConnectedDevice, WirelessClient } from '../../models/Models'
+import { DeviceNoteStore } from '../../common/store/DeviceNoteStore'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 
 interface HasMac {
@@ -34,6 +35,15 @@ struct ClientDetailPage {
   @State basicError: string = ''
   @State statsError: string = ''
   @State recordsError: string = ''
+  // 设备管理增强
+  @State note: string = ''
+  @State noteInput: string = ''
+  @State editingNote: boolean = false
+  @State isDenied: boolean = false
+  @State managing: boolean = false
+  @State manageMsg: string = ''
+  private noteStore: DeviceNoteStore = DeviceNoteStore.getInstance()
+  private deviceId: string = ''
 
   aboutToAppear(): void {
     this.isDark = AppState.getInstance().isDarkMode
@@ -44,6 +54,16 @@ struct ClientDetailPage {
       this.mac = (params['mac'] as string) || ''
       this.hostname = (params['hostname'] as string) || ''
     }
+
+    // 初始化设备备注存储（懒初始化）
+    const hostCtx = this.getUIContext().getHostContext()
+    if (hostCtx) {
+      this.noteStore.init(hostCtx as Context)
+    }
+    const activeDevice = AppState.getInstance().getActiveDevice()
+    this.deviceId = activeDevice ? activeDevice.id : ''
+    this.loadNote()
+    this.loadDenyState()
 
     AppState.getInstance().onThemeChange(() => {
       this.isDark = AppState.getInstance().isDarkMode
@@ -91,6 +111,88 @@ struct ClientDetailPage {
       }
     }
     return null
+  }
+
+  // ===== 设备管理 =====
+
+  /** 加载设备备注名 */
+  async loadNote(): Promise<void> {
+    if (!this.deviceId || !this.mac) return
+    try {
+      this.note = await this.noteStore.getNote(this.deviceId, this.mac)
+      this.noteInput = this.note
+    } catch (e) {
+      hilog.error(0x0001, 'ClientDetailPage', `loadNote err: ${JSON.stringify(e)}`)
+    }
+  }
+
+  /** 保存设备备注名 */
+  async saveNote(): Promise<void> {
+    if (!this.deviceId || !this.mac) return
+    try {
+      await this.noteStore.saveNote(this.deviceId, this.mac, this.noteInput)
+      this.note = this.noteInput.trim()
+      this.editingNote = false
+    } catch (e) {
+      hilog.error(0x0001, 'ClientDetailPage', `saveNote err: ${JSON.stringify(e)}`)
+    }
+  }
+
+  /** 加载禁用联网状态 */
+  async loadDenyState(): Promise<void> {
+    if (!this.mac) return
+    try {
+      const api = new ApiService()
+      this.isDenied = await api.isDeviceDenied(this.mac)
+    } catch (e) {
+      hilog.error(0x0001, 'ClientDetailPage', `loadDenyState err: ${JSON.stringify(e)}`)
+    }
+  }
+
+  /** 切换禁用/恢复联网 */
+  async toggleDeny(): Promise<void> {
+    if (this.managing || !this.mac) return
+    this.managing = true
+    this.manageMsg = ''
+    try {
+      const api = new ApiService()
+      const ok: boolean = this.isDenied
+        ? await api.allowDeviceNet(this.mac)
+        : await api.denyDeviceNet(this.mac)
+      if (ok) {
+        this.isDenied = !this.isDenied
+        this.manageMsg = this.isDenied ? '已禁用该设备联网' : '已恢复该设备联网'
+      } else {
+        this.manageMsg = '操作失败：设备不支持或接口无权限'
+      }
+    } catch (e) {
+      this.manageMsg = '操作异常，请重试'
+    }
+    this.managing = false
+  }
+
+  /** 踢下线 */
+  async kickDevice(): Promise<void> {
+    if (this.managing || !this.mac) return
+    this.managing = true
+    this.manageMsg = ''
+    try {
+      const api = new ApiService()
+      // 需要无线接口名（从 wifiClient 获取），无则尝试 DHCP 接口
+      let devName: string = ''
+      if (this.wifiClient && this.wifiClient.interface) {
+        devName = this.wifiClient.interface
+      }
+      const ok: boolean = await api.kickWifiClient(devName, this.mac)
+      if (ok) {
+        this.manageMsg = '已将该设备踢下线'
+      } else {
+        this.manageMsg = '踢下线失败：设备不支持或接口无权限'
+      }
+    } catch (e) {
+      this.manageMsg = '操作异常，请重试'
+    }
+    this.managing = false
   }
 
   async loadStats(): Promise<void> {
@@ -329,6 +431,9 @@ struct ClientDetailPage {
           this.WifiInfoSection()
         }
 
+        // 设备管理卡片（备注名/禁用联网/踢下线）
+        this.DeviceManageSection()
+
         if (!this.dhcpDevice && !this.wifiClient) {
           Row() {
             Text('⚠')
@@ -371,6 +476,121 @@ struct ClientDetailPage {
       }
       if (this.dhcpDevice!.vendor) {
         this.infoRow('厂商', this.dhcpDevice!.vendor)
+      }
+    }
+    .width('100%')
+    .padding(14)
+    .borderRadius(14)
+    .margin({ top: 8 })
+    .backgroundColor(this.theme.bgCard)
+    .backdropBlur(20)
+    .border({ width: 0.5, color: this.theme.borderGlass })
+  }
+
+  @Builder
+  DeviceManageSection() {
+    Column() {
+      Text('🛠 设备管理')
+        .fontSize(14)
+        .fontColor(this.theme.textPrimary)
+        .fontWeight(FontWeight.Medium)
+        .margin({ bottom: 4 })
+        .width('100%')
+
+      // 备注名
+      Row() {
+        Text('备注名')
+          .fontSize(12)
+          .fontColor(this.theme.textSecondary)
+          .width(68)
+        if (this.editingNote) {
+          TextInput({ placeholder: '给设备起个名字', text: this.noteInput })
+            .placeholderColor(this.theme.textTertiary)
+            .fontColor(this.theme.textPrimary)
+            .backgroundColor('transparent')
+            .layoutWeight(1)
+            .height(36)
+            .onChange((v: string) => { this.noteInput = v })
+        } else {
+          Text(this.note || '未设置')
+            .fontSize(12)
+            .fontColor(this.note ? this.theme.textPrimary : this.theme.textTertiary)
+            .fontWeight(this.note ? FontWeight.Medium : FontWeight.Normal)
+            .layoutWeight(1)
+        }
+        if (this.editingNote) {
+          Row() {
+            Text('取消')
+              .fontSize(11)
+              .fontColor(this.theme.textTertiary)
+              .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+              .onClick(() => { this.editingNote = false; this.noteInput = this.note })
+            Text('保存')
+              .fontSize(11)
+              .fontColor('#FFFFFF')
+              .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+              .borderRadius(10)
+              .backgroundColor(this.theme.primary)
+              .margin({ left: 6 })
+              .onClick(() => this.saveNote())
+          }
+        } else {
+          Text('编辑')
+            .fontSize(11)
+            .fontColor(this.theme.primary)
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .borderRadius(10)
+            .backgroundColor('rgba(68,138,255,0.1)')
+            .onClick(() => { this.editingNote = true })
+        }
+      }
+      .width('100%')
+      .padding({ top: 10, bottom: 10 })
+      .border({ width: { bottom: 0.3 }, color: this.theme.borderGlass })
+
+      // 操作按钮行
+      Row() {
+        // 禁用/恢复联网
+        Row() {
+          Text(this.isDenied ? '🔓 恢复联网' : '🚫 禁用联网')
+            .fontSize(12)
+            .fontColor(this.isDenied ? this.theme.success : this.theme.danger)
+        }
+        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+        .borderRadius(12)
+        .backgroundColor(this.isDenied ? 'rgba(0,230,118,0.1)' : 'rgba(255,82,82,0.1)')
+        .border({ width: 0.5, color: this.isDenied ? '#00E67644' : '#FF525244' })
+        .onClick(() => this.toggleDeny())
+
+        // 踢下线
+        Row() {
+          Text('⏏ 踢下线')
+            .fontSize(12)
+            .fontColor(this.theme.warning)
+        }
+        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+        .borderRadius(12)
+        .backgroundColor('rgba(255,152,0,0.1)')
+        .border({ width: 0.5, color: '#FF980044' })
+        .margin({ left: 10 })
+        .onClick(() => this.kickDevice())
+      }
+      .width('100%')
+      .padding({ top: 6, bottom: 2 })
+
+      // 操作结果提示
+      if (this.manageMsg) {
+        Text(this.manageMsg)
+          .fontSize(11)
+          .fontColor(this.manageMsg.includes('已') ? this.theme.success : this.theme.warning)
+          .width('100%')
+          .margin({ top: 6 })
+      }
+      if (this.managing) {
+        Row() {
+          LoadingProgress().width(16).height(16).color(this.theme.primary)
+          Text(' 处理中…').fontSize(11).fontColor(this.theme.textTertiary)
+        }.width('100%').margin({ top: 8 })
       }
     }
     .width('100%')

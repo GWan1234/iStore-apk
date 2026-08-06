@@ -18,6 +18,8 @@
     "pages/apps/TrafficRankPage",
     "pages/apps/PortTrafficPage",
     "pages/apps/EthPortPage",
-    "pages/apps/ConntrackRankPage"
+    "pages/apps/ConntrackRankPage",
+    "pages/apps/NotifySettingsPage",
+    "pages/apps/SchedulePage"
   ]
 }

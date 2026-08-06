@@ -40,7 +40,8 @@ export interface ImmichAsset {
   id: string
   type: string          // IMAGE / VIDEO
   originalFileName: string
-  createdAt: string
+  createdAt: string     // 上传/入库时间
+  takenAt: string       // 拍摄时间（exifInfo.dateTimeOriginal → fileCreatedAt → createdAt 回退）
   thumbhash: string
   width: number
   height: number
@@ -500,11 +501,24 @@ export class ImmichClient {
       const a = item as Record<string, Object>
       const id: string = this.strOf(a, 'id')
       if (!id) continue
+      // 拍摄时间：优先 EXIF 拍摄时间，其次文件创建时间，最后回退上传时间
+      let takenAt: string = ''
+      const exif = a['exifInfo'] as Record<string, Object>
+      if (exif && typeof exif === 'object') {
+        takenAt = this.strOf(exif, 'dateTimeOriginal')
+      }
+      if (!takenAt) {
+        takenAt = this.strOf(a, 'fileCreatedAt')
+      }
+      if (!takenAt) {
+        takenAt = this.strOf(a, 'createdAt')
+      }
       list.push({
         id: id,
         type: this.strOf(a, 'type'),
         originalFileName: this.strOf(a, 'originalFileName'),
         createdAt: this.strOf(a, 'createdAt'),
+        takenAt: takenAt,
         thumbhash: this.strOf(a, 'thumbhash'),
         width: this.numOf(a, 'width'),
         height: this.numOf(a, 'height'),

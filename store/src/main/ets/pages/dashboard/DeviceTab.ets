@@ -3,6 +3,7 @@ import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
 import { ConnectedDevice, WirelessClient } from '../../models/Models'
 import { FormatUtils } from '../../common/utils/FormatUtils'
 import { ApiService } from '../../api/ApiService'
+import { DeviceNoteStore } from '../../common/store/DeviceNoteStore'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 
 // ============================================================
@@ -18,10 +19,42 @@ export struct DeviceTab {
   @State subTab: number = 0
   @State wirelessClients: WirelessClient[] = []
   @State wirelessLoading: boolean = false
+  // 设备备注名映射（mac → 备注）
+  @State noteMap: Map<string, string> = new Map()
+  private noteStore: DeviceNoteStore = DeviceNoteStore.getInstance()
   private lastScrollY: number = 0
   aboutToAppear(): void {
+    const ctx = this.getUIContext().getHostContext()
+    if (ctx) {
+      this.noteStore.init(ctx as Context)
+    }
     this.loadDevices()
     this.loadWirelessData()
+    this.loadNotes()
+  }
+
+  /** 加载当前设备的备注名映射 */
+  async loadNotes(): Promise<void> {
+    const device = AppState.getInstance().getActiveDevice()
+    if (!device) return
+    try {
+      const map: Map<string, string> = new Map()
+      // 从存储读取所有 mac 备注（通过遍历当前设备列表的 mac）
+      for (let i = 0; i < this.devices.length; i++) {
+        const note: string = await this.noteStore.getNote(device.id, this.devices[i].mac)
+        if (note) {
+          map.set(this.devices[i].mac.toUpperCase(), note)
+        }
+      }
+      this.noteMap = map
+    } catch (e) {
+      hilog.error(0x0001, 'DeviceTab', `loadNotes err: ${JSON.stringify(e)}`)
+    }
+  }
+
+  /** 设备显示名（优先备注） */
+  deviceDisplayName(device: ConnectedDevice): string {
+    return this.noteMap.get(device.mac.toUpperCase()) || device.hostname || 'Unknown'
   }
 
   async loadDevices(): Promise<void> {
@@ -242,7 +275,7 @@ export struct DeviceTab {
 
                 // 设备信息
                 Column() {
-                  Text(device.hostname || 'Unknown')
+                  Text(this.deviceDisplayName(device))
                     .fontSize(15)
                     .fontColor(this.theme.textPrimary)
                     .fontWeight(FontWeight.Medium)

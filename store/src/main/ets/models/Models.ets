@@ -341,6 +341,7 @@ export interface IStoreApp {
   icon: string
   link: string
   iconBase64: string
+  category: string   // 应用分类（无分类时为空）
 }
 
 export interface DockerOverview {

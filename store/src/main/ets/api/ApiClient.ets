@@ -172,6 +172,18 @@ class UciSetParam {
   values: Object = new Object()
 }
 
+/** uci add <config> <type>：添加匿名 section */
+class UciAddParam {
+  config: string = ''
+  type: string = ''
+}
+
+/** uci delete <config>.<section>：删除 section */
+class UciDeleteParam {
+  config: string = ''
+  section: string = ''
+}
+
 class UciApplyParam {
   rollback: boolean = false
 }
@@ -2145,6 +2157,10 @@ export class ApiClient {
             item['version'] = ApiUtils.strOf(a, 'version')
             item['icon'] = `/luci-static/resources/app-icons/${name}.png`
             item['link'] = ApiUtils.strOf(a, 'entry')
+            // 分类：兼容多种字段名（iStoreOS 不同版本返回不同）
+            item['category'] = ApiUtils.strOf(a, 'category') ||
+              ApiUtils.strOf(a, 'package_category') ||
+              ApiUtils.strOf(a, 'app_category')
             list.push(item as Object)
           }
         }
@@ -2908,13 +2924,23 @@ export class ApiClient {
     return true
   }
 
-  /** 执行远程命令（预留） */
-  async execCommand(_command: string, _params?: string[]): Promise<string> {
+  /** 执行远程命令（受 LuCI 命令 ACL 限制，仅白名单命令可用） */
+  async execCommand(command: string, params?: string[]): Promise<string> {
+    try {
+      return await this.ubusExec(command, params || [])
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `execCommand err: ${JSON.stringify(e)}`)
+    }
     return ''
   }
 
-  /** 读取路由器文件（预留） */
-  async readFile(_filepath: string): Promise<string> {
+  /** 读取路由器文件内容（受 LuCI 文件 ACL 限制） */
+  async readFile(filepath: string): Promise<string> {
+    try {
+      return await this.ubusReadFile(filepath)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `readFile err: ${JSON.stringify(e)}`)
+    }
     return ''
   }
 
@@ -2926,5 +2952,149 @@ export class ApiClient {
   /** 调用 ubus 接口并返回第一个结果（预留） */
   callUbusFirst(_namespace: string, _procedure: string, _params: Record<string, Object>): Promise<Object> {
     return Promise.resolve(new EmptyRecord())
+  }
+
+  // ========== 设备管理（防火墙 MAC 规则）==========
+
+  /**
+   * 禁用指定 MAC 设备联网（添加防火墙 DROP 规则）
+   * @param mac 设备 MAC 地址
+   * @returns 是否成功
+   */
+  async denyDeviceNet(mac: string): Promise<boolean> {
+    try {
+      // 1. 添加防火墙规则（匿名 section）
+      const addP: UciAddParam = new UciAddParam()
+      addP.config = 'firewall'
+      addP.type = 'rule'
+      const added: Object | null = await this.ubusCall('uci', 'add', addP)
+      if (added === null) {
+        return false
+      }
+      const rec = added as Record<string, Object>
+      const section: string = ApiUtils.strOf(rec, 'id') || ApiUtils.strOf(rec, 'section')
+      if (!section) {
+        return false
+      }
+      // 2. 设置规则属性
+      const name: string = `istore_deny_${mac.replace(/[^0-9A-Fa-f]/g, '')}`
+      const values: Record<string, Object> = {
+        'name': name,
+        'src_mac': mac.toUpperCase(),
+        'target': 'DROP',
+        'proto': 'all',
+        'enabled': '1'
+      }
+      const setP: UciSetParam = new UciSetParam()
+      setP.config = 'firewall'
+      setP.section = section
+      setP.values = values as Object
+      const setOk: Object | null = await this.ubusCall('uci', 'set', setP)
+      if (setOk === null) {
+        return false
+      }
+      // 3. commit + reload
+      return await this.commitFirewall()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `denyDeviceNet err: ${JSON.stringify(e)}`)
+      return false
+    }
+  }
+
+  /**
+   * 恢复指定 MAC 设备联网（删除对应防火墙规则）
+   * @param mac 设备 MAC 地址
+   * @returns 是否成功
+   */
+  async allowDeviceNet(mac: string): Promise<boolean> {
+    try {
+      // 读取防火墙配置，找到 istore_deny_ 开头的规则并删除
+      const uciGetP: UciGetParam = new UciGetParam()
+      uciGetP.config = 'firewall'
+      const configData: Object | null = await this.ubusCall('uci', 'get', uciGetP)
+      const sections: string[] = []
+      if (configData) {
+        const rec = configData as Record<string, Object>
+        // 遍历所有 rule section（key 可能带 .name/.src_mac 后缀，遍历以 '.name' 结尾的）
+        const keys: string[] = Object.keys(rec)
+        const macUpper: string = mac.toUpperCase()
+        for (let i = 0; i < keys.length; i++) {
+          const k: string = keys[i]
+          if (!k.endsWith('.name')) continue
+          const secName: string = k.substring(0, k.length - 5)  // 去掉 .name
+          const val: string = ApiUtils.strOf(rec, k)
+          if (val.startsWith('istore_deny_')) {
+            // 确认 src_mac 匹配
+            const macVal: string = ApiUtils.strOf(rec, `${secName}.src_mac`)
+            if (macVal.toUpperCase() === macUpper) {
+              sections.push(secName)
+            }
+          }
+        }
+      }
+      if (sections.length === 0) {
+        return true  // 无规则视为已恢复
+      }
+      // 删除找到的 section
+      for (let i = 0; i < sections.length; i++) {
+        const delP: UciDeleteParam = new UciDeleteParam()
+        delP.config = 'firewall'
+        delP.section = sections[i]
+        const delOk: Object | null = await this.ubusCall('uci', 'delete', delP)
+        if (delOk === null) {
+          return false
+        }
+      }
+      return await this.commitFirewall()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `allowDeviceNet err: ${JSON.stringify(e)}`)
+      return false
+    }
+  }
+
+  /**
+   * 查询设备是否被禁用联网（是否存在 istore_deny_ 规则）
+   * @param mac 设备 MAC 地址
+   * @returns 是否被禁用
+   */
+  async isDeviceDenied(mac: string): Promise<boolean> {
+    try {
+      const uciGetP: UciGetParam = new UciGetParam()
+      uciGetP.config = 'firewall'
+      const configData: Object | null = await this.ubusCall('uci', 'get', uciGetP)
+      if (!configData) {
+        return false
+      }
+      const rec = configData as Record<string, Object>
+      const keys: string[] = Object.keys(rec)
+      const macUpper: string = mac.toUpperCase()
+      for (let i = 0; i < keys.length; i++) {
+        if (!keys[i].endsWith('.name')) continue
+        const secName: string = keys[i].substring(0, keys[i].length - 5)
+        const name: string = ApiUtils.strOf(rec, keys[i])
+        if (name.startsWith('istore_deny_')) {
+          const macVal: string = ApiUtils.strOf(rec, `${secName}.src_mac`)
+          if (macVal.toUpperCase() === macUpper) {
+            return true
+          }
+        }
+      }
+      return false
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `isDeviceDenied err: ${JSON.stringify(e)}`)
+      return false
+    }
+  }
+
+  /** 提交并应用防火墙配置（uci commit firewall + fw4 reload） */
+  private async commitFirewall(): Promise<boolean> {
+    const commitOk: Object | null = await this.ubusCall('uci', 'commit', this.buildUciConfigParam('firewall'))
+    if (commitOk === null) {
+      return false
+    }
+    const reloadP: WirelessReloadParam = new WirelessReloadParam()
+    reloadP.rollback = false
+    const reloadOk: Object | null = await this.ubusCall('network.reload', 'reload', reloadP)
+    return reloadOk !== null
   }
 }

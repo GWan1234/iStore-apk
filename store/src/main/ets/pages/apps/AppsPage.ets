@@ -26,6 +26,11 @@ struct AppsPage {
   @State isDark: boolean = true
   @State theme: ThemePalette = DARK_THEME
   @State itemSlides: number[] = []
+  @State deviceName: string = '未连接设备'
+  @State deviceHost: string = ''
+  @State deviceConnected: boolean = false
+  @State savedCount: number = 0
+  @State versionText: string = 'v2.8.5'
 
   private groups: ToolGroup[] = [
     {
@@ -45,6 +50,8 @@ struct AppsPage {
         { emoji: '🛡️', name: '家长控制',  desc: 'OAF 应用过滤引擎配置', route: 'pages/apps/OafPage' },
         { emoji: '⚙️', name: '系统进程',  desc: '查看和管理运行中的进程', route: 'pages/process/ProcessListPage' },
         { emoji: '🚀', name: '启动项',   desc: '管理开机自启服务', route: 'pages/process/StartupPage' },
+        { emoji: '🔔', name: '智能通知',  desc: '断网告警与新设备接入提醒', route: 'pages/apps/NotifySettingsPage' },
+        { emoji: '⏰', name: '定时任务',  desc: '定时重启与定时开关 WiFi', route: 'pages/apps/SchedulePage' },
       ]
     },
     {
@@ -125,6 +132,15 @@ struct AppsPage {
       this.theme = AppState.getInstance().getTheme()
     })
 
+    // 填充设备信息（仿应用商店「我的」个人卡片）
+    const active = AppState.getInstance().getActiveDevice()
+    this.deviceConnected = AppState.getInstance().isConnected()
+    if (active) {
+      this.deviceName = active.label || active.host || '路由器'
+      this.deviceHost = active.host ? `${active.host}${active.port && active.port !== '80' ? ':' + active.port : ''}` : ''
+    }
+    this.savedCount = AppState.getInstance().devices.length
+
     const tools: ToolEntry[] = this.flatTools()
     const slides: number[] = []
     for (let i = 0; i < tools.length; i++) slides.push(300)
@@ -189,67 +205,151 @@ struct AppsPage {
         .width('100%')
         .padding({ left: 16, right: 16, top: 48, bottom: 12 })
 
-        // 分类列表
+        // 内容列表（仿鸿蒙应用商店「我的」排版）
         Scroll() {
           Column() {
+            // ===== 顶部个人信息卡片 =====
+            Row() {
+              // 圆形设备头像
+              Row() {
+                SymbolGlyph($r('sys.symbol.externaldrive_fill_3'))
+                  .fontSize(30)
+                  .fontColor([this.theme.primary])
+              }
+              .width(64).height(64).borderRadius(32)
+              .backgroundColor(this.deviceConnected ? 'rgba(68,138,255,0.15)' : 'rgba(255,82,82,0.12)')
+              .justifyContent(FlexAlign.Center)
+
+              // 名称 + 地址
+              Column() {
+                Row() {
+                  Text(this.deviceName)
+                    .fontSize(18).fontColor(this.theme.textPrimary)
+                    .fontWeight(FontWeight.Bold)
+                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Text(this.deviceConnected ? '●' : '○')
+                    .fontSize(14).fontColor(this.deviceConnected ? '#00E676' : '#FF5252')
+                    .margin({ left: 6 })
+                }
+                .width('100%')
+                .alignItems(VerticalAlign.Center)
+
+                if (this.deviceHost) {
+                  Text(this.deviceHost)
+                    .fontSize(12).fontColor(this.theme.textTertiary)
+                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .margin({ top: 3 })
+                } else {
+                  Text('未连接设备，请先登录路由器')
+                    .fontSize(12).fontColor(this.theme.textTertiary)
+                    .margin({ top: 3 })
+                }
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+              .margin({ left: 14 })
+
+              // 已保存设备数
+              Column() {
+                Text(String(this.savedCount))
+                  .fontSize(20).fontColor(this.theme.primary).fontWeight(FontWeight.Bold)
+                Text('已保存设备')
+                  .fontSize(10).fontColor(this.theme.textTertiary).margin({ top: 2 })
+              }
+              .alignItems(HorizontalAlign.Center)
+              .padding({ left: 12, right: 4 })
+            }
+            .width('100%')
+            .padding(18)
+            .borderRadius(20)
+            .backgroundColor(this.theme.bgCard)
+            .backdropBlur(20)
+            .border({ width: 0.5, color: this.theme.borderGlass })
+            .margin({ left: 16, right: 16, top: 8 })
+
+            // ===== 分组大卡片（行间分割线）=====
             ForEach(this.groups, (group: ToolGroup, gIdx: number) => {
               Column() {
                 // 分类标题
                 Text(group.title)
-                  .fontSize(18).fontColor(this.theme.textPrimary)
-                  .fontWeight(FontWeight.Bold)
+                  .fontSize(13).fontColor(this.theme.textSecondary)
                   .width('100%')
-                  .padding({ left: 16, right: 16, top: 20, bottom: 8 })
+                  .padding({ left: 18, right: 18, top: 20, bottom: 8 })
 
-                // 分类下卡片
-                ForEach(group.items, (tool: ToolEntry, tIdx: number) => {
-                  Row() {
-                    // 左侧图标
-                    Row() {
-                      if (tool.iconResource) {
-                        Image(tool.iconResource).width(24).height(24).objectFit(ImageFit.Contain)
-                      } else {
-                        Text(tool.emoji).fontSize(22)
+                // 整组一张大卡片
+                Column() {
+                  ForEach(group.items, (tool: ToolEntry, tIdx: number) => {
+                    Column() {
+                      Row() {
+                        // 左侧图标
+                        Row() {
+                          if (tool.iconResource) {
+                            Image(tool.iconResource).width(22).height(22).objectFit(ImageFit.Contain)
+                          } else {
+                            Text(tool.emoji).fontSize(20)
+                          }
+                        }
+                        .width(40).height(40).borderRadius(12)
+                        .backgroundColor(this.theme.bgGlassLight)
+                        .justifyContent(FlexAlign.Center)
+
+                        // 中间文字
+                        Column() {
+                          Text(tool.name)
+                            .fontSize(15).fontColor(this.theme.textPrimary)
+                            .fontWeight(FontWeight.Medium)
+                          Text(tool.desc)
+                            .fontSize(11).fontColor(this.theme.textTertiary)
+                            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                            .margin({ top: 2 })
+                        }
+                        .alignItems(HorizontalAlign.Start)
+                        .layoutWeight(1)
+                        .margin({ left: 12 })
+
+                        // 右侧箭头
+                        Text('›').fontSize(20).fontColor(this.theme.textTertiary)
+                      }
+                      .width('100%')
+                      .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+                      .onClick(() => this.handleClick(tool))
+
+                      // 行间分割线（除最后一项）
+                      if (tIdx < group.items.length - 1) {
+                        Row()
+                          .width('calc(100% - 28px)')
+                          .height(0.5)
+                          .backgroundColor(this.theme.borderGlass)
+                          .margin({ left: 14 })
                       }
                     }
-                    .width(44).height(44).borderRadius(14)
-                    .backgroundColor(this.theme.bgGlassLight)
-                    .justifyContent(FlexAlign.Center)
-
-                    // 中间文字
-                    Column() {
-                      Text(tool.name)
-                        .fontSize(15).fontColor(this.theme.textPrimary)
-                        .fontWeight(FontWeight.Medium)
-                      Text(tool.desc)
-                        .fontSize(12).fontColor(this.theme.textTertiary)
-                        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                        .margin({ top: 2 })
-                    }
-                    .alignItems(HorizontalAlign.Start)
-                    .layoutWeight(1)
-                    .margin({ left: 12 })
-
-                    // 右侧箭头
-                    Text('›').fontSize(22).fontColor(this.theme.textTertiary)
-                  }
-                  .width('100%').padding(14).borderRadius(14)
-                  .backgroundColor(this.theme.bgCard).backdropBlur(20)
-                  .border({ width: 0.5, color: this.theme.borderGlass })
-                  .opacity(this.getSlideIndex(gIdx, tIdx) < this.itemSlides.length && this.itemSlides[this.getSlideIndex(gIdx, tIdx)] === 0 ? 1 : 0)
-                  .translate({ x: this.itemSlides.length > this.getSlideIndex(gIdx, tIdx) ? this.itemSlides[this.getSlideIndex(gIdx, tIdx)] : 300 })
-                  .onClick(() => this.handleClick(tool))
-                })
-
-                // 分类间距
-                Row().width('100%').height(4)
+                    .width('100%')
+                    .opacity(this.getSlideIndex(gIdx, tIdx) < this.itemSlides.length && this.itemSlides[this.getSlideIndex(gIdx, tIdx)] === 0 ? 1 : 0)
+                    .translate({ x: this.itemSlides.length > this.getSlideIndex(gIdx, tIdx) ? this.itemSlides[this.getSlideIndex(gIdx, tIdx)] : 300 })
+                  })
+                }
+                .width('100%')
+                .borderRadius(18)
+                .backgroundColor(this.theme.bgCard)
+                .backdropBlur(20)
+                .border({ width: 0.5, color: this.theme.borderGlass })
+                .padding({ top: 4, bottom: 4 })
               }
               .width('100%')
               .margin({ left: 16, right: 16 })
             })
 
-            // 底部留白
-            Row().width('100%').height(100)
+            // 底部版本信息
+            Column() {
+              Text('iStore 路由器管理')
+                .fontSize(12).fontColor(this.theme.textTertiary)
+              Text(`${this.versionText} · 开源 · HarmonyOS`)
+                .fontSize(10).fontColor(this.theme.textTertiary).opacity(0.7)
+                .margin({ top: 3 })
+            }
+            .width('100%')
+            .alignItems(HorizontalAlign.Center)
+            .padding({ top: 28, bottom: 40 })
           }
           .width('100%')
         }

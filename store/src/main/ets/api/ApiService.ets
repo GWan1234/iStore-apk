@@ -1030,6 +1030,77 @@ export class ApiService {
     return false
   }
 
+  /** 执行远程命令（受路由器 ACL 白名单限制） */
+  async execCommand(command: string, params?: string[]): Promise<string> {
+    try {
+      return await this.client.execCommand(command, params)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'execCommand err')
+    }
+    return ''
+  }
+
+  /** 读取路由器文件内容 */
+  async readFile(path: string): Promise<string> {
+    try {
+      return await this.client.readFile(path)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'readFile err')
+    }
+    return ''
+  }
+
+  /** 轻量在线检测：执行 ACL 白名单内的 /bin/df，成功即在线 */
+  async isRouterOnline(): Promise<boolean> {
+    try {
+      const out: string = await this.client.execCommand('/bin/df', ['-k'])
+      return out.length > 0
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'isRouterOnline err')
+    }
+    return false
+  }
+
+  /** 获取无线接口名列表（radio0 / radio1 等，用于定时开关 WiFi） */
+  async getWirelessRadios(): Promise<string[]> {
+    try {
+      const list: WifiApInfo[] = await this.fetchWifiApList()
+      const radios: string[] = []
+      for (let i = 0; i < list.length; i++) {
+        const dev: string = list[i].device
+        if (dev && radios.indexOf(dev) < 0) {
+          radios.push(dev)
+        }
+      }
+      return radios
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'getWirelessRadios err')
+    }
+    return []
+  }
+
+  /** 开关所有无线接口（定时任务用）：disabled=1 关 / 0 开 */
+  async setAllWifiEnabled(enabled: boolean): Promise<boolean> {
+    try {
+      const radios: string[] = await this.getWirelessRadios()
+      if (radios.length === 0) {
+        return false
+      }
+      const disabledVal: string = enabled ? '0' : '1'
+      let ok: boolean = true
+      for (let i = 0; i < radios.length; i++) {
+        const r: boolean = await this.updateWifiConfig(radios[i], 'disabled', disabledVal)
+        if (!r) {
+          ok = false
+        }
+      }
+      return ok
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'setAllWifiEnabled err')
+    }
+    return false
+  }
+
   /**
    * 踢下线 WiFi 客户端
    * @param device 无线设备名（radio0）
@@ -1040,6 +1111,36 @@ export class ApiService {
       return await this.client.kickWifiClient(device, mac)
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'kickWifiClient err')
+    }
+    return false
+  }
+
+  /** 禁用设备联网（添加防火墙 DROP 规则） */
+  async denyDeviceNet(mac: string): Promise<boolean> {
+    try {
+      return await this.client.denyDeviceNet(mac)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'denyDeviceNet err')
+    }
+    return false
+  }
+
+  /** 恢复设备联网（删除防火墙规则） */
+  async allowDeviceNet(mac: string): Promise<boolean> {
+    try {
+      return await this.client.allowDeviceNet(mac)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'allowDeviceNet err')
+    }
+    return false
+  }
+
+  /** 查询设备是否被禁用联网 */
+  async isDeviceDenied(mac: string): Promise<boolean> {
+    try {
+      return await this.client.isDeviceDenied(mac)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'isDeviceDenied err')
     }
     return false
   }
@@ -1227,7 +1328,8 @@ export class ApiService {
           version: ObjectHelper.getString(a, 'version', ''),
           icon: ObjectHelper.getString(a, 'icon', ''),
           link: ObjectHelper.getString(a, 'link', ''),
-          iconBase64: ''
+          iconBase64: '',
+          category: ObjectHelper.getString(a, 'category', '')
         })
       }
       return list

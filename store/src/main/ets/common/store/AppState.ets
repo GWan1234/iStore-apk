@@ -153,6 +153,40 @@ export class AppState {
     if (idx >= 0) this.navListeners.splice(idx, 1)
   }
 
+  // ========== 底部导航安全区（悬浮主导航条占用高度，随机型变化）==========
+  // 组成：手势条高度 + 悬浮边距 28 + HdsTabs 导航条高度 + 间隙余量
+  // 实测校准：底部到导航条顶部 ≈ 手势条 + 130（含边距/材质/避让余量）
+  private bottomNavInset: number = 150  // 默认：20(手势条) + 130
+  private navInsetListeners: ((inset: number) => void)[] = []
+
+  /** 设置主页悬浮导航条占用的底部空间（MainPage 根据机型安全区计算后广播） */
+  setBottomNavInset(inset: number): void {
+    if (inset > 0 && inset !== this.bottomNavInset) {
+      this.bottomNavInset = inset
+      for (const l of this.navInsetListeners) {
+        try { l(inset) } catch (_e) {}
+      }
+    }
+  }
+
+  /** 获取主页悬浮导航条占用的底部空间（供子页做相对布局避免遮挡） */
+  getBottomNavInset(): number {
+    return this.bottomNavInset
+  }
+
+  /** 订阅底部导航 inset 变化（机型安全区确认后触发） */
+  onBottomNavInsetChange(listener: (inset: number) => void): void {
+    if (!this.navInsetListeners.includes(listener)) {
+      this.navInsetListeners.push(listener)
+    }
+  }
+
+  /** 取消订阅底部导航 inset 变化 */
+  offBottomNavInsetChange(listener: (inset: number) => void): void {
+    const idx = this.navInsetListeners.indexOf(listener)
+    if (idx >= 0) this.navInsetListeners.splice(idx, 1)
+  }
+
   // ========== 相册子视图状态（供 MainPage 拦截返回手势） ==========
 
   private albumSubViewActive: boolean = false

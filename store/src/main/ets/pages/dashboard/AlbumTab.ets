@@ -10,10 +10,19 @@ import { http } from '@kit.NetworkKit'
 import { common } from '@kit.AbilityKit'
 
 /**
- * AlbumTab - Immich 相册 MVP
+ * AlbumTab - Immich 相册（仿鸿蒙相册）
  * 未配置：显示配置表单（服务器地址 + API Key）
- * 已配置：相册列表 → 点击相册进入照片网格 → 点击照片全屏查看
+ * 已配置：底部导航「相片 / 相册」；相片为按天分组的时间线，相册为相册网格
+ * 点击照片全屏查看（Swiper 滑动切换）
  */
+
+/** 按天分组的照片（鸿蒙相册时间线样式） */
+interface PhotoDay {
+  title: string       // 日期标题（今天/昨天/YYYY年M月D日）
+  dateKey: string     // 排序用的日期 key（YYYY-MM-DD）
+  items: ImmichAsset[]
+}
+
 @Component
 export struct AlbumTab {
   @Prop theme: ThemePalette
@@ -37,10 +46,15 @@ export struct AlbumTab {
   @State activeAlbum: ImmichAlbum | null = null
   @State assets: ImmichAsset[] = []
   @State albumLoading: boolean = false
-  // 全部照片
-  @State allPhotosView: boolean = false
+  // 主视图：底部导航（0=相片 1=相册）
+  @State mainTab: number = 0
+  // 主页悬浮导航条占用底部空间（相对布局，随机型动态）
+  @State bottomInset: number = 150
+  // 全部照片（按天分组时间线，默认首页）
   @State allPhotos: ImmichAsset[] = []
   @State allPhotosLoading: boolean = false
+  // 按天分组后的时间线（key=日期标题, 照片列表）
+  @State photoDays: PhotoDay[] = []
   // 分页状态
   private pageSize: number = 20
   private assetsPage: number = 1
@@ -74,10 +88,24 @@ export struct AlbumTab {
 
   private store: ImmichStore = ImmichStore.getInstance()
   private client: ImmichClient | null = null
+  private navInsetListener: ((inset: number) => void) | null = null
+  private themeListener: (() => void) | null = null
 
   aboutToAppear(): void {
     this.isDark = AppState.getInstance().isDarkMode
     this.theme = AppState.getInstance().getTheme()
+    // 订阅主题变化（胶囊导航条颜色随主题切换）
+    this.themeListener = () => {
+      this.isDark = AppState.getInstance().isDarkMode
+      this.theme = AppState.getInstance().getTheme()
+    }
+    AppState.getInstance().onThemeChange(this.themeListener)
+    // 底部导航 inset（相对布局，避免被主页悬浮导航遮挡）
+    this.bottomInset = AppState.getInstance().getBottomNavInset()
+    this.navInsetListener = (inset: number) => {
+      this.bottomInset = inset
+    }
+    AppState.getInstance().onBottomNavInsetChange(this.navInsetListener)
     // 注册相册返回回调（MainPage onBackPress 触发时先退出子视图）
     AppState.getInstance().onAlbumBack(() => {
       this.exitSubView()
@@ -88,9 +116,10 @@ export struct AlbumTab {
       this.closeViewer()
       this.activeAlbum = null
       this.assets = []
-      this.allPhotosView = false
       this.allPhotos = []
+      this.photoDays = []
       this.showConfig = false
+      this.mainTab = 0
       this.loadConfigForDevice()
     })
     this.loadConfigForDevice()
@@ -112,6 +141,8 @@ export struct AlbumTab {
       this.apiKey = cfg.apiKey
       this.configured = true
       this.client = new ImmichClient(cfg.baseUrl, cfg.apiKey)
+      // 默认首页：相片时间线（按天分组）
+      this.loadAllPhotos()
       this.loadAlbums()
     } else {
       // 当前设备无配置，重置为未配置状态
@@ -120,11 +151,21 @@ export struct AlbumTab {
       this.apiKey = ''
       this.client = null
       this.albums = []
+      this.allPhotos = []
+      this.photoDays = []
     }
   }
 
   aboutToDisappear(): void {
     AppState.getInstance().offAlbumBack(() => {})
+    if (this.navInsetListener) {
+      AppState.getInstance().offBottomNavInsetChange(this.navInsetListener)
+      this.navInsetListener = null
+    }
+    if (this.themeListener) {
+      AppState.getInstance().offThemeChange(this.themeListener)
+      this.themeListener = null
+    }
   }
 
   /** 打开全屏查看器（传入照片列表和起始索引） */
@@ -142,8 +183,9 @@ export struct AlbumTab {
     this.viewerShowOriginal = originals
     this.videoPlaying = playing
     this.videoLoading = loading
-    // 全屏查看时隐藏底部导航栏
+    // 全屏查看时隐藏底部导航栏，并标记子视图状态（MainPage 据此拦截 Tab 滑动穿透）
     AppState.getInstance().hideNav()
+    AppState.getInstance().setAlbumSubView(true)
   }
 
   /** 关闭全屏查看器 */
@@ -165,8 +207,11 @@ export struct AlbumTab {
     this.videoPlaying = []
     this.videoLoading = []
     this.shareMsg = ''
-    // 恢复底部导航栏
+    // 恢复底部导航栏；仅当不再处于相册详情子视图时清除子视图标记
     AppState.getInstance().showNav()
+    if (!this.activeAlbum) {
+      AppState.getInstance().setAlbumSubView(false)
+    }
   }
 
   /** 指定索引的视频是否已开始播放 */
@@ -231,12 +276,6 @@ export struct AlbumTab {
     if (this.activeAlbum) {
       this.activeAlbum = null
       this.assets = []
-      AppState.getInstance().setAlbumSubView(false)
-      return
-    }
-    if (this.allPhotosView) {
-      this.allPhotosView = false
-      this.allPhotos = []
       AppState.getInstance().setAlbumSubView(false)
       return
     }
@@ -318,11 +357,9 @@ export struct AlbumTab {
     this.assetsLoadingMore = false
   }
 
-  /** 加载全部照片（时间线，分页加载，每次 pageSize 张） */
+  /** 加载全部照片（按天分组时间线，分页加载，每次 pageSize 张） */
   async loadAllPhotos(): Promise<void> {
     if (!this.client) return
-    this.allPhotosView = true
-    AppState.getInstance().setAlbumSubView(true)
     this.allPhotosLoading = true
     this.errorText = ''
     this.allPhotos = []
@@ -335,6 +372,7 @@ export struct AlbumTab {
       if (cached && cached.length > 0) {
         this.allPhotos = cached
         this.allPhotosTotal = cached.length
+        this.rebuildPhotoDays(cached)
         this.allPhotosLoading = false
         return
       }
@@ -344,6 +382,7 @@ export struct AlbumTab {
         this.allPhotos = result.items
         this.allPhotosTotal = result.total
         this.assetCache.set('all', result.items)
+        this.rebuildPhotoDays(result.items)
       }
     } catch (e) {
       this.errorText = '加载照片失败'
@@ -366,11 +405,64 @@ export struct AlbumTab {
         this.allPhotos = merged
         this.allPhotosTotal = result.total
         this.assetCache.set('all', merged)
+        this.rebuildPhotoDays(merged)
       }
     } catch (e) {
       hilog.error(0x0001, 'AlbumTab', `loadMoreAllPhotos err: ${JSON.stringify(e)}`)
     }
     this.allPhotosLoadingMore = false
+  }
+
+  /** 将照片按天分组，生成时间线（鸿蒙相册样式：今天/昨天/日期） */
+  private rebuildPhotoDays(list: ImmichAsset[]): void {
+    const groups: Map<string, ImmichAsset[]> = new Map()
+    for (let i = 0; i < list.length; i++) {
+      const key: string = this.dateKeyOf(list[i])
+      if (!key) continue
+      const arr: ImmichAsset[] | undefined = groups.get(key)
+      if (arr) {
+        arr.push(list[i])
+      } else {
+        groups.set(key, [list[i]])
+      }
+    }
+    // 按日期降序排列（最新在前）
+    const keys: string[] = Array.from(groups.keys()).sort().reverse()
+    const days: PhotoDay[] = []
+    const todayKey: string = this.yyyymmdd(new Date())
+    const yesterdayKey: string = this.yyyymmdd(new Date(Date.now() - 86400000))
+    for (let i = 0; i < keys.length; i++) {
+      const d: PhotoDay = {
+        title: keys[i] === todayKey ? '今天' : (keys[i] === yesterdayKey ? '昨天' : this.formatCnDate(keys[i])),
+        dateKey: keys[i],
+        items: groups.get(keys[i]) as ImmichAsset[]
+      }
+      days.push(d)
+    }
+    this.photoDays = days
+  }
+
+  /** 资产拍摄日期 key（YYYY-MM-DD，优先拍摄时间 takenAt） */
+  private dateKeyOf(asset: ImmichAsset): string {
+    const src: string = asset.takenAt || asset.createdAt
+    if (!src) return ''
+    try {
+      return this.yyyymmdd(new Date(src))
+    } catch (e) {
+      return ''
+    }
+  }
+
+  /** Date → YYYY-MM-DD */
+  private yyyymmdd(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  /** YYYY-MM-DD → 中文日期（2026年8月6日） */
+  private formatCnDate(key: string): string {
+    const parts: string[] = key.split('-')
+    if (parts.length !== 3) return key
+    return `${parts[0]}年${parseInt(parts[1])}月${parseInt(parts[2])}日`
   }
 
   /** 运行 API 诊断 */
@@ -465,6 +557,7 @@ export struct AlbumTab {
       this.client = client
       this.configured = true
       this.showConfig = false
+      this.loadAllPhotos()
       this.loadAlbums()
     } catch (e) {
       this.configError = '连接异常，请重试'
@@ -519,23 +612,51 @@ export struct AlbumTab {
         .width('100%')
         .padding({ left: 16, right: 16, top: 4, bottom: 4 })
 
-        // 统计条（仅相册列表视图显示，固定在标题下方）
-        if (!this.activeAlbum && !this.allPhotosView && !this.showConfig && this.configured && this.serverInfo) {
-          this.statsBar()
-        }
-
-        // 视图分支
         if (this.activeAlbum) {
+          // 相册详情（覆盖式，隐藏底部导航）
           this.albumDetailView()
-        } else if (this.allPhotosView) {
-          // 全部照片视图
-          this.allPhotosViewBuilder()
         } else if (this.showConfig || !this.configured) {
           // 配置视图
           this.configView()
         } else {
-          // 相册列表视图
-          this.albumListView()
+          // 主视图：自绘底部导航「相片 / 相册」
+          Column() {
+            // 内容区（Stack + 过渡动画切换）
+            Stack({ alignContent: Alignment.Top }) {
+              if (this.mainTab === 0) {
+                Column() {
+                  this.photoTimelineView()
+                }
+                .width('100%')
+                .height('100%')
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut }))
+              } else {
+                Column() {
+                  this.albumListView()
+                }
+                .width('100%')
+                .height('100%')
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut }))
+              }
+            }
+            .width('100%')
+            .layoutWeight(1)
+
+            // 自绘底部导航条（相片 / 相册，居中悬浮）
+            Row() {
+              this.bottomNavBar()
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.Center)
+
+            // 底部相对留白：= 主页悬浮导航条占用空间（随机型动态计算，不写死）
+            Row()
+              .width('100%')
+              .height(this.bottomInset)
+              .backgroundColor(Color.Transparent)
+          }
+          .width('100%')
+          .height('100%')
         }
       }
       .width('100%')
@@ -1062,31 +1183,6 @@ export struct AlbumTab {
   albumListView(): void {
     Scroll() {
       Column() {
-        // 全部照片入口
-        Row() {
-          SymbolGlyph($r('sys.symbol.picture'))
-            .fontSize(18).fontColor([this.theme.primary])
-          Column() {
-            Text('全部照片')
-              .fontSize(14).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Medium)
-            Text(`时间线 ${this.serverInfo ? this.serverInfo.statistics.totalImages : 0} 张照片`)
-              .fontSize(10).fontColor(this.theme.textTertiary).margin({ top: 2 })
-          }
-          .alignItems(HorizontalAlign.Start)
-          .margin({ left: 12 })
-          .layoutWeight(1)
-
-          Text('›')
-            .fontSize(20).fontColor(this.theme.textTertiary)
-        }
-        .width('100%')
-        .padding(14)
-        .borderRadius(16)
-        .backgroundColor(this.theme.bgCard)
-        .border({ width: 0.5, color: this.theme.borderGlass })
-        .onClick(() => this.loadAllPhotos())
-        .margin({ top: 8, bottom: 12 })
-
         if (this.isLoading) {
           Column() {
             LoadingProgress().color(this.theme.primary).width(32).height(32)
@@ -1255,28 +1351,58 @@ export struct AlbumTab {
     .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
   }
 
-  /** 全部照片视图（时间线） */
+  /** 自绘底部导航条（仿主页悬浮胶囊样式，缩小版） */
   @Builder
-  allPhotosViewBuilder(): void {
+  bottomNavBar(): void {
+    Row() {
+      // 相片
+      this.navItem(0, '相片', $r('sys.symbol.picture'))
+      // 相册
+      this.navItem(1, '相册', $r('sys.symbol.rectangle_stack'))
+    }
+    .width(240)
+    .height(44)
+    .borderRadius(22)
+    .backgroundColor(this.isDark ? 'rgba(30,34,64,0.72)' : 'rgba(255,255,255,0.75)')
+    .backdropBlur(20)
+    .border({ width: 0.5, color: this.theme.borderGlass })
+    .shadow({
+      radius: 12,
+      color: this.isDark ? 'rgba(0,0,0,0.35)' : 'rgba(31,47,94,0.10)',
+      offsetY: 4
+    })
+  }
+
+  /** 单个导航项（选中态高亮 + 图标 + 文字，仿 BottomTabBarStyle） */
+  @Builder
+  navItem(tab: number, label: string, icon: Resource): void {
     Column() {
-      // 头部
-      Row() {
-        Row() {
-          Text('←').fontSize(18).fontColor(this.theme.primary)
-          Text(' 全部照片')
-            .fontSize(15).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Medium)
-        }
-        .padding({ left: 12, right: 16, top: 6, bottom: 6 })
-        .borderRadius(100).backgroundColor(this.theme.bgCard)
-        .border({ width: 0.5, color: this.theme.borderGlass })
-        .onClick(() => { this.allPhotosView = false; this.allPhotos = []; AppState.getInstance().setAlbumSubView(false) })
-
-        Blank()
-        Text(`${this.allPhotos.length} 张`)
-          .fontSize(11).fontColor(this.theme.textTertiary)
+      // 图标
+      SymbolGlyph(icon)
+        .fontSize(17)
+        .fontColor([this.mainTab === tab ? this.theme.primary : this.theme.textTertiary])
+      // 文字
+      Text(label)
+        .fontSize(10)
+        .fontColor(this.mainTab === tab ? this.theme.primary : this.theme.textTertiary)
+        .fontWeight(this.mainTab === tab ? FontWeight.Medium : FontWeight.Normal)
+        .margin({ top: 1 })
+    }
+    .layoutWeight(1)
+    .justifyContent(FlexAlign.Center)
+    .onClick(() => {
+      if (this.mainTab !== tab) {
+        this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseOut }, () => {
+          this.mainTab = tab
+        })
       }
-      .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 8 })
+    })
+  }
 
+  /** 相片时间线视图（按天分组，仿鸿蒙相册首页） */
+  @Builder
+  photoTimelineView(): void {
+    Column() {
       if (this.allPhotosLoading) {
         Column() {
           LoadingProgress().color(this.theme.primary).width(32).height(32)
@@ -1305,60 +1431,90 @@ export struct AlbumTab {
           }
         }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
       } else {
-        Scroll() {
-          Column() {
-            Grid() {
-              ForEach(this.allPhotos, (asset: ImmichAsset, idx: number) => {
-                GridItem() {
-                  Stack() {
-                    Image(asset.thumbnailUrl)
-                      .width('100%').height('100%')
-                      .objectFit(ImageFit.Cover)
-                      .borderRadius(8)
-                    // 视频角标
-                    if (asset.type === 'VIDEO') {
-                      Text('🎬')
-                        .fontSize(14)
-                        .padding(4)
-                        .borderRadius(6)
-                        .backgroundColor('rgba(0,0,0,0.55)')
-                        .position({ x: 6, y: 6 })
-                    }
-                  }
-                  .width('100%').height(110)
-                  .clip(true)
-                  .onClick(() => { this.openViewer(this.allPhotos, idx) })
+        List({ space: 2 }) {
+          // 按天分组：每组一个 ListItem = 日期标题 + 照片流
+          ForEach(this.photoDays, (day: PhotoDay) => {
+            ListItem() {
+              Column() {
+                // 日期标题
+                Row() {
+                  Text(day.title)
+                    .fontSize(15)
+                    .fontColor(this.theme.textPrimary)
+                    .fontWeight(FontWeight.Bold)
+                  Text(`${day.items.length} 张`)
+                    .fontSize(11)
+                    .fontColor(this.theme.textTertiary)
+                    .margin({ left: 8 })
                 }
-              }, (asset: ImmichAsset): string => asset.id)
+                .width('100%')
+                .padding({ left: 12, right: 12, top: 10, bottom: 8 })
+
+                // 当天照片流（Flex 换行，3 列）
+                Flex({ wrap: FlexWrap.Wrap }) {
+                  ForEach(day.items, (asset: ImmichAsset, idxInDay: number) => {
+                    Stack() {
+                      Image(asset.thumbnailUrl)
+                        .width('100%').height('100%')
+                        .objectFit(ImageFit.Cover)
+                      // 视频角标
+                      if (asset.type === 'VIDEO') {
+                        Text('🎬')
+                          .fontSize(13)
+                          .padding(3)
+                          .borderRadius(5)
+                          .backgroundColor('rgba(0,0,0,0.55)')
+                          .position({ x: 5, y: 5 })
+                      }
+                    }
+                    .width('33.3%')
+                    .aspectRatio(1)
+                    .clip(true)
+                    .padding({ left: 1.5, right: 1.5, bottom: 3 })
+                    .onClick(() => {
+                      this.openViewer(this.allPhotos, this.photoIndexByDay(day, idxInDay))
+                    })
+                  }, (asset: ImmichAsset): string => asset.id)
+                }
+                .width('100%')
+                .padding({ left: 6.5, right: 6.5 })
+              }
+              .width('100%')
             }
-            .columnsTemplate('1fr 1fr 1fr')
-            .columnsGap(4)
-            .rowsGap(4)
-            .width('100%')
-            .padding({ left: 8, right: 8 })
-            // 滚动到底加载下一页
-            .onReachEnd(() => { this.loadMoreAllPhotos() })
-            // 加载更多提示
-            if (this.allPhotosLoadingMore) {
-              Row() {
-                LoadingProgress().width(18).height(18).color(this.theme.textTertiary)
-                Text(' 加载更多…').fontSize(12).fontColor(this.theme.textTertiary)
-              }.width('100%').justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 })
-            } else if (this.allPhotosTotal >= 0 && this.allPhotos.length >= this.allPhotosTotal && this.allPhotos.length > 0) {
-              Text('已加载全部')
-                .fontSize(11).fontColor(this.theme.textTertiary)
-                .width('100%').textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
-            }
-          }
-          .width('100%')
+          }, (day: PhotoDay): string => day.dateKey)
         }
+        .width('100%')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
-        .align(Alignment.Top)
+        .edgeEffect(EdgeEffect.Spring)
+        .onReachEnd(() => { this.loadMoreAllPhotos() })
+
+        // 加载更多提示（固定在 List 下方）
+        if (this.allPhotosLoadingMore) {
+          Row() {
+            LoadingProgress().width(18).height(18).color(this.theme.textTertiary)
+            Text(' 加载更多…').fontSize(12).fontColor(this.theme.textTertiary)
+          }.width('100%').justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 })
+        } else if (this.allPhotosTotal >= 0 && this.allPhotos.length >= this.allPhotosTotal && this.allPhotos.length > 0) {
+          Text('已加载全部')
+            .fontSize(11).fontColor(this.theme.textTertiary)
+            .width('100%').textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
+        }
       }
     }
     .width('100%')
     .height('100%')
-    .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
+  }
+
+  /** 计算某天照片在全局列表中的索引（供查看器定位） */
+  private photoIndexByDay(day: PhotoDay, idxInDay: number): number {
+    let base: number = 0
+    for (let i = 0; i < this.photoDays.length; i++) {
+      if (this.photoDays[i].dateKey === day.dateKey) {
+        return base + idxInDay
+      }
+      base += this.photoDays[i].items.length
+    }
+    return idxInDay
   }
 }

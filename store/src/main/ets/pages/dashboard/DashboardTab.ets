@@ -26,6 +26,15 @@ export struct DashboardTab {
   private timerId: number = -1
   private isVisible: boolean = false
   private tabChangeListener: ((tab: number) => void) | null = null
+  // 仪表盘 Canvas 上下文（每个仪表独立）
+  private gaugeCtx0: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true))
+  private gaugeCtx1: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true))
+  private gaugeCtx2: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true))
+  private gaugeCtx3: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true))
+  // 仪表动画状态（当前显示值 → 目标值，丝滑过渡）
+  private gaugeCurrent: number[] = [0, 0, 0, 0]
+  private gaugeTarget: number[] = [0, 0, 0, 0]
+  private gaugeAnimTimer: number = -1
 
   aboutToAppear(): void {
     // 前台感知：仅当本 Tab（首页 index 0）可见时轮询
@@ -61,6 +70,10 @@ export struct DashboardTab {
     if (this.timerId !== -1) {
       clearInterval(this.timerId)
       this.timerId = -1
+    }
+    if (this.gaugeAnimTimer !== -1) {
+      clearInterval(this.gaugeAnimTimer)
+      this.gaugeAnimTimer = -1
     }
     if (this.tabChangeListener) {
       AppState.getInstance().offTabChange(this.tabChangeListener)
@@ -102,6 +115,7 @@ export struct DashboardTab {
     }
     this.isLoading = false
     this.updateTimestamp()
+    this.redrawGauges()
   }
 
   countOnlineClients(devices: ConnectedDevice[]): number {
@@ -139,6 +153,7 @@ export struct DashboardTab {
       // 刷新失败静默处理，不打断用户操作
     }
     this.updateTimestamp()
+    this.redrawGauges()
   }
 
   updateTimestamp(): void {
@@ -164,23 +179,6 @@ export struct DashboardTab {
     }
   }
 
-  getTempColor(temp: number): string {
-    if (temp <= 0) {
-      // 未获取到温度数据，使用灰色
-      return this.theme.textTertiary
-    }
-    if (temp < 50) {
-      // < 50°C：健康（绿色）
-      return '#00E676'
-    }
-    if (temp < 65) {
-      // 50-65°C：警告（黄色）
-      return '#FFD740'
-    }
-    // ≥ 65°C：过热（红色）
-    return '#FF5252'
-  }
-
   getCpuColor(usage: number): string {
     if (usage < 30) {
       // < 30%：低负载（绿色）
@@ -194,6 +192,219 @@ export struct DashboardTab {
     return '#FF5252'
   }
 
+  /** 内存使用率（%） */
+  memoryPercent(): number {
+    return this.systemInfo.memoryTotal > 0
+      ? Math.min(100, Math.round(this.systemInfo.memoryUsed * 100 / this.systemInfo.memoryTotal))
+      : 0
+  }
+
+  /** 内存已用/总量文本（如 256MB / 1.9GB） */
+  memoryUsedText(): string {
+    if (this.systemInfo.memoryTotal <= 0) {
+      return '--'
+    }
+    return FormatUtils.formatBytes(this.systemInfo.memoryUsed)
+  }
+
+  /** 内存颜色（按使用率） */
+  getMemColor(usage: number): string {
+    if (usage < 60) return '#448AFF'
+    if (usage < 85) return '#FFD740'
+    return '#FF5252'
+  }
+
+  /** 温度 → 仪表进度（0-100%），>90°C 视为满 */
+  tempPercent(temp: number): number {
+    if (temp <= 0) return 0
+    return Math.min(100, Math.max(0, Math.round(temp * 100 / 90)))
+  }
+
+  /** 统一仪表颜色：绿(<30%)/蓝(<60%)/黄(<70%)/红(≥70%)，返回 [浅色, 深色] 渐变对 */
+  getGaugeGradient(percent: number): string[] {
+    if (percent < 30) {
+      return ['#69F0AE', '#00C853']  // 绿色渐变（浅→深，对比明显）
+    }
+    if (percent < 60) {
+      return ['#90CAF9', '#1E88E5']  // 蓝色渐变（浅→深）
+    }
+    if (percent < 70) {
+      return ['#FFE082', '#FFB300']  // 黄色渐变（浅→深）
+    }
+    return ['#FF8A80', '#D50000']    // 红色渐变（浅→深）
+  }
+
+  /** 温度仪表配色：绿(<30°C) / 蓝(<60°C) / 黄(<70°C) / 红(≥70°C)，返回 [浅色, 深色] */
+  getTempGaugeGradient(temp: number): string[] {
+    if (temp <= 0) {
+      return ['#9E9E9E', '#616161']  // 无温度数据：灰色渐变
+    }
+    if (temp < 30) {
+      return ['#69F0AE', '#00C853']  // 绿色渐变（浅→深）
+    }
+    if (temp < 60) {
+      return ['#90CAF9', '#1E88E5']  // 蓝色渐变（浅→深）
+    }
+    if (temp < 70) {
+      return ['#FFE082', '#FFB300']  // 黄色渐变（浅→深）
+    }
+    return ['#FF8A80', '#D50000']    // 红色渐变（浅→深）
+  }
+
+  /** 环形仪表卡片（Canvas 渐变圆弧） */
+  @Builder
+  gaugeCard(label: string, valueText: string, percent: number, color: string, ctx: CanvasRenderingContext2D, gradientOverride: string[]) {
+    Column() {
+      // 环形仪表（Canvas 渐变）
+      Canvas(ctx)
+        .width(76).height(76)
+        .onReady(() => {
+          // 首次绘制当前目标值（传入渐变对覆盖时用覆盖配色）
+          this.drawGauge(ctx, Math.max(0, Math.min(100, percent)), color, gradientOverride)
+        })
+      // 中心数值（叠加在 Canvas 上方，数值与说明字号一致 10）
+      Column() {
+        Text(valueText)
+          .fontSize(10)
+          .fontColor(this.theme.textPrimary)
+          .fontWeight(FontWeight.Bold)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(label)
+          .fontSize(10)
+          .fontColor(this.theme.textTertiary)
+          .margin({ top: 2 })
+      }
+      .width(76).height(76)
+      .position({ x: 0, y: 0 })
+      .alignItems(HorizontalAlign.Center)
+      .justifyContent(FlexAlign.Center)
+    }
+    .layoutWeight(1)
+    .padding({ top: 14, bottom: 14 })
+    .borderRadius(16)
+    .backgroundColor(this.theme.bgCard)
+    .backdropBlur(20)
+    .border({ width: 0.5, color: this.theme.borderGlass })
+    .alignItems(HorizontalAlign.Center)
+    .margin({ left: 3, right: 3 })
+  }
+
+  /** 数据更新后平滑动画过渡到新值（丝滑渐变） */
+  private redrawGauges(): void {
+    const cpu: number = Math.max(0, Math.min(100, this.systemInfo.cpuUsage))
+    const mem: number = this.memoryPercent()
+    const temp: number = this.tempPercent(this.systemInfo.cpuTemp)
+    // 更新目标值：CPU / 内存 / 内存占用 / 温度
+    this.gaugeTarget[0] = cpu
+    this.gaugeTarget[1] = mem
+    this.gaugeTarget[2] = mem
+    this.gaugeTarget[3] = temp
+    // 启动动画循环（若未运行）
+    if (this.gaugeAnimTimer === -1) {
+      this.gaugeAnimTimer = setInterval(() => {
+        this.gaugeAnimTick()
+      }, 16)
+    }
+  }
+
+  /** 动画帧：当前值向目标值插值逼近，重绘 4 个仪表 */
+  private gaugeAnimTick(): void {
+    try {
+      let done: boolean = true
+      for (let i = 0; i < 4; i++) {
+        const cur: number = this.gaugeCurrent[i]
+        const tgt: number = this.gaugeTarget[i]
+        if (Math.abs(tgt - cur) < 0.3) {
+          this.gaugeCurrent[i] = tgt
+        } else {
+          // 每帧向目标靠近 18%（指数趋近，先快后慢，丝滑）
+          this.gaugeCurrent[i] = cur + (tgt - cur) * 0.18
+          done = false
+        }
+      }
+      // 重绘（用插值后的当前值；注意 ctx 与 UI 布局顺序对应：CPU ctx0 / 内存 ctx1 / 内存占用 ctx3 / 温度 ctx2）
+      this.drawGauge(this.gaugeCtx0, this.gaugeCurrent[0], this.getGaugeGradient(this.gaugeTarget[0])[0])
+      this.drawGauge(this.gaugeCtx1, this.gaugeCurrent[1], this.getGaugeGradient(this.gaugeTarget[1])[0])
+      this.drawGauge(this.gaugeCtx3, this.gaugeCurrent[2], this.getGaugeGradient(this.gaugeTarget[2])[0])
+      // 温度仪表：按温度值分档配色（绿<30°C / 蓝<60°C / 黄<70°C / 红≥70°C）
+      const tempColors: string[] = this.getTempGaugeGradient(this.systemInfo.cpuTemp)
+      this.drawGauge(this.gaugeCtx2, this.gaugeCurrent[3], tempColors[0], tempColors)
+      // 全部到位后停止动画
+      if (done) {
+        if (this.gaugeAnimTimer !== -1) {
+          clearInterval(this.gaugeAnimTimer)
+          this.gaugeAnimTimer = -1
+        }
+      }
+    } catch (e) {
+      hilog.error(0x0001, 'DashboardTab', `gaugeAnimTick err: ${JSON.stringify(e)}`)
+      if (this.gaugeAnimTimer !== -1) {
+        clearInterval(this.gaugeAnimTimer)
+        this.gaugeAnimTimer = -1
+      }
+    }
+  }
+
+  /** 绘制渐变圆弧仪表 */
+  private drawGauge(ctx: CanvasRenderingContext2D, percent: number, color: string, colorsOverride: string[] = []): void {
+    try {
+      const w: number = 76
+      const h: number = 76
+      const cx: number = w / 2
+      const cy: number = h / 2
+      const r: number = 30
+      const startAngle: number = -Math.PI / 2  // 12 点方向
+      const endAngle: number = startAngle + Math.PI * 2  // 整圆
+
+      ctx.clearRect(0, 0, w, h)
+
+      // 底环（灰色）
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)'
+      ctx.lineWidth = 8
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.stroke()
+
+      // 进度渐变圆弧：从起始点（12点）浅色 → 沿弧线均匀过渡到深色
+      // 用分段绘制实现精确可控的弧线渐变（圆锥渐变角度语义不可靠）
+      const colors: string[] = colorsOverride.length > 0 ? colorsOverride : this.getGaugeGradient(percent)
+      const angle: number = Math.PI * 2 * Math.max(0, Math.min(100, percent)) / 100
+      const segments: number = 24
+      ctx.lineWidth = 8
+      ctx.lineCap = 'round'
+      for (let i = 0; i < segments; i++) {
+        const t: number = i / segments  // 0（起始点浅色）→ 1（终点深色）
+        const a0: number = startAngle + angle * i / segments
+        const a1: number = startAngle + angle * (i + 1) / segments
+        ctx.strokeStyle = this.lerpColor(colors[0], colors[1], t)
+        ctx.beginPath()
+        ctx.arc(cx, cy, r, a0, a1)
+        ctx.stroke()
+      }
+    } catch (e) {
+      hilog.error(0x0001, 'DashboardTab', `drawGauge err: ${JSON.stringify(e)}`)
+    }
+  }
+
+  /** 两个 #RRGGBB 颜色按 t(0-1) 线性插值 */
+  private lerpColor(c1: string, c2: string, t: number): string {
+    try {
+      const r1: number = parseInt(c1.substring(1, 3), 16)
+      const g1: number = parseInt(c1.substring(3, 5), 16)
+      const b1: number = parseInt(c1.substring(5, 7), 16)
+      const r2: number = parseInt(c2.substring(1, 3), 16)
+      const g2: number = parseInt(c2.substring(3, 5), 16)
+      const b2: number = parseInt(c2.substring(5, 7), 16)
+      const r: number = Math.round(r1 + (r2 - r1) * t)
+      const g: number = Math.round(g1 + (g2 - g1) * t)
+      const b: number = Math.round(b1 + (b2 - b1) * t)
+      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+    } catch (e) {
+      return c1
+    }
+  }
+
   formatLocalTime(isoStr: string): string {
     try {
       // 将 ISO 格式时间字符串转为本地友好格式
@@ -203,26 +414,6 @@ export struct DashboardTab {
       // 解析失败时返回原始字符串兜底
       return isoStr
     }
-  }
-
-  getMemoryPct(): number {
-    // 计算内存使用率，避免除零
-    return this.systemInfo.memoryTotal > 0
-      ? (this.systemInfo.memoryUsed / this.systemInfo.memoryTotal) * 100
-      : 0
-  }
-
-  getMemoryColor(usage: number): string {
-    if (usage < 40) {
-      // < 40%：充足（绿色）
-      return '#00E676'
-    }
-    if (usage < 75) {
-      // 40-75%：适中（黄色）
-      return '#FFD740'
-    }
-    // ≥ 75%：紧张（红色）
-    return '#FF5252'
   }
 
   getTypeColor(type: string): string {
@@ -369,188 +560,25 @@ export struct DashboardTab {
             .justifyContent(FlexAlign.SpaceBetween)
             .margin({ top: 8 })
 
-            // ============ 第二行：CPU / 内存% / 内存占用 / 温度 四个均分卡片 ============
+            // ============ 实时监控仪表盘：CPU / 内存 / 内存占用 / 温度 环形仪表（统一绿/蓝/黄/红渐变）============
             Row() {
-              // CPU
-              Column() {
-                Text('CPU')
-                  .fontSize(11)
-                  .fontColor(this.theme.textTertiary)
-                  .margin({ bottom: 4 })
-                Text(FormatUtils.formatPercent(this.systemInfo.cpuUsage))
-                  .fontSize(16)
-                  .fontColor(this.getCpuColor(this.systemInfo.cpuUsage))
-                  .fontWeight(FontWeight.Bold)
-                  .margin({ bottom: 4 })
-
-                Stack() {
-                  Row()
-                    .width('100%')
-                    .height(4)
-                    .borderRadius(2)
-                    .backgroundColor('rgba(255,255,255,0.1)')
-                  Row()
-                    .width(`${Math.max(0, Math.min(100, this.systemInfo.cpuUsage))}%`)
-                    .height(4)
-                    .borderRadius(2)
-                    .linearGradient({
-                      angle: 90,
-                      colors: [
-                        [this.getCpuColor(this.systemInfo.cpuUsage), 0],
-                        [this.getCpuColor(this.systemInfo.cpuUsage) + '44', 1]
-                      ]
-                    })
-                }
-                .width('100%')
-                .alignContent(Alignment.End)
-              }
-              .layoutWeight(1)
-              .padding({ left: 8, right: 8, top: 10, bottom: 10 })
-              .borderRadius(12)
-              .backgroundColor(this.theme.bgCard)
-              .backdropBlur(20)
-              .border({ width: 0.5, color: this.theme.borderGlass })
-              .alignItems(HorizontalAlign.Start)
-              .margin({ left: 2, right: 2 })
-
-              // 内存使用率
-              Column() {
-                Text('内存')
-                  .fontSize(11)
-                  .fontColor(this.theme.textTertiary)
-                  .margin({ bottom: 4 })
-                Text(`${this.getMemoryPct().toFixed(1)}%`)
-                  .fontSize(16)
-                  .fontColor(this.getMemoryColor(this.getMemoryPct()))
-                  .fontWeight(FontWeight.Bold)
-                  .margin({ bottom: 4 })
-
-                Stack() {
-                  Row()
-                    .width('100%')
-                    .height(4)
-                    .borderRadius(2)
-                    .backgroundColor('rgba(255,255,255,0.1)')
-                  Row()
-                    .width(`${Math.max(0, Math.min(100, this.getMemoryPct()))}%`)
-                    .height(4)
-                    .borderRadius(2)
-                    .linearGradient({
-                      angle: 90,
-                      colors: [
-                        [this.getMemoryColor(this.getMemoryPct()), 0],
-                        [this.getMemoryColor(this.getMemoryPct()) + '44', 1]
-                      ]
-                    })
-                }
-                .width('100%')
-                .alignContent(Alignment.End)
-              }
-              .layoutWeight(1)
-              .padding({ left: 8, right: 8, top: 10, bottom: 10 })
-              .borderRadius(12)
-              .backgroundColor(this.theme.bgCard)
-              .backdropBlur(20)
-              .border({ width: 0.5, color: this.theme.borderGlass })
-              .alignItems(HorizontalAlign.Start)
-              .margin({ left: 2, right: 2 })
-
-              // 内存占用
-              Column() {
-                Text('内存占用')
-                  .fontSize(11)
-                  .fontColor(this.theme.textTertiary)
-                  .margin({ bottom: 4 })
-                Text(`${FormatUtils.formatBytes(this.systemInfo.memoryUsed)} / ${FormatUtils.formatBytes(this.systemInfo.memoryTotal)}`)
-                  .fontSize(9)
-                  .fontColor(this.theme.textPrimary)
-                  .width('100%')
-
-                Row()
-                  .width('100%')
-                  .height(12)
-
-                Stack() {
-                  Row()
-                    .width('100%')
-                    .height(4)
-                    .borderRadius(2)
-                    .backgroundColor('rgba(255,255,255,0.1)')
-                  Row()
-                    .width(`${Math.max(0, Math.min(100, this.getMemoryPct()))}%`)
-                    .height(4)
-                    .borderRadius(2)
-                    .linearGradient({
-                      angle: 90,
-                      colors: [
-                        [this.getMemoryColor(this.getMemoryPct()), 0],
-                        [this.getMemoryColor(this.getMemoryPct()) + '44', 1]
-                      ]
-                    })
-                }
-                .width('100%')
-                .alignContent(Alignment.End)
-              }
-              .layoutWeight(1)
-              .padding({ left: 8, right: 8, top: 10, bottom: 10 })
-              .borderRadius(12)
-              .backgroundColor(this.theme.bgCard)
-              .backdropBlur(20)
-              .border({ width: 0.5, color: this.theme.borderGlass })
-              .alignItems(HorizontalAlign.Start)
-              .margin({ left: 2, right: 2 })
-
-              // CPU 温度
-              Column() {
-                Text('CPU温度')
-                  .fontSize(11)
-                  .fontColor(this.theme.textTertiary)
-                  .margin({ bottom: 4 })
-                Row() {
-                  Text(this.systemInfo.cpuTemp > 0 ? this.systemInfo.cpuTemp.toFixed(1) : '--')
-                    .fontSize(16)
-                    .fontColor(this.getTempColor(this.systemInfo.cpuTemp))
-                    .fontWeight(FontWeight.Bold)
-                  Text('°C')
-                    .fontSize(11)
-                    .fontColor(this.theme.textTertiary)
-                    .margin({ left: 2 })
-                }
-                .margin({ bottom: 4 })
-
-                Stack() {
-                  Row()
-                    .width('100%')
-                    .height(4)
-                    .borderRadius(2)
-                    .backgroundColor('rgba(255,255,255,0.1)')
-                  Row()
-                    .width(`${this.systemInfo.cpuTemp > 0 ? Math.min(100, (this.systemInfo.cpuTemp / 100) * 100) : 0}%`)
-                    .height(4)
-                    .borderRadius(2)
-                    .linearGradient({
-                      angle: 90,
-                      colors: [
-                        [this.getTempColor(this.systemInfo.cpuTemp), 0],
-                        [this.getTempColor(this.systemInfo.cpuTemp) + '44', 1]
-                      ]
-                    })
-                }
-                .width('100%')
-                .alignContent(Alignment.End)
-              }
-              .layoutWeight(1)
-              .padding({ left: 8, right: 8, top: 10, bottom: 10 })
-              .borderRadius(12)
-              .backgroundColor(this.theme.bgCard)
-              .backdropBlur(20)
-              .border({ width: 0.5, color: this.theme.borderGlass })
-              .alignItems(HorizontalAlign.Start)
-              .margin({ left: 2, right: 2 })
+              // CPU 仪表
+              this.gaugeCard('CPU', FormatUtils.formatPercent(this.systemInfo.cpuUsage),
+                this.systemInfo.cpuUsage, this.getGaugeGradient(this.systemInfo.cpuUsage)[0], this.gaugeCtx0, [])
+              // 内存仪表
+              this.gaugeCard('内存', FormatUtils.formatPercent(this.memoryPercent()),
+                this.memoryPercent(), this.getGaugeGradient(this.memoryPercent())[0], this.gaugeCtx1, [])
+              // 内存容量占用仪表（已用/总量）
+              this.gaugeCard('内存占用', this.memoryUsedText(),
+                this.memoryPercent(), this.getGaugeGradient(this.memoryPercent())[0], this.gaugeCtx3, [])
+              // 温度仪表（按温度值分档配色：绿<30°C / 蓝<60°C / 黄<70°C / 红≥70°C）
+              this.gaugeCard('温度', this.systemInfo.cpuTemp > 0 ? `${this.systemInfo.cpuTemp.toFixed(1)}°C` : '--',
+                this.tempPercent(this.systemInfo.cpuTemp), this.getTempGaugeGradient(this.systemInfo.cpuTemp)[0],
+                this.gaugeCtx2, this.getTempGaugeGradient(this.systemInfo.cpuTemp))
             }
             .width('100%')
             .justifyContent(FlexAlign.SpaceBetween)
-            .margin({ top: 10 })
+            .margin({ top: 8 })
 
             // ============ 系统信息卡片 ============
             Column() {

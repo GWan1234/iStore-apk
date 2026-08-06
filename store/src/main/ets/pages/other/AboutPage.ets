@@ -2,9 +2,12 @@ import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
 import { AppState } from '../../common/store/AppState'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { common } from '@kit.AbilityKit'
+import { pasteboard } from '@kit.BasicServicesKit'
+import { promptAction } from '@kit.ArkUI'
 
-const CURRENT_VERSION = '2.7.0'
+const CURRENT_VERSION = '2.8.5'
 const PROJECT_URL = 'https://github.com/HWYWL/iStore'
+const QQ_GROUP = '1101685827'
 
 @Entry
 @Component
@@ -13,6 +16,32 @@ struct AboutPage {
   @State theme: ThemePalette = DARK_THEME
   @State latestVersion: string = '加载中...'
   @State isReady: boolean = false
+
+  /** 复制 QQ 群号到剪贴板，弹窗提示，1.5 秒后消失 */
+  copyQqGroup(): void {
+    try {
+      const sysPaste: pasteboard.SystemPasteboard = pasteboard.getSystemPasteboard()
+      const data: pasteboard.PasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, QQ_GROUP)
+      sysPaste.setData(data).then(() => {
+        this.showCopyToast()
+      }).catch((e: Error) => {
+        hilog.error(0x0001, 'AboutPage', `copy failed: ${JSON.stringify(e)}`)
+      })
+    } catch (e) {
+      hilog.error(0x0001, 'AboutPage', `copy err: ${JSON.stringify(e)}`)
+    }
+  }
+
+  private showCopyToast(): void {
+    try {
+      promptAction.showToast({
+        message: '复制成功',
+        duration: 1500
+      })
+    } catch (e) {
+      hilog.error(0x0001, 'AboutPage', `toast err: ${JSON.stringify(e)}`)
+    }
+  }
 
   aboutToAppear(): void {
     this.isDark = AppState.getInstance().isDarkMode
@@ -143,6 +172,32 @@ struct AboutPage {
                 .width('100%')
 
               this.infoRow('作者', '一叶秋枫')
+
+              // Q 群行（含复制按钮）
+              Row() {
+                Text('QQ 群')
+                  .fontSize(12)
+                  .fontColor(this.theme.textSecondary)
+                  .width(68)
+                Text(QQ_GROUP)
+                  .fontSize(12)
+                  .fontColor(this.theme.textPrimary)
+                  .fontWeight(FontWeight.Medium)
+                Blank()
+                // 复制按钮（save 图标）
+                Row() {
+                  SymbolGlyph($r('sys.symbol.save'))
+                    .fontSize(14)
+                    .fontColor([this.theme.primary])
+                }
+                .width(28).height(28).borderRadius(14)
+                .backgroundColor('rgba(68,138,255,0.1)')
+                .justifyContent(FlexAlign.Center)
+                .onClick(() => this.copyQqGroup())
+              }
+              .width('100%')
+              .padding({ top: 8, bottom: 8 })
+              .border({ width: { bottom: 0.3 }, color: this.theme.borderGlass })
             }
             .width('100%')
             .padding(14)
