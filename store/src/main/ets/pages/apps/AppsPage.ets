@@ -3,6 +3,7 @@ import { AppState } from '../../common/store/AppState'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { http } from '@kit.NetworkKit'
 import { util } from '@kit.ArkTS'
+import { getAppVersionText } from '../../common/utils/AppVersion'
 
 const VERSION_URL = 'https://raw.githubusercontent.com/HWYWL/iStore/main/api/version.json'
 
@@ -30,7 +31,7 @@ struct AppsPage {
   @State deviceHost: string = ''
   @State deviceConnected: boolean = false
   @State savedCount: number = 0
-  @State versionText: string = 'v2.8.5'
+  @State versionText: string = getAppVersionText()
 
   private groups: ToolGroup[] = [
     {
@@ -74,6 +75,7 @@ struct AppsPage {
     return arr
   }
 
+  /** 拉取远程最新版本并跳转关于页（version.json 发布信息） */
   async fetchVersionAndAbout(): Promise<void> {
     let ver = '未知'
     let req: http.HttpRequest | null = null

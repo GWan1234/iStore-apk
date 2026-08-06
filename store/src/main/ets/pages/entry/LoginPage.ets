@@ -13,8 +13,9 @@ import { ConnectionConfig } from '../../models/Models'
 import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
 import { common } from '@kit.AbilityKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
-import { pasteboard, deviceInfo } from '@kit.BasicServicesKit'
+import { deviceInfo } from '@kit.BasicServicesKit'
 import { window } from '@kit.ArkUI'
+import { getAppVersionText } from '../../common/utils/AppVersion'
 
 @Entry
 @Component
@@ -31,7 +32,7 @@ struct LoginPage {
   @State successMessage: string = ''
   @State showPassword: boolean = false
   @State savedDevices: SavedDevice[] = []
-  @State showAddForm: boolean = false
+  @State showAddSheet: boolean = false  // 添加/编辑设备弹窗显隐
   @State editingId: string = ''
   @State connectingId: string = ''
   @State formVersion: number = 0
@@ -154,6 +155,7 @@ struct LoginPage {
       this.successMessage = '设备已保存'
       this.isSaving = false
       this.resetForm()
+      this.showAddSheet = false
 
       setTimeout(() => { this.successMessage = '' }, 2000)
     } catch (e) {
@@ -281,81 +283,18 @@ struct LoginPage {
     this.editingId = device.id
     this.formVersion++
     this.errorMessage = ''
-    this.showAddForm = true
+    this.showAddSheet = true
+  }
+
+  /** 打开添加设备弹窗 */
+  openAddSheet(): void {
+    this.resetForm()
+    this.showAddSheet = true
   }
 
   async deleteDevice(id: string): Promise<void> {
     await this.appState.removeDevice(id)
     this.savedDevices = this.appState.devices
-  }
-
-  toggleAddForm(): void {
-    this.showAddForm = !this.showAddForm
-    if (this.showAddForm) {
-      this.resetForm()
-      this.errorMessage = ''
-    }
-  }
-
-  shareDevice(device: SavedDevice): void {
-    try {
-      const js = JSON.stringify({
-        host: device.host,
-        port: device.port,
-        username: device.username || '',
-        password: device.password || '',
-        token: device.token || '',
-        label: device.label || ''
-      })
-      const pb = pasteboard.getSystemPasteboard()
-      pb.setData(pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, js))
-      this.successMessage = '已复制，可在其他设备粘贴导入'
-      setTimeout(() => { this.successMessage = '' }, 2500)
-    } catch (e) {
-      this.errorMessage = '复制失败'
-    }
-  }
-
-  async importDevice(): Promise<void> {
-    try {
-      const pb: pasteboard.SystemPasteboard = pasteboard.getSystemPasteboard()
-      const pasteData: pasteboard.PasteData = await pb.getData()
-      const record: pasteboard.PasteDataRecord = pasteData.getRecord(0)
-      if (!record) {
-        this.errorMessage = '剪贴板为空'
-        return
-      }
-      const text: string = record.plainText
-      if (!text) {
-        this.errorMessage = '剪贴板为空'
-        return
-      }
-      const json: Record<string, string> = JSON.parse(text) as Record<string, string>
-      if (!json['host']) {
-        this.errorMessage = '缺少设备地址'
-        return
-      }
-      const label: string = json['label'] || json['host']
-      const newId: string = `import_${Date.now()}_${json['host']}`
-      const device: SavedDevice = {
-        id: newId,
-        host: json['host'],
-        port: String(json['port'] || '80'),
-        token: json['token'] || '',
-        useHttps: false,
-        label: label,
-        version: 0,
-        lastConnected: 0,
-        username: json['username'] || '',
-        password: json['password'] || ''
-      }
-      await this.appState.saveDevice(device)
-      this.savedDevices = this.appState.devices
-      this.successMessage = `已导入: ${label}`
-      setTimeout(() => { this.successMessage = '' }, 2500)
-    } catch (e) {
-      this.errorMessage = '导入失败，请确认剪贴板内容有效'
-    }
   }
 
   @Builder
@@ -426,6 +365,13 @@ struct LoginPage {
                 }
               }.margin({ top: 6 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+
+            // 右上角软件版本
+            Text(getAppVersionText())
+              .fontSize(11)
+              .fontColor(this.theme.textTertiary)
+              .fontWeight(FontWeight.Medium)
+              .alignSelf(ItemAlign.Start)
           }
           .width('100%').padding(20).borderRadius(20)
           .backgroundColor(this.theme.bgCard).backdropBlur(20)
@@ -476,10 +422,6 @@ struct LoginPage {
                       .fontSize(16).fontColor([this.theme.textTertiary]).padding(8)
                       .onClick(() => { this.fillForm(device) })
 
-                    Text('📋')
-                      .fontSize(16).fontColor(this.theme.textTertiary).padding(8)
-                      .onClick(() => { this.shareDevice(device) })
-
                     SymbolGlyph($r('sys.symbol.trash'))
                       .fontSize(16).fontColor([this.theme.textTertiary]).padding(8)
                       .onClick(() => { this.deleteDevice(device.id) })
@@ -493,111 +435,15 @@ struct LoginPage {
               }, (item: SavedDevice): string => `${item.id}_v${item.version}`)
             }
 
+            // 添加新设备（居中）
             Row() {
-              Text(this.showAddForm ? '收起 ▲' : '+ 添加新设备')
+              Text('+ 添加新设备')
                 .fontSize(14).fontColor(this.theme.primary).fontWeight(FontWeight.Medium)
-                .padding({ top: 12, bottom: 12 })
-              Blank()
-              Text('📥 导入设备')
-                .fontSize(14).fontColor(this.theme.primary).fontWeight(FontWeight.Medium)
-                .padding({ top: 12, bottom: 12, left: 16, right: 16 })
-                .onClick(() => { this.importDevice() })
+                .padding({ top: 12, bottom: 12, left: 20, right: 20 })
             }
             .width('100%').justifyContent(FlexAlign.Center)
-            .onClick(() => { this.toggleAddForm() })
+            .onClick(() => { this.openAddSheet() })
             .margin({ top: this.savedDevices.length > 0 ? 16 : 0 })
-
-            if (this.showAddForm) {
-              Column() {
-                Row() {
-                  TextInput({ placeholder: '设备名称（可选）', text: this.label })
-                    .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
-                    .backgroundColor('transparent')
-                    .onChange((v: string) => { this.label = v })
-                    .layoutWeight(1).height(52)
-                }
-                .width('100%').height(52).borderRadius(24)
-                .backgroundColor(this.theme.bgCard).backdropBlur(10)
-                .border({ width: 0.5, color: this.theme.borderGlass })
-                .padding({ left: 14, right: 14 }).margin({ bottom: 16 })
-
-                Row() {
-                  TextInput({ placeholder: 'IP 地址（如 192.168.1.1）', text: this.host })
-                    .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
-                    .backgroundColor('transparent')
-                    .onChange((v: string) => { this.host = v })
-                    .layoutWeight(1).height(52)
-                }
-                .width('100%').height(52).borderRadius(24)
-                .backgroundColor(this.theme.bgCard).backdropBlur(10)
-                .border({ width: 0.5, color: this.theme.borderGlass })
-                .padding({ left: 14, right: 14 }).margin({ bottom: 16 })
-
-                Row() {
-                  TextInput({ placeholder: '端口', text: this.port })
-                    .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
-                    .backgroundColor('transparent').type(InputType.Number)
-                    .onChange((v: string) => { this.port = v })
-                    .width('30%').height(52)
-                }
-                .width('100%').height(52).borderRadius(24)
-                .backgroundColor(this.theme.bgCard).backdropBlur(10)
-                .border({ width: 0.5, color: this.theme.borderGlass })
-                .padding({ left: 14, right: 14 }).margin({ bottom: 16 })
-
-                Row() {
-                  TextInput({ placeholder: '用户名（一般为 root）', text: this.username })
-                    .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
-                    .backgroundColor('transparent')
-                    .onChange((v: string) => { this.username = v })
-                    .layoutWeight(1).height(52)
-                }
-                .width('100%').height(52).borderRadius(24)
-                .backgroundColor(this.theme.bgCard)
-                .border({ width: 0.5, color: this.theme.borderGlass })
-                .padding({ left: 14, right: 14 }).margin({ bottom: 16 })
-
-                Row() {
-                  TextInput({ placeholder: '密码（路由器管理密码）', text: this.password })
-                    .type(this.showPassword ? InputType.Normal : InputType.Password)
-                    .showPasswordIcon(false)
-                    .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
-                    .backgroundColor('transparent')
-                    .onChange((v: string) => { this.password = v })
-                    .layoutWeight(1).height(52)
-                  Text(this.showPassword ? '◉' : '◎')
-                    .fontSize(18).fontColor(this.theme.textSecondary).padding(8)
-                    .onClick(() => { this.showPassword = !this.showPassword })
-                }
-                .width('100%').height(52).borderRadius(24)
-                .backgroundColor(this.theme.bgCard)
-                .border({ width: 0.5, color: this.theme.borderGlass })
-                .padding({ left: 14, right: 8 }).margin({ bottom: 16 })
-
-                Row() {
-                  Button() {
-                    Text('保存设备')
-                      .fontSize(14).fontColor(this.theme.textPrimary)
-                  }
-                  .width('47%').height(52).borderRadius(26)
-                  .backgroundColor(this.theme.bgCard)
-                  .border({ width: 1, color: this.theme.borderGlass })
-                  .enabled(!this.isSaving)
-                  .onClick(() => { this.doSave() })
-
-                  Button() {
-                    Text('连接并进入')
-                      .fontSize(14).fontColor('#FFFFFF').fontWeight(FontWeight.Medium)
-                  }
-                  .width('47%').height(52).borderRadius(26)
-                  .linearGradient({ angle: 135, colors: [[this.theme.primary, 0], [this.theme.secondary, 1]] })
-                  .enabled(!this.isConnecting && !this.isSaving)
-                  .onClick(() => { this.connectAndEnter() })
-                }
-                .width('100%').justifyContent(FlexAlign.SpaceBetween)
-              }
-              .animation({ duration: 300, curve: Curve.FastOutSlowIn })
-            }
 
             if (this.errorMessage) {
               Row() {
@@ -626,5 +472,132 @@ struct LoginPage {
     }
     .width('100%').height('100%')
     .backgroundColor(this.isDark ? '#0A0E27' : '#E8ECF1')
+    .bindSheet($$this.showAddSheet, this.deviceFormSheet(), {
+      height: 620,
+      dragBar: true,
+      showClose: true,
+      backgroundColor: this.theme.bgCardSolid
+    })
+  }
+
+  /** 添加/编辑设备弹窗 */
+  @Builder
+  deviceFormSheet() {
+    Column() {
+      // 弹窗标题
+      Row() {
+        Text(this.editingId ? '编辑设备' : '添加设备')
+          .fontSize(17).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
+      }
+      .width('100%').margin({ top: 18, bottom: 16 })
+
+      // 设备名称
+      Row() {
+        TextInput({ placeholder: '设备名称（可选）', text: this.label })
+          .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
+          .backgroundColor('transparent')
+          .onChange((v: string) => { this.label = v })
+          .layoutWeight(1).height(52)
+      }
+      .width('100%').height(52).borderRadius(24)
+      .backgroundColor(this.theme.bgCard).backdropBlur(10)
+      .border({ width: 0.5, color: this.theme.borderGlass })
+      .padding({ left: 14, right: 14 }).margin({ bottom: 14 })
+
+      // IP 地址
+      Row() {
+        TextInput({ placeholder: 'IP 地址（如 192.168.1.1）', text: this.host })
+          .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
+          .backgroundColor('transparent')
+          .onChange((v: string) => { this.host = v })
+          .layoutWeight(1).height(52)
+      }
+      .width('100%').height(52).borderRadius(24)
+      .backgroundColor(this.theme.bgCard).backdropBlur(10)
+      .border({ width: 0.5, color: this.theme.borderGlass })
+      .padding({ left: 14, right: 14 }).margin({ bottom: 14 })
+
+      // 端口
+      Row() {
+        TextInput({ placeholder: '端口', text: this.port })
+          .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
+          .backgroundColor('transparent').type(InputType.Number)
+          .onChange((v: string) => { this.port = v })
+          .layoutWeight(1).height(52)
+      }
+      .width('100%').height(52).borderRadius(24)
+      .backgroundColor(this.theme.bgCard).backdropBlur(10)
+      .border({ width: 0.5, color: this.theme.borderGlass })
+      .padding({ left: 14, right: 14 }).margin({ bottom: 14 })
+
+      // 用户名
+      Row() {
+        TextInput({ placeholder: '用户名（一般为 root）', text: this.username })
+          .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
+          .backgroundColor('transparent')
+          .onChange((v: string) => { this.username = v })
+          .layoutWeight(1).height(52)
+      }
+      .width('100%').height(52).borderRadius(24)
+      .backgroundColor(this.theme.bgCard).backdropBlur(10)
+      .border({ width: 0.5, color: this.theme.borderGlass })
+      .padding({ left: 14, right: 14 }).margin({ bottom: 14 })
+
+      // 密码
+      Row() {
+        TextInput({ placeholder: '密码（路由器管理密码）', text: this.password })
+          .type(this.showPassword ? InputType.Normal : InputType.Password)
+          .showPasswordIcon(false)
+          .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
+          .backgroundColor('transparent')
+          .onChange((v: string) => { this.password = v })
+          .layoutWeight(1).height(52)
+        Text(this.showPassword ? '◉' : '◎')
+          .fontSize(18).fontColor(this.theme.textSecondary).padding(8)
+          .onClick(() => { this.showPassword = !this.showPassword })
+      }
+      .width('100%').height(52).borderRadius(24)
+      .backgroundColor(this.theme.bgCard).backdropBlur(10)
+      .border({ width: 0.5, color: this.theme.borderGlass })
+      .padding({ left: 14, right: 8 }).margin({ bottom: 14 })
+
+      // 错误提示
+      if (this.errorMessage) {
+        Row() {
+          Text('⚠ ' + this.errorMessage)
+            .fontSize(13).fontColor(this.theme.danger)
+            .layoutWeight(1)
+        }
+        .width('100%').padding({ left: 14, right: 14, top: 10, bottom: 10 })
+        .borderRadius(12).margin({ bottom: 12 })
+        .backgroundColor(this.isDark ? 'rgba(255, 82, 82, 0.1)' : 'rgba(255, 82, 82, 0.05)')
+        .border({ width: 0.5, color: this.isDark ? 'rgba(255, 82, 82, 0.25)' : 'rgba(255, 82, 82, 0.15)' })
+      }
+
+      // 按钮
+      Row() {
+        Button() {
+          Text('保存设备')
+            .fontSize(14).fontColor(this.theme.textPrimary)
+        }
+        .width('47%').height(52).borderRadius(26)
+        .backgroundColor(this.theme.bgCard)
+        .border({ width: 1, color: this.theme.borderGlass })
+        .enabled(!this.isSaving)
+        .onClick(() => { this.doSave() })
+
+        Button() {
+          Text('连接并进入')
+            .fontSize(14).fontColor('#FFFFFF').fontWeight(FontWeight.Medium)
+        }
+        .width('47%').height(52).borderRadius(26)
+        .linearGradient({ angle: 135, colors: [[this.theme.primary, 0], [this.theme.secondary, 1]] })
+        .enabled(!this.isConnecting && !this.isSaving)
+        .onClick(() => { this.connectAndEnter() })
+      }
+      .width('100%').justifyContent(FlexAlign.SpaceBetween).margin({ top: 4, bottom: 16 })
+    }
+    .width('100%').padding({ left: 20, right: 20 })
+    .backgroundColor(this.theme.bgCardSolid)
   }
 }

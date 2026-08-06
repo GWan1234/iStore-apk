@@ -1,5 +1,5 @@
 {
-  "version": "2.8.5",
+  "version": "2.8.6",
   "versionCode": 2,
   "description": "优化immich相册管理，增加智能通知和定时任务，增加设备静止联网、备注、下线，还有更美观的首页",
   "releaseDate": "2026-08-05",

@@ -4,8 +4,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import { common } from '@kit.AbilityKit'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { promptAction } from '@kit.ArkUI'
+import { getAppVersion } from '../../common/utils/AppVersion'
 
-const CURRENT_VERSION = '2.8.5'
 const PROJECT_URL = 'https://github.com/HWYWL/iStore'
 const QQ_GROUP = '1101685827'
 
@@ -151,7 +151,7 @@ struct AboutPage {
                 .margin({ bottom: 10 })
                 .width('100%')
 
-              this.infoRow('当前版本', CURRENT_VERSION)
+              this.infoRow('当前版本', getAppVersion())
               this.infoRow('最新版本', this.isReady ? this.latestVersion : '加载中...',
                 this.latestVersion !== '未知' && this.latestVersion !== '加载中...' ? this.theme.success : this.theme.textSecondary)
             }
