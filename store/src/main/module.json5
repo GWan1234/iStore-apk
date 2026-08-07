@@ -33,6 +33,7 @@
         "label": "$string:StoreAbility_label",
         "startWindowIcon": "$media:logo",
         "startWindowBackground": "$color:start_window_background",
+        "orientation": "auto_rotation",
         "exported": true,
         "skills": [
           {
@@ -58,6 +59,20 @@
             "resource": "$profile:backup_config"
           }
         ],
+      },
+      {
+        "name": "EntryFormAbility",
+        "srcEntry": "./ets/entryformability/EntryFormAbility.ets",
+        "label": "$string:widget_network_name",
+        "description": "$string:widget_network_desc",
+        "type": "form",
+        "exported": false,
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:form_config"
+          }
+        ]
       }
     ]
   }

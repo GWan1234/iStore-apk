@@ -8,6 +8,7 @@ import { DeviceTab } from './DeviceTab'
 import { IStoreTabView } from './IStoreTabView'
 import { NotificationWatcher } from '../../common/store/NotificationWatcher'
 import { NotifyStore } from '../../common/store/NotifyStore'
+import { applyImmersiveBar } from '../../common/utils/WindowUtils'
 import { ScheduleStore } from '../../common/store/ScheduleStore'
 import { DockerTab } from './DockerTab'
 import { AlbumTab } from './AlbumTab'
@@ -43,6 +44,13 @@ struct MainPage {
     AppState.getInstance().onThemeChange(() => {
       this.isDark = AppState.getInstance().isDarkMode
       this.theme = AppState.getInstance().getTheme()
+      // 主题切换后同步状态栏图标颜色（沉浸式）
+      try {
+        const ctx = this.getUIContext().getHostContext()
+        if (ctx) {
+          applyImmersiveBar(ctx as Context, this.isDark)
+        }
+      } catch (e) {}
     })
 
     AppState.getInstance().onNavChange(() => {

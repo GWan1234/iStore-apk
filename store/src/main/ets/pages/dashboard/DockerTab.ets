@@ -1,6 +1,6 @@
 import { AppState } from '../../common/store/AppState'
 import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
-import { DockerOverview, DockerContainer, DockerStats } from '../../models/Models'
+import { DockerOverview, DockerContainer, DockerStats, DockerImage, DockerNetwork } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 
@@ -18,8 +18,70 @@ export struct DockerTab {
   @State apiAvailable: boolean = false
   @State showApiConfirm: boolean = false
   @State apiEnabling: boolean = false
+  @State iconFailed: string[] = []  // 远程 logo 加载失败的容器（回退默认 icon_docker）
+  @State viewIndex: number = 0  // 0=容器 / 1=镜像 / 2=网络
+  @State images: DockerImage[] = []
+  @State imagesLoading: boolean = false
+  @State networks: DockerNetwork[] = []
+  @State networksLoading: boolean = false
   private api: ApiService = new ApiService()
   private lastScrollY: number = 0
+
+  /** 格式化镜像大小 */
+  fmtImageSize(bytes: number): string {
+    if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(2)} GB`
+    if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} MB`
+    if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`
+    return `${bytes} B`
+  }
+
+  /** 格式化镜像创建时间 */
+  fmtImageCreated(ts: number): string {
+    if (!ts) return '--'
+    const d: Date = new Date(ts * 1000)
+    const p = (n: number): string => n < 10 ? `0${n}` : `${n}`
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  }
+
+  /** 加载镜像列表 */
+  async loadImages(): Promise<void> {
+    this.imagesLoading = true
+    try {
+      this.images = await this.api.fetchDockerImages()
+    } catch (e) {
+      hilog.error(0x0001, 'DockerTab', `loadImages err: ${JSON.stringify(e)}`)
+    }
+    this.imagesLoading = false
+  }
+
+  /** 加载网络列表 */
+  async loadNetworks(): Promise<void> {
+    this.networksLoading = true
+    try {
+      this.networks = await this.api.fetchDockerNetworks()
+    } catch (e) {
+      hilog.error(0x0001, 'DockerTab', `loadNetworks err: ${JSON.stringify(e)}`)
+    }
+    this.networksLoading = false
+  }
+
+  /** 切换 容器/镜像/网络 视图 */
+  switchView(idx: number): void {
+    if (this.viewIndex === idx) return
+    this.viewIndex = idx
+    if (idx === 1 && this.images.length === 0) {
+      this.loadImages()
+    } else if (idx === 2 && this.networks.length === 0) {
+      this.loadNetworks()
+    }
+  }
+
+  /** 标记远程图标加载失败（回退默认图标） */
+  markIconFailed(name: string): void {
+    if (this.iconFailed.indexOf(name) < 0) {
+      this.iconFailed.push(name)
+    }
+  }
   private refreshTimer: number = -1
   private isVisible: boolean = false
   private tabChangeListener: ((tab: number) => void) | null = null
@@ -350,26 +412,72 @@ export struct DockerTab {
               .border({ width: 0.5, color: this.theme.borderGlass })
             }
 
-            // ========== 容器列表 ==========
-            if (this.containers.length > 0) {
-              Text('容器列表')
-                .fontSize(13).fontColor(this.theme.textTertiary)
-                .width('100%').padding({ left: 4, top: 12, bottom: 6 })
+            // ========== 容器 / 镜像 / 网络 切换 ==========
+            Row() {
+              Row() {
+                Text('📦 容器')
+                  .fontSize(12)
+                  .fontColor(this.viewIndex === 0 ? this.theme.textPrimary : this.theme.textTertiary)
+                  .fontWeight(this.viewIndex === 0 ? FontWeight.Medium : FontWeight.Normal)
+              }
+              .padding({ left: 18, right: 18, top: 8, bottom: 8 })
+              .borderRadius(12)
+              .backgroundColor(this.viewIndex === 0 ? this.theme.bgCardHover : 'transparent')
+              .border(this.viewIndex === 0 ? { width: 0.5, color: this.theme.primary } : {})
+              .onClick(() => { this.switchView(0) })
 
+              Row() {
+                Text('🗂 镜像')
+                  .fontSize(12)
+                  .fontColor(this.viewIndex === 1 ? this.theme.textPrimary : this.theme.textTertiary)
+                  .fontWeight(this.viewIndex === 1 ? FontWeight.Medium : FontWeight.Normal)
+              }
+              .padding({ left: 18, right: 18, top: 8, bottom: 8 })
+              .borderRadius(12)
+              .backgroundColor(this.viewIndex === 1 ? this.theme.bgCardHover : 'transparent')
+              .border(this.viewIndex === 1 ? { width: 0.5, color: this.theme.primary } : {})
+              .margin({ left: 10 })
+              .onClick(() => { this.switchView(1) })
+
+              Row() {
+                Text('🌐 网络')
+                  .fontSize(12)
+                  .fontColor(this.viewIndex === 2 ? this.theme.textPrimary : this.theme.textTertiary)
+                  .fontWeight(this.viewIndex === 2 ? FontWeight.Medium : FontWeight.Normal)
+              }
+              .padding({ left: 18, right: 18, top: 8, bottom: 8 })
+              .borderRadius(12)
+              .backgroundColor(this.viewIndex === 2 ? this.theme.bgCardHover : 'transparent')
+              .border(this.viewIndex === 2 ? { width: 0.5, color: this.theme.primary } : {})
+              .margin({ left: 10 })
+              .onClick(() => { this.switchView(2) })
+
+              Blank()
+              Text(this.viewIndex === 0 ? `${this.containers.length} 个容器`
+                : this.viewIndex === 1 ? `${this.images.length} 个镜像`
+                  : `${this.networks.length} 个网络`)
+                .fontSize(11).fontColor(this.theme.textTertiary)
+            }
+            .width('100%')
+            .padding({ left: 4, top: 12, bottom: 6 })
+
+            // ========== 容器视图 ==========
+            if (this.viewIndex === 0) {
+              if (this.containers.length > 0) {
               ForEach(this.containers, (c: DockerContainer) => {
                 Column() {
                   Row() {
                     Column() {
                       if (this.actionContainer === c.name) {
                         LoadingProgress().width(18).height(18).color(this.theme.primary)
+                      } else if (this.iconFailed.indexOf(c.name) >= 0) {
+                        // 远程 logo 加载失败 → 默认 Docker 图标
+                        Image($r('app.media.icon_docker'))
+                          .width(28).height(28).objectFit(ImageFit.Contain)
                       } else {
-                        if (this.containerIconUrl(c.image)) {
-                          Image(this.containerIconUrl(c.image))
-                            .width(40).height(40).objectFit(ImageFit.Cover).borderRadius(12)
-                        } else {
-                          Image($r('app.media.icon_docker'))
-                            .width(24).height(24).objectFit(ImageFit.Contain)
-                        }
+                        Image(this.containerIconUrl(c.image))
+                          .width(40).height(40).objectFit(ImageFit.Cover).borderRadius(12)
+                          .onError(() => { this.markIconFailed(c.name) })
                       }
                     }
                     .width(40).height(40).borderRadius(12)
@@ -438,10 +546,139 @@ export struct DockerTab {
                 .backgroundColor(this.theme.bgCard).backdropBlur(20)
                 .border({ width: 0.5, color: this.theme.borderGlass })
               }, (c: DockerContainer): string => c.id)
+              } else {
+                Text('暂无容器')
+                  .fontSize(12).fontColor(this.theme.textTertiary)
+                  .width('100%').textAlign(TextAlign.Center).padding(20)
+              }
+            } else if (this.viewIndex === 1) {
+              // ========== 镜像视图 ==========
+              if (this.imagesLoading) {
+                Row() {
+                  LoadingProgress().width(18).height(18).color(this.theme.primary)
+                  Text(' 加载镜像中…').fontSize(12).fontColor(this.theme.textTertiary)
+                }
+                .width('100%').justifyContent(FlexAlign.Center).padding(24)
+              } else if (this.images.length > 0) {
+                ForEach(this.images, (img: DockerImage) => {
+                  Column() {
+                    Row() {
+                      Column() {
+                        Image($r('app.media.icon_docker'))
+                          .width(24).height(24).objectFit(ImageFit.Contain)
+                      }
+                      .width(40).height(40).borderRadius(12)
+                      .backgroundColor('rgba(200,200,200,0.15)')
+                      .justifyContent(FlexAlign.Center)
+
+                      Column() {
+                        // 悬空镜像（无标签）用 ID 作标题
+                        Text(img.repoTag === '<none>:<none>' ? img.id : img.repoTag)
+                          .fontSize(14).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Medium)
+                          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                        if (img.repoTag === '<none>:<none>') {
+                          Text('悬空镜像（无标签）')
+                            .fontSize(10).fontColor(this.theme.warning)
+                            .margin({ top: 3 })
+                        } else {
+                          Text(`ID ${img.id}`)
+                            .fontSize(10).fontColor(this.theme.textTertiary)
+                            .margin({ top: 3 })
+                            .fontFamily('monospace')
+                        }
+                      }
+                      .alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 10 })
+
+                      Column() {
+                        Text(this.fmtImageSize(img.size))
+                          .fontSize(12).fontColor(this.theme.textPrimary)
+                        Text(this.fmtImageCreated(img.created))
+                          .fontSize(10).fontColor(this.theme.textTertiary)
+                          .margin({ top: 3 })
+                      }
+                      .alignItems(HorizontalAlign.End)
+                    }
+                    .width('100%')
+                  }
+                  .width('100%').padding(16).borderRadius(20).margin({ top: 10 })
+                  .backgroundColor(this.theme.bgCard).backdropBlur(20)
+                  .border({ width: 0.5, color: this.theme.borderGlass })
+                }, (img: DockerImage): string => img.id)
+              } else {
+                Column() {
+                  Text('暂无镜像')
+                    .fontSize(12).fontColor(this.theme.textTertiary)
+                    .width('100%').textAlign(TextAlign.Center).padding({ top: 20 })
+                  if (!this.api.hasDockerApi()) {
+                    Text('开启 Docker API 后可查看镜像列表')
+                      .fontSize(11).fontColor(this.theme.warning)
+                      .width('100%').textAlign(TextAlign.Center).padding({ top: 6, bottom: 20 })
+                  }
+                }
+                .width('100%')
+              }
             } else {
-              Text('暂无容器')
-                .fontSize(12).fontColor(this.theme.textTertiary)
-                .width('100%').textAlign(TextAlign.Center).padding(20)
+              // ========== 网络视图 ==========
+              if (this.networksLoading) {
+                Row() {
+                  LoadingProgress().width(18).height(18).color(this.theme.primary)
+                  Text(' 加载网络中…').fontSize(12).fontColor(this.theme.textTertiary)
+                }
+                .width('100%').justifyContent(FlexAlign.Center).padding(24)
+              } else if (this.networks.length > 0) {
+                ForEach(this.networks, (nw: DockerNetwork) => {
+                  Column() {
+                    Row() {
+                      Column() {
+                        Text('🌐')
+                          .fontSize(20)
+                      }
+                      .width(40).height(40).borderRadius(12)
+                      .backgroundColor('rgba(200,200,200,0.15)')
+                      .justifyContent(FlexAlign.Center)
+
+                      Column() {
+                        Text(nw.name)
+                          .fontSize(14).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Medium)
+                          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                        Text(`ID ${nw.id}`)
+                          .fontSize(10).fontColor(this.theme.textTertiary)
+                          .margin({ top: 3 })
+                          .fontFamily('monospace')
+                      }
+                      .alignItems(HorizontalAlign.Start).layoutWeight(1).margin({ left: 10 })
+
+                      Column() {
+                        Text(nw.driver)
+                          .fontSize(11).fontColor(this.theme.primary)
+                          .padding({ top: 3, bottom: 3, left: 10, right: 10 })
+                          .borderRadius(8)
+                          .backgroundColor('rgba(68,138,255,0.12)')
+                        Text(nw.scope === 'local' ? '本地' : nw.scope)
+                          .fontSize(10).fontColor(this.theme.textTertiary)
+                          .margin({ top: 4 })
+                      }
+                      .alignItems(HorizontalAlign.End)
+                    }
+                    .width('100%')
+                  }
+                  .width('100%').padding(16).borderRadius(20).margin({ top: 10 })
+                  .backgroundColor(this.theme.bgCard).backdropBlur(20)
+                  .border({ width: 0.5, color: this.theme.borderGlass })
+                }, (nw: DockerNetwork): string => nw.id)
+              } else {
+                Column() {
+                  Text('暂无网络')
+                    .fontSize(12).fontColor(this.theme.textTertiary)
+                    .width('100%').textAlign(TextAlign.Center).padding({ top: 20 })
+                  if (!this.api.hasDockerApi()) {
+                    Text('开启 Docker API 后可查看网络列表')
+                      .fontSize(11).fontColor(this.theme.warning)
+                      .width('100%').textAlign(TextAlign.Center).padding({ top: 6, bottom: 20 })
+                  }
+                }
+                .width('100%')
+              }
             }
           }
         }

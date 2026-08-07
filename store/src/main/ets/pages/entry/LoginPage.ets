@@ -16,6 +16,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import { deviceInfo } from '@kit.BasicServicesKit'
 import { window } from '@kit.ArkUI'
 import { getAppVersionText } from '../../common/utils/AppVersion'
+import { applyImmersiveBar } from '../../common/utils/WindowUtils'
 
 @Entry
 @Component
@@ -55,6 +56,16 @@ struct LoginPage {
     this.savedDevices = this.appState.devices
     this.isDark = this.appState.isDarkMode
     this.theme = this.appState.getTheme()
+
+    // 沉浸式状态栏：跟随主题更新图标颜色
+    try {
+      const hostCtx: common.Context = this.getUIContext().getHostContext() as common.Context
+      if (hostCtx) {
+        applyImmersiveBar(hostCtx, this.isDark)
+      }
+    } catch (e) {
+      hilog.error(0x0001, 'LoginPage', `applyImmersiveBar err: ${e}`)
+    }
 
     // 获取状态栏高度（避免顶部按钮被遮挡）
     try {
@@ -322,6 +333,13 @@ struct LoginPage {
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.appState.toggleTheme()
+            // 主题切换后同步状态栏图标颜色（沉浸式）
+            try {
+              const hostCtx: common.Context = this.getUIContext().getHostContext() as common.Context
+              if (hostCtx) {
+                applyImmersiveBar(hostCtx, this.appState.isDarkMode)
+              }
+            } catch (e) {}
           })
           .margin({ right: 16, top: this.topSafeArea + 4 })
         }
@@ -333,11 +351,11 @@ struct LoginPage {
             .objectFit(ImageFit.Cover)
             .margin({ top: 24 })
 
-          Text('iStore')
-            .fontSize(40).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
+          Text('iStore 路由管家')
+            .fontSize(34).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
             .margin({ top: 16 })
 
-          Text('路由器设备管理')
+          Text('OpenWrt 软路由管理工具')
             .fontSize(14).fontColor(this.theme.textSecondary).margin({ top: 4 })
         }
         .alignItems(HorizontalAlign.Center)
@@ -376,6 +394,7 @@ struct LoginPage {
           .width('100%').padding(20).borderRadius(20)
           .backgroundColor(this.theme.bgCard).backdropBlur(20)
           .border({ width: 0.5, color: this.theme.borderGlass })
+          .shadow({ radius: this.theme.cardShadowRadius, color: this.theme.cardShadow, offsetY: 4 })
         }
         .width('100%').padding({ left: 16, right: 16 }).margin({ bottom: 12 })
 
@@ -432,6 +451,7 @@ struct LoginPage {
                 .width('100%').padding(20).borderRadius(20).margin({ top: 16 })
                 .backgroundColor(this.theme.bgCard).backdropBlur(20)
                 .border({ width: 0.5, color: this.theme.borderGlass })
+                .shadow({ radius: this.theme.cardShadowRadius, color: this.theme.cardShadow, offsetY: 4 })
               }, (item: SavedDevice): string => `${item.id}_v${item.version}`)
             }
 

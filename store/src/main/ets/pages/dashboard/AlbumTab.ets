@@ -8,6 +8,8 @@ import { fileIo as fs } from '@kit.CoreFileKit'
 import { fileUri } from '@kit.CoreFileKit'
 import { http } from '@kit.NetworkKit'
 import { common } from '@kit.AbilityKit'
+import { window } from '@kit.ArkUI'
+import { setWindowOrientation } from '../../common/utils/WindowUtils'
 
 /**
  * AlbumTab - Immich 相册（仿鸿蒙相册）
@@ -77,6 +79,13 @@ export struct AlbumTab {
   @State videoPlaying: boolean[] = []
   // 视频加载状态（转圈，播放就绪后取消）
   @State videoLoading: boolean[] = []
+  // 视频暂停状态（播放中/暂停，控制条切换用）
+  @State videoPaused: boolean[] = []
+  // 视频自定义控制条（进度/全屏）
+  @State viewerCtrlVisible: boolean = true
+  @State videoFullscreen: boolean = false
+  @State videoProgress: number = 0
+  @State videoDuration: number = 0
   // 分享状态
   @State sharing: boolean = false
   @State shareMsg: string = ''
@@ -175,17 +184,31 @@ export struct AlbumTab {
     const originals: boolean[] = []
     const playing: boolean[] = []
     const loading: boolean[] = []
+    const paused: boolean[] = []
     for (let i = 0; i < list.length; i++) {
       originals.push(false)
       playing.push(false)
       loading.push(false)
+      paused.push(false)
     }
     this.viewerShowOriginal = originals
     this.videoPlaying = playing
     this.videoLoading = loading
+    this.videoPaused = paused
+    this.viewerCtrlVisible = true
+    this.videoFullscreen = false
+    this.videoProgress = 0
+    this.videoDuration = 0
     // 全屏查看时隐藏底部导航栏，并标记子视图状态（MainPage 据此拦截 Tab 滑动穿透）
     AppState.getInstance().hideNav()
     AppState.getInstance().setAlbumSubView(true)
+    // 查看器内允许旋转（横屏视频可横屏播放），关闭时恢复竖屏
+    try {
+      const ctx = this.getUIContext().getHostContext()
+      if (ctx) {
+        setWindowOrientation(ctx as Context, window.Orientation.AUTO_ROTATION)
+      }
+    } catch (_e) {}
   }
 
   /** 关闭全屏查看器 */
@@ -206,12 +229,24 @@ export struct AlbumTab {
     this.viewerShowOriginal = []
     this.videoPlaying = []
     this.videoLoading = []
+    this.videoPaused = []
+    this.videoFullscreen = false
+    this.viewerCtrlVisible = true
+    this.videoProgress = 0
+    this.videoDuration = 0
     this.shareMsg = ''
     // 恢复底部导航栏；仅当不再处于相册详情子视图时清除子视图标记
     AppState.getInstance().showNav()
     if (!this.activeAlbum) {
       AppState.getInstance().setAlbumSubView(false)
     }
+    // 恢复竖屏（查看器内允许旋转的窗口方向还原）
+    try {
+      const ctx = this.getUIContext().getHostContext()
+      if (ctx) {
+        setWindowOrientation(ctx as Context, window.Orientation.PORTRAIT)
+      }
+    } catch (_e) {}
   }
 
   /** 指定索引的视频是否已开始播放 */
@@ -265,6 +300,47 @@ export struct AlbumTab {
       this.videoControllers.push(new VideoController())
     }
     return this.videoControllers[idx]
+  }
+
+  /** 播放/暂停切换 */
+  toggleVideoPlayPause(idx: number): void {
+    if (idx < 0 || idx >= this.videoPaused.length) {
+      return
+    }
+    const ctrl = this.getVideoController(idx)
+    try {
+      if (this.videoPaused[idx]) {
+        ctrl.start()
+        this.videoPaused[idx] = false
+      } else {
+        ctrl.pause()
+        this.videoPaused[idx] = true
+      }
+    } catch (e) {
+      hilog.error(0x0001, 'AlbumTab', `toggle play err: ${JSON.stringify(e)}`)
+    }
+  }
+
+  /** 全屏切换：点击全屏图标自动横屏（无需手动旋转手机） */
+  toggleVideoFullscreen(): void {
+    this.videoFullscreen = !this.videoFullscreen
+    try {
+      const ctx = this.getUIContext().getHostContext()
+      if (ctx) {
+        setWindowOrientation(ctx as Context,
+          this.videoFullscreen ? window.Orientation.LANDSCAPE : window.Orientation.PORTRAIT)
+      }
+    } catch (e) {
+      hilog.error(0x0001, 'AlbumTab', `fullscreen rotate err: ${JSON.stringify(e)}`)
+    }
+  }
+
+  /** 视频时间格式化（mm:ss） */
+  fmtVideoTime(sec: number): string {
+    if (!sec || sec < 0) sec = 0
+    const m: number = Math.floor(sec / 60)
+    const s: number = Math.floor(sec % 60)
+    return `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`
   }
 
   /** 退出子视图（返回相册列表），供 MainPage 返回手势调用 */
@@ -692,11 +768,10 @@ export struct AlbumTab {
                     .width('100%').height('100%')
                     .objectFit(ImageFit.Contain)
                   // 播放按钮
-                  Circle()
-                    .width(64).height(64)
-                    .fill('rgba(0,0,0,0.45)')
-                  Text('▶')
-                    .fontSize(28).fontColor('#FFFFFF')
+                  SymbolGlyph($r('sys.symbol.play_circle_fill'))
+                    .fontSize(64)
+                    .fontColor([Color.White])
+                    .opacity(0.92)
                 }
                 .width('100%').height('100%')
                 .onClick(() => { this.playVideo(idx) })
@@ -708,7 +783,7 @@ export struct AlbumTab {
                     controller: this.getVideoController(idx)
                   })
                     .width('100%').height('100%')
-                    .controls(true)
+                    .controls(false)
                     .objectFit(ImageFit.Contain)
                     .onStart(() => {
                       // 真正开始播放才取消转圈
@@ -716,6 +791,16 @@ export struct AlbumTab {
                     })
                     .onError(() => {
                       this.setVideoLoading(idx, false)
+                    })
+                    .onPrepared((e: PreparedInfo) => {
+                      this.videoDuration = e.duration
+                    })
+                    .onUpdate((e: PlaybackInfo) => {
+                      this.videoProgress = e.time
+                    })
+                    .onClick(() => {
+                      // 点击视频切换控制条显隐（控制条为兄弟节点，点击控制条不会触发此处）
+                      this.viewerCtrlVisible = !this.viewerCtrlVisible
                     })
                   // 加载转圈（开始播放后自动消失）
                   if (this.isVideoLoading(idx)) {
@@ -731,10 +816,77 @@ export struct AlbumTab {
                     .justifyContent(FlexAlign.Center)
                     .backgroundColor('rgba(0,0,0,0.5)')
                   }
+                  // 自定义控制条（底部：播放/暂停 + 进度 + 全屏）
+                  if (this.viewerCtrlVisible) {
+                    Column() {
+                      Row() {
+                        // 播放/暂停
+                        if (this.videoPaused[idx]) {
+                          SymbolGlyph($r('sys.symbol.play_circle_fill'))
+                            .fontSize(30)
+                            .fontColor([Color.White])
+                            .padding(6)
+                            .onClick(() => this.toggleVideoPlayPause(idx))
+                        } else {
+                          SymbolGlyph($r('sys.symbol.pause_circle_fill'))
+                            .fontSize(30)
+                            .fontColor([Color.White])
+                            .padding(6)
+                            .onClick(() => this.toggleVideoPlayPause(idx))
+                        }
+                        // 当前时间
+                        Text(this.fmtVideoTime(this.videoProgress))
+                          .fontSize(11).fontColor('#FFFFFF')
+                          .margin({ left: 6 })
+                        // 进度条
+                        Slider({
+                          value: this.videoProgress,
+                          min: 0,
+                          max: this.videoDuration > 0 ? this.videoDuration : 1
+                        })
+                          .layoutWeight(1)
+                          .height(28)
+                          .selectedColor('#FFFFFF')
+                          .trackColor('rgba(255,255,255,0.3)')
+                          .blockColor('#FFFFFF')
+                          .onChange((v: number) => {
+                            this.videoProgress = v
+                            try {
+                              this.getVideoController(idx).setCurrentTime(v)
+                            } catch (_e) {}
+                          })
+                        // 总时长
+                        Text(this.fmtVideoTime(this.videoDuration))
+                          .fontSize(11).fontColor('#FFFFFF')
+                          .margin({ right: 6 })
+                        // 全屏按钮（点按自动横屏）
+                        if (this.videoFullscreen) {
+                          SymbolGlyph($r('sys.symbol.arrow_down_right_and_arrow_up_left'))
+                            .fontSize(22)
+                            .fontColor([Color.White])
+                            .padding(8)
+                            .onClick(() => this.toggleVideoFullscreen())
+                        } else {
+                          SymbolGlyph($r('sys.symbol.arrow_up_left_and_arrow_down_right'))
+                            .fontSize(22)
+                            .fontColor([Color.White])
+                            .padding(8)
+                            .onClick(() => this.toggleVideoFullscreen())
+                        }
+                      }
+                      .width('100%')
+                      .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+                      .backgroundColor('rgba(0,0,0,0.45)')
+                      .borderRadius(12)
+                    }
+                    .width('100%')
+                    .position({ bottom: this.videoFullscreen ? 30 : 10 })
+                    .padding({ left: 10, right: 10 })
+                  }
                 }
                 .width('100%').height('100%')
                 // 底部留白，让视频控制条完整露出（避开系统手势条）
-                .padding({ bottom: 80 })
+                .padding({ bottom: this.videoFullscreen ? 0 : 80 })
               }
             } else {
               Image(this.isOriginalLoaded(idx)
@@ -766,30 +918,33 @@ export struct AlbumTab {
         this.viewerIndex = index
       })
 
-      // 顶部关闭
-      Text('✕')
-        .fontSize(22).fontColor('#FFFFFF')
-        .padding(12)
-        .position({ x: 16, y: 16 })
-        .onClick(() => { this.closeViewer() })
+      // 顶部关闭（全屏时隐藏）
+      if (!this.videoFullscreen) {
+        Text('✕')
+          .fontSize(22).fontColor('#FFFFFF')
+          .padding(12)
+          .position({ x: 16, y: 16 })
+          .onClick(() => { this.closeViewer() })
 
-      // 顶部分享按钮（下载中状态显示文字，右移避免被边缘裁剪）
-      Text(this.sharing ? '下载中…' : '📤')
-        .fontSize(this.sharing ? 13 : 18)
-        .fontColor('#FFFFFF')
-        .padding(10)
-        .borderRadius(16)
-        .backgroundColor(this.sharing ? 'rgba(0,0,0,0.4)' : 'transparent')
-        .position({ x: '72%', y: 16 })
-        .onClick(() => { this.shareCurrentAsset() })
+        // 顶部分享按钮（下载中状态显示文字，右移避免被边缘裁剪）
+        Text(this.sharing ? '下载中…' : '📤')
+          .fontSize(this.sharing ? 13 : 18)
+          .fontColor('#FFFFFF')
+          .padding(10)
+          .borderRadius(16)
+          .backgroundColor(this.sharing ? 'rgba(0,0,0,0.4)' : 'transparent')
+          .position({ x: '72%', y: 16 })
+          .onClick(() => { this.shareCurrentAsset() })
 
-      // 顶部索引指示
-      Text(`${this.viewerIndex + 1} / ${this.viewerList.length}`)
-        .fontSize(13).fontColor('#FFFFFF')
-        .position({ x: '45%', y: 24 })
+        // 顶部索引指示
+        Text(`${this.viewerIndex + 1} / ${this.viewerList.length}`)
+          .fontSize(13).fontColor('#FFFFFF')
+          .position({ x: '45%', y: 24 })
+      }
 
-      // 底部信息（视频播放时隐藏，避免遮挡进度条；图片始终显示）
-      if (!(this.currentViewerAsset() && this.currentViewerAsset()!.type === 'VIDEO'
+      // 底部信息（视频播放时隐藏，避免遮挡进度条；图片始终显示；全屏时隐藏）
+      if (!this.videoFullscreen &&
+        !(this.currentViewerAsset() && this.currentViewerAsset()!.type === 'VIDEO'
         && this.isVideoPlaying(this.viewerIndex))) {
         this.viewerInfoBar()
       }
@@ -925,7 +1080,7 @@ export struct AlbumTab {
       const record: systemShare.SharedRecord = {
         uri: uri,
         title: asset.originalFileName,
-        description: 'iStore 相册分享',
+        description: 'iStore 路由管家相册分享',
         utd: asset.type === 'VIDEO' ? 'general.video' : 'general.image'
       }
       const data: systemShare.SharedData = new systemShare.SharedData(record)
@@ -1306,8 +1461,9 @@ export struct AlbumTab {
                       .borderRadius(8)
                     // 视频角标
                     if (asset.type === 'VIDEO') {
-                      Text('🎬')
-                        .fontSize(14)
+                      SymbolGlyph($r('sys.symbol.play_video_fill'))
+                        .fontSize(13)
+                        .fontColor([Color.White])
                         .padding(4)
                         .borderRadius(6)
                         .backgroundColor('rgba(0,0,0,0.55)')

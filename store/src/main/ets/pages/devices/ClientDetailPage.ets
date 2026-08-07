@@ -42,6 +42,10 @@ struct ClientDetailPage {
   @State isDenied: boolean = false
   @State managing: boolean = false
   @State manageMsg: string = ''
+  @State dhcpBound: boolean = false
+  @State showIpInput: boolean = false
+  @State ipInput: string = ''
+  @State bindingIp: string = ''
   private noteStore: DeviceNoteStore = DeviceNoteStore.getInstance()
   private deviceId: string = ''
 
@@ -64,6 +68,7 @@ struct ClientDetailPage {
     this.deviceId = activeDevice ? activeDevice.id : ''
     this.loadNote()
     this.loadDenyState()
+    this.loadDhcpState()
 
     AppState.getInstance().onThemeChange(() => {
       this.isDark = AppState.getInstance().isDarkMode
@@ -147,6 +152,76 @@ struct ClientDetailPage {
     } catch (e) {
       hilog.error(0x0001, 'ClientDetailPage', `loadDenyState err: ${JSON.stringify(e)}`)
     }
+  }
+
+  /** 加载 DHCP 静态绑定状态 */
+  async loadDhcpState(): Promise<void> {
+    if (!this.mac) return
+    try {
+      const api = new ApiService()
+      const list = await api.listDhcpBindings()
+      const macUpper: string = this.mac.toUpperCase()
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].mac.toUpperCase() === macUpper) {
+          this.dhcpBound = true
+          this.bindingIp = list[i].ip
+          return
+        }
+      }
+      this.dhcpBound = false
+      this.bindingIp = ''
+    } catch (e) {
+      hilog.error(0x0001, 'ClientDetailPage', `loadDhcpState err: ${JSON.stringify(e)}`)
+    }
+  }
+
+  /** 保存 DHCP 静态绑定（固定 IP） */
+  async saveDhcpBinding(): Promise<void> {
+    if (this.managing || !this.mac) return
+    const ip: string = this.ipInput.trim()
+    if (!ip) {
+      this.manageMsg = '请输入固定 IP 地址'
+      return
+    }
+    this.managing = true
+    this.manageMsg = ''
+    try {
+      const api = new ApiService()
+      const name: string = this.note || this.hostname || this.mac
+      const ok: boolean = await api.addDhcpBinding(this.mac, ip, name)
+      if (ok) {
+        this.dhcpBound = true
+        this.bindingIp = ip
+        this.showIpInput = false
+        this.manageMsg = '已固定 IP，设备重启后地址保持不变'
+      } else {
+        this.manageMsg = '固定 IP 失败：接口无权限或参数无效'
+      }
+    } catch (e) {
+      this.manageMsg = '操作异常，请重试'
+    }
+    this.managing = false
+  }
+
+  /** 解除 DHCP 静态绑定 */
+  async removeDhcpBinding(): Promise<void> {
+    if (this.managing || !this.mac) return
+    this.managing = true
+    this.manageMsg = ''
+    try {
+      const api = new ApiService()
+      const ok: boolean = await api.removeDhcpBinding(this.mac)
+      if (ok) {
+        this.dhcpBound = false
+        this.bindingIp = ''
+        this.manageMsg = '已解除固定 IP'
+      } else {
+        this.manageMsg = '解除失败：接口无权限'
+      }
+    } catch (e) {
+      this.manageMsg = '操作异常，请重试'
+    }
+    this.managing = false
   }
 
   /** 切换禁用/恢复联网 */
@@ -577,6 +652,59 @@ struct ClientDetailPage {
       }
       .width('100%')
       .padding({ top: 6, bottom: 2 })
+
+      // 固定 IP（DHCP 静态绑定）
+      Row() {
+        if (this.showIpInput) {
+          TextInput({ placeholder: '输入固定 IP，如 192.168.1.100', text: this.ipInput })
+            .placeholderColor(this.theme.textTertiary)
+            .fontColor(this.theme.textPrimary)
+            .backgroundColor('transparent')
+            .layoutWeight(1)
+            .height(34)
+            .onChange((v: string) => { this.ipInput = v })
+          Text('取消')
+            .fontSize(11)
+            .fontColor(this.theme.textTertiary)
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .margin({ left: 6 })
+            .onClick(() => { this.showIpInput = false })
+          Text('确定')
+            .fontSize(11)
+            .fontColor('#FFFFFF')
+            .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+            .borderRadius(10)
+            .backgroundColor(this.theme.primary)
+            .margin({ left: 6 })
+            .onClick(() => this.saveDhcpBinding())
+        } else if (this.dhcpBound) {
+          Text(`📌 已固定 IP：${this.bindingIp}`)
+            .fontSize(12)
+            .fontColor(this.theme.success)
+            .layoutWeight(1)
+          Text('解除')
+            .fontSize(11)
+            .fontColor(this.theme.danger)
+            .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+            .borderRadius(10)
+            .backgroundColor('rgba(255,82,82,0.1)')
+            .onClick(() => this.removeDhcpBinding())
+        } else {
+          Text('📌 固定 IP')
+            .fontSize(12)
+            .fontColor(this.theme.primary)
+            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            .borderRadius(12)
+            .backgroundColor('rgba(68,138,255,0.1)')
+            .border({ width: 0.5, color: '#448AFF44' })
+            .onClick(() => {
+              this.showIpInput = true
+              this.ipInput = this.dhcpDevice ? this.dhcpDevice.ip : ''
+            })
+        }
+      }
+      .width('100%')
+      .padding({ top: 8, bottom: 2 })
 
       // 操作结果提示
       if (this.manageMsg) {

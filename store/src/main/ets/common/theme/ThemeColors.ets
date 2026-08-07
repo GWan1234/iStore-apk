@@ -39,6 +39,10 @@ export interface ThemePalette {
   // --- 边框颜色 ---
   borderGlass: string       // 毛玻璃边框（默认态）
   borderGlassFocus: string  // 毛玻璃边框（聚焦/悬停态）
+
+  // --- 光感（沉浸式投影） ---
+  cardShadow: string        // 卡片柔和投影颜色（透明色，如 rgba(0,0,0,0.14)）
+  cardShadowRadius: number  // 卡片投影模糊半径（vp）
 }
 
 /**
@@ -69,7 +73,10 @@ export const DARK_THEME: ThemePalette = {
   textAccent: '#00D4FF',
 
   borderGlass: 'rgba(255, 255, 255, 0.1)',
-  borderGlassFocus: 'rgba(255, 255, 255, 0.25)'
+  borderGlassFocus: 'rgba(255, 255, 255, 0.25)',
+
+  cardShadow: 'rgba(0, 0, 0, 0.35)',
+  cardShadowRadius: 18
 }
 
 /**
@@ -100,6 +107,9 @@ export const LIGHT_THEME: ThemePalette = {
   textAccent: '#0077CC',
 
   borderGlass: 'rgba(0, 0, 0, 0.08)',
-  borderGlassFocus: 'rgba(0, 0, 0, 0.2)'
+  borderGlassFocus: 'rgba(0, 0, 0, 0.2)',
+
+  cardShadow: 'rgba(0, 0, 0, 0.12)',
+  cardShadowRadius: 14
 }
 

@@ -20,6 +20,10 @@
     "pages/apps/EthPortPage",
     "pages/apps/ConntrackRankPage",
     "pages/apps/NotifySettingsPage",
-    "pages/apps/SchedulePage"
+    "pages/apps/SchedulePage",
+    "pages/apps/TrafficReportPage",
+    "pages/apps/TopologyPage",
+    "pages/apps/AiAssistantPage",
+    "pages/apps/SshTerminalPage"
   ]
 }

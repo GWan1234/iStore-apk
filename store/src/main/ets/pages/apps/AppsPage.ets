@@ -43,6 +43,8 @@ struct AppsPage {
         { emoji: '🔗', name: '连接排行',  desc: '发现 NAT 连接数最多的设备', route: 'pages/apps/ConntrackRankPage' },
         { emoji: '',  name: '网口流量',  desc: '各接口实时速率与累计统计', route: 'pages/apps/PortTrafficPage', iconResource: $r('app.media.flow_monitoring') },
         { emoji: '🖧', name: '物理网口',  desc: '查看物理端口连接状态与速率', route: 'pages/apps/EthPortPage' },
+        { emoji: '📈', name: '流量统计',  desc: '近 7/30 天每日流量趋势', route: 'pages/apps/TrafficReportPage' },
+        { emoji: '🗺', name: '网络拓扑',  desc: '可视化设备连接关系图', route: 'pages/apps/TopologyPage' },
       ]
     },
     {
@@ -53,6 +55,8 @@ struct AppsPage {
         { emoji: '🚀', name: '启动项',   desc: '管理开机自启服务', route: 'pages/process/StartupPage' },
         { emoji: '🔔', name: '智能通知',  desc: '断网告警与新设备接入提醒', route: 'pages/apps/NotifySettingsPage' },
         { emoji: '⏰', name: '定时任务',  desc: '定时重启与定时开关 WiFi', route: 'pages/apps/SchedulePage' },
+        { emoji: '🤖', name: 'AI 网络助手', desc: '自然语言查询网络状态', route: 'pages/apps/AiAssistantPage' },
+        { emoji: '⌨️', name: 'SSH 终端',   desc: '命令行管理路由器', route: 'pages/apps/SshTerminalPage' },
       ]
     },
     {
@@ -343,7 +347,7 @@ struct AppsPage {
 
             // 底部版本信息
             Column() {
-              Text('iStore 路由器管理')
+              Text('iStore 路由管家')
                 .fontSize(12).fontColor(this.theme.textTertiary)
               Text(`${this.versionText} · 开源 · HarmonyOS`)
                 .fontSize(10).fontColor(this.theme.textTertiary).opacity(0.7)

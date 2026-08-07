@@ -27,6 +27,15 @@ struct WifiPage {
   // 踢客户端确认
   @State kickTarget: string = ''
   @State kickDevice: string = ''
+  // 访客网络状态
+  @State guestEnabled: boolean = false
+  @State guestSsid: string = ''
+  @State guestShowForm: boolean = false
+  @State guestInputSsid: string = ''
+  @State guestInputKey: string = ''
+  @State guestBusy: boolean = false
+  @State guestMsg: string = ''
+  @State guestErr: string = ''
 
   aboutToAppear(): void {
     this.isDark = AppState.getInstance().isDarkMode
@@ -36,6 +45,80 @@ struct WifiPage {
       this.theme = AppState.getInstance().getTheme()
     })
     this.loadData()
+    this.loadGuestStatus()
+  }
+
+  /** 加载访客网络状态 */
+  async loadGuestStatus(): Promise<void> {
+    try {
+      const api: ApiService = new ApiService()
+      const info = await api.getGuestWifiStatus()
+      if (info) {
+        this.guestEnabled = info.enabled
+        this.guestSsid = info.ssid
+      } else {
+        this.guestEnabled = false
+        this.guestSsid = ''
+      }
+    } catch (e) {
+      this.guestErr = '加载访客网络状态失败'
+    }
+  }
+
+  /** 开启访客网络 */
+  async doEnableGuest(): Promise<void> {
+    if (this.guestBusy) return
+    const ssid: string = this.guestInputSsid.trim()
+    const key: string = this.guestInputKey.trim()
+    if (!ssid) {
+      this.guestErr = '请输入访客网络名称（SSID）'
+      return
+    }
+    if (key.length < 8) {
+      this.guestErr = '密码至少 8 位'
+      return
+    }
+    this.guestBusy = true
+    this.guestMsg = ''
+    this.guestErr = ''
+    try {
+      const api: ApiService = new ApiService()
+      const device: string = this.aps.length > 0 ? this.aps[0].device : 'radio0'
+      const ok: boolean = await api.enableGuestWifi(ssid, key, device)
+      if (ok) {
+        this.guestEnabled = true
+        this.guestSsid = ssid
+        this.guestShowForm = false
+        this.guestMsg = '访客网络已开启，配置生效中（无线会短暂重启）'
+      } else {
+        this.guestErr = '开启失败：接口无权限或参数无效'
+      }
+    } catch (e) {
+      this.guestErr = '操作异常，请重试'
+    }
+    this.guestBusy = false
+  }
+
+  /** 关闭访客网络 */
+  async doDisableGuest(): Promise<void> {
+    if (this.guestBusy) return
+    this.guestBusy = true
+    this.guestMsg = ''
+    this.guestErr = ''
+    try {
+      const api: ApiService = new ApiService()
+      const ok: boolean = await api.disableGuestWifi()
+      if (ok) {
+        this.guestEnabled = false
+        this.guestSsid = ''
+        this.guestMsg = '访客网络已关闭'
+      } else {
+        this.guestErr = '关闭失败：接口无权限'
+      }
+    } catch (e) {
+      this.guestErr = '操作异常，请重试'
+    }
+    this.guestBusy = false
   }
 
   async loadData(): Promise<void> {
@@ -316,6 +399,126 @@ struct WifiPage {
     .layoutWeight(1)
   }
 
+  /** 访客网络卡片 */
+  @Builder
+  guestCard(): void {
+    Column() {
+      Row() {
+        Text('🛜 访客网络')
+          .fontSize(14)
+          .fontColor(this.theme.textPrimary)
+          .fontWeight(FontWeight.Medium)
+        Blank()
+        Text(this.guestEnabled ? '已开启' : '未开启')
+          .fontSize(11)
+          .fontColor(this.guestEnabled ? this.theme.success : this.theme.textTertiary)
+      }
+      .width('100%')
+
+      Text('独立访客 SSID，访客可上网但无法访问内网设备（已隔离）')
+        .fontSize(11)
+        .fontColor(this.theme.textTertiary)
+        .lineHeight(15)
+        .width('100%')
+        .margin({ top: 4, bottom: 8 })
+
+      if (this.guestEnabled) {
+        Row() {
+          Text(`📶 ${this.guestSsid || '已开启'}`)
+            .fontSize(12)
+            .fontColor(this.theme.textPrimary)
+            .layoutWeight(1)
+          Text('关闭')
+            .fontSize(12)
+            .fontColor(this.theme.danger)
+            .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+            .borderRadius(12)
+            .backgroundColor('rgba(255,82,82,0.1)')
+            .onClick(() => this.doDisableGuest())
+        }
+        .width('100%')
+      } else if (this.guestShowForm) {
+        Column() {
+          Row() {
+            TextInput({ placeholder: '访客网络名称（如 Home-Guest）', text: this.guestInputSsid })
+              .placeholderColor(this.theme.textTertiary)
+              .fontColor(this.theme.textPrimary)
+              .backgroundColor('transparent')
+              .layoutWeight(1)
+              .height(44)
+          }
+          .width('100%').height(44).borderRadius(20)
+          .backgroundColor(this.theme.bgCard).backdropBlur(10)
+          .border({ width: 0.5, color: this.theme.borderGlass })
+          .padding({ left: 12, right: 12 })
+          .margin({ bottom: 10 })
+
+          Row() {
+            TextInput({ placeholder: '密码（至少 8 位）', text: this.guestInputKey })
+              .placeholderColor(this.theme.textTertiary)
+              .fontColor(this.theme.textPrimary)
+              .backgroundColor('transparent')
+              .layoutWeight(1)
+              .height(44)
+          }
+          .width('100%').height(44).borderRadius(20)
+          .backgroundColor(this.theme.bgCard).backdropBlur(10)
+          .border({ width: 0.5, color: this.theme.borderGlass })
+          .padding({ left: 12, right: 12 })
+          .margin({ bottom: 10 })
+
+          Row() {
+            Text('取消')
+              .fontSize(12).fontColor(this.theme.textTertiary)
+              .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+              .onClick(() => { this.guestShowForm = false; this.guestErr = '' })
+            Blank()
+            Text(this.guestBusy ? '开启中…' : '开启访客网络')
+              .fontSize(12).fontColor('#FFFFFF')
+              .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+              .borderRadius(14)
+              .backgroundColor(this.theme.primary)
+              .opacity(this.guestBusy ? 0.5 : 1)
+              .onClick(() => this.doEnableGuest())
+          }
+          .width('100%')
+        }
+        .width('100%')
+      } else {
+        Row() {
+          Text('+ 开启访客网络')
+            .fontSize(12)
+            .fontColor(this.theme.primary)
+            .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+            .borderRadius(12)
+            .backgroundColor('rgba(68,138,255,0.1)')
+            .onClick(() => {
+              this.guestShowForm = true
+              this.guestErr = ''
+              this.guestInputSsid = this.aps.length > 0 ? `${this.aps[0].ssid}-Guest` : 'Home-Guest'
+            })
+        }
+        .width('100%')
+      }
+
+      if (this.guestMsg) {
+        Text('✓ ' + this.guestMsg)
+          .fontSize(11).fontColor(this.theme.success).width('100%').margin({ top: 8 })
+      }
+      if (this.guestErr) {
+        Text('⚠ ' + this.guestErr)
+          .fontSize(11).fontColor(this.theme.danger).width('100%').margin({ top: 8 })
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(14)
+    .margin({ top: 10, left: 16, right: 16 })
+    .backgroundColor(this.theme.bgCard)
+    .backdropBlur(20)
+    .border({ width: 0.5, color: this.theme.borderGlass })
+  }
+
   build() {
     Stack() {
       Column()
@@ -380,6 +583,9 @@ struct WifiPage {
                   this.apCard(ap, idx)
                 })
               }
+
+              // 访客网络
+              this.guestCard()
             }
             .width('100%')
             .padding({ bottom: 24 })

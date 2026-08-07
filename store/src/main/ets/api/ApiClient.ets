@@ -15,7 +15,7 @@
  *    仅用于兼容已保存的旧设备，新设备不再使用。
  */
 import { http } from '@kit.NetworkKit'
-import { ConnectionConfig } from '../models/Models'
+import { ConnectionConfig, DhcpBindingInfo, GuestWifiInfo } from '../models/Models'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { connect, Client, DisconnectReason as SshDisconnectReason } from '@ohos-rs/ssh'
 import { ApiUtils } from './ApiUtils'
@@ -182,6 +182,13 @@ class UciAddParam {
 class UciDeleteParam {
   config: string = ''
   section: string = ''
+}
+
+/** uci rename <config>.<section> <value>：给匿名 section 命名 */
+class UciRenameParam {
+  config: string = ''
+  section: string = ''
+  value: string = ''
 }
 
 class UciApplyParam {
@@ -888,6 +895,57 @@ export class ApiClient {
     return list as Object
   }
 
+  /** 经 Docker API 构建镜像列表 */
+  private async buildDockerImagesApi(): Promise<Object> {
+    const list: Object[] = []
+    const data: Object | null = await this.dockerApiGet('/images/json')
+    if (data && Array.isArray(data)) {
+      const arr = data as Object[]
+      for (let i = 0; i < arr.length; i++) {
+        const im = arr[i] as Record<string, Object>
+        if (!im || typeof im !== 'object') {
+          continue
+        }
+        const id: string = ApiUtils.strOf(im, 'Id')
+        let repoTag: string = '<none>:<none>'
+        const tags = im['RepoTags']
+        if (Array.isArray(tags) && tags.length > 0) {
+          repoTag = String(tags[0])
+        }
+        const item: Record<string, Object> = {}
+        item['id'] = id.length > 12 ? id.substring(7, 19) : id
+        item['repoTag'] = repoTag
+        item['size'] = ApiUtils.numOf(im, 'Size', 0)
+        item['created'] = ApiUtils.numOf(im, 'Created', 0)
+        list.push(item as Object)
+      }
+    }
+    return list as Object
+  }
+
+  /** 经 Docker API 构建网络列表 */
+  private async buildDockerNetworksApi(): Promise<Object> {
+    const list: Object[] = []
+    const data: Object | null = await this.dockerApiGet('/networks')
+    if (data && Array.isArray(data)) {
+      const arr = data as Object[]
+      for (let i = 0; i < arr.length; i++) {
+        const nw = arr[i] as Record<string, Object>
+        if (!nw || typeof nw !== 'object') {
+          continue
+        }
+        const id: string = ApiUtils.strOf(nw, 'Id')
+        const item: Record<string, Object> = {}
+        item['id'] = id.length > 12 ? id.substring(0, 12) : id
+        item['name'] = ApiUtils.strOf(nw, 'Name')
+        item['driver'] = ApiUtils.strOf(nw, 'Driver')
+        item['scope'] = ApiUtils.strOf(nw, 'Scope')
+        list.push(item as Object)
+      }
+    }
+    return list as Object
+  }
+
   /** 经 Docker API 构建容器实时统计（CPU%/内存，官方采样差值公式） */
   private async buildDockerStatsApi(): Promise<Object> {
     const list: Object[] = []
@@ -1347,6 +1405,18 @@ export class ApiClient {
         resp.data = this.dockerApiBase ? await this.buildDockerStatsApi() : [] as Object
         return resp
       }
+      case 'docker_images': {
+        resp.code = 0
+        // 镜像列表仅 Docker API 可用
+        resp.data = this.dockerApiBase ? await this.buildDockerImagesApi() : [] as Object
+        return resp
+      }
+      case 'docker_networks': {
+        resp.code = 0
+        // 网络列表仅 Docker API 可用
+        resp.data = this.dockerApiBase ? await this.buildDockerNetworksApi() : [] as Object
+        return resp
+      }
       case 'docker_container': {
         const cname: string = kv.get('container') ? kv.get('container')! : ''
         const caction: string = kv.get('container_action') ? kv.get('container_action')! : ''
@@ -1606,6 +1676,33 @@ export class ApiClient {
       }
     }
     return stats
+  }
+
+  /** 获取 WAN 接口累计收发字节数（流量统计用，返回 [rx, tx]） */
+  async getWanTrafficBytes(): Promise<number[]> {
+    try {
+      const stats: Map<string, number[]> = await this.fetchDevStats()
+      if (stats.size === 0) return [0, 0]
+      const names: string[] = Array.from(stats.keys())
+      // 1. 优先 wan 接口（wan / wan6 等）
+      for (let i = 0; i < names.length; i++) {
+        const n: string = names[i]
+        if (n.startsWith('wan')) {
+          const v: number[] | undefined = stats.get(n)
+          return v ? [v[0], v[1]] : [0, 0]
+        }
+      }
+      // 2. 回退：第一个非 lo / 非 br 的物理接口
+      for (let i = 0; i < names.length; i++) {
+        const n: string = names[i]
+        if (n === 'lo' || n.startsWith('br')) continue
+        const v: number[] | undefined = stats.get(n)
+        return v ? [v[0], v[1]] : [0, 0]
+      }
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `getWanTrafficBytes err: ${JSON.stringify(e)}`)
+    }
+    return [0, 0]
   }
 
   /**
@@ -2659,6 +2756,24 @@ export class ApiClient {
     return []
   }
 
+  /** 获取 Docker 镜像列表（仅 Docker API 可用时返回数据） */
+  async getDockerImages(): Promise<Object[]> {
+    const result = await this.request('docker_images')
+    if (result && result.data && Array.isArray(result.data)) {
+      return [result.data]
+    }
+    return []
+  }
+
+  /** 获取 Docker 网络列表（仅 Docker API 可用时返回数据） */
+  async getDockerNetworks(): Promise<Object[]> {
+    const result = await this.request('docker_networks')
+    if (result && result.data && Array.isArray(result.data)) {
+      return [result.data]
+    }
+    return []
+  }
+
   async dockerContainerAction(container: string, action: string): Promise<Object> {
     const result = await this.request(`docker_container&container=${container}&container_action=${action}`)
     if (result && result.data) {
@@ -3096,5 +3211,297 @@ export class ApiClient {
     reloadP.rollback = false
     const reloadOk: Object | null = await this.ubusCall('network.reload', 'reload', reloadP)
     return reloadOk !== null
+  }
+
+  // ========== DHCP 静态绑定 ==========
+
+  /** 提交 DHCP 配置（commit 后 dnsmasq 由 procd 自动重载） */
+  private async commitDhcp(): Promise<boolean> {
+    const commitOk: Object | null = await this.ubusCall('uci', 'commit', this.buildUciConfigParam('dhcp'))
+    return commitOk !== null
+  }
+
+  /** 获取 DHCP 静态绑定列表（uci dhcp 下 type=host 的 section） */
+  async listDhcpBindings(): Promise<DhcpBindingInfo[]> {
+    const result: DhcpBindingInfo[] = []
+    try {
+      const p: UciGetParam = new UciGetParam()
+      p.config = 'dhcp'
+      const data: Object | null = await this.ubusCall('uci', 'get', p)
+      if (!data) return result
+      const rec = data as Record<string, Object>
+      const keys: string[] = Object.keys(rec)
+      for (let i = 0; i < keys.length; i++) {
+        const k: string = keys[i]
+        if (!k.endsWith('.type')) continue
+        if (ApiUtils.strOf(rec, k) !== 'host') continue
+        const sec: string = k.substring(0, k.length - 5)
+        const info: DhcpBindingInfo = {
+          section: sec,
+          mac: ApiUtils.strOf(rec, `${sec}.mac`),
+          ip: ApiUtils.strOf(rec, `${sec}.ip`),
+          name: ApiUtils.strOf(rec, `${sec}.name`)
+        }
+        result.push(info)
+      }
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `listDhcpBindings err: ${JSON.stringify(e)}`)
+    }
+    return result
+  }
+
+  /** 添加 DHCP 静态绑定（mac → 固定 ip） */
+  async addDhcpBinding(mac: string, ip: string, name: string): Promise<boolean> {
+    try {
+      // 1. 添加 host section
+      const addP: UciAddParam = new UciAddParam()
+      addP.config = 'dhcp'
+      addP.type = 'host'
+      const added: Object | null = await this.ubusCall('uci', 'add', addP)
+      if (added === null) return false
+      const rec = added as Record<string, Object>
+      const section: string = ApiUtils.strOf(rec, 'id') || ApiUtils.strOf(rec, 'section')
+      if (!section) return false
+      // 2. 设置属性
+      const values: Record<string, Object> = {
+        'mac': mac.toUpperCase(),
+        'ip': ip,
+        'name': name
+      }
+      const setP: UciSetParam = new UciSetParam()
+      setP.config = 'dhcp'
+      setP.section = section
+      setP.values = values as Object
+      const setOk: Object | null = await this.ubusCall('uci', 'set', setP)
+      if (setOk === null) return false
+      // 3. commit（dnsmasq 自动重载）
+      return await this.commitDhcp()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `addDhcpBinding err: ${JSON.stringify(e)}`)
+      return false
+    }
+  }
+
+  /** 移除 DHCP 静态绑定（按 mac 匹配） */
+  async removeDhcpBinding(mac: string): Promise<boolean> {
+    try {
+      const list: DhcpBindingInfo[] = await this.listDhcpBindings()
+      let found: boolean = false
+      const macUpper: string = mac.toUpperCase()
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].mac.toUpperCase() !== macUpper) continue
+        const delP: UciDeleteParam = new UciDeleteParam()
+        delP.config = 'dhcp'
+        delP.section = list[i].section
+        const delOk: Object | null = await this.ubusCall('uci', 'delete', delP)
+        if (delOk === null) return false
+        found = true
+      }
+      if (!found) return true  // 无绑定视为已移除
+      return await this.commitDhcp()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `removeDhcpBinding err: ${JSON.stringify(e)}`)
+      return false
+    }
+  }
+
+  /** 查询指定 MAC 是否已有静态绑定 */
+  async isDhcpBound(mac: string): Promise<boolean> {
+    try {
+      const list: DhcpBindingInfo[] = await this.listDhcpBindings()
+      const macUpper: string = mac.toUpperCase()
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].mac.toUpperCase() === macUpper) return true
+      }
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `isDhcpBound err: ${JSON.stringify(e)}`)
+    }
+    return false
+  }
+
+  // ========== WiFi 访客网络 ==========
+
+  /** 通用：add 匿名 section 并返回 section id */
+  private async uciAddSection(config: string, type: string): Promise<string> {
+    const addP: UciAddParam = new UciAddParam()
+    addP.config = config
+    addP.type = type
+    const added: Object | null = await this.ubusCall('uci', 'add', addP)
+    if (added === null) return ''
+    const rec = added as Record<string, Object>
+    return ApiUtils.strOf(rec, 'id') || ApiUtils.strOf(rec, 'section') || ''
+  }
+
+  /** 通用：设置 section 属性 */
+  private async uciSetSection(config: string, section: string, values: Record<string, Object>): Promise<boolean> {
+    const setP: UciSetParam = new UciSetParam()
+    setP.config = config
+    setP.section = section
+    setP.values = values as Object
+    const data: Object | null = await this.ubusCall('uci', 'set', setP)
+    return data !== null
+  }
+
+  /** 获取访客网络状态（wireless 下 network=guest 的 wifi-iface） */
+  async getGuestWifiStatus(): Promise<GuestWifiInfo | null> {
+    try {
+      const p: UciGetParam = new UciGetParam()
+      p.config = 'wireless'
+      const data: Object | null = await this.ubusCall('uci', 'get', p)
+      if (!data) return null
+      const rec = data as Record<string, Object>
+      const keys: string[] = Object.keys(rec)
+      for (let i = 0; i < keys.length; i++) {
+        const k: string = keys[i]
+        if (!k.endsWith('.network')) continue
+        if (ApiUtils.strOf(rec, k) !== 'guest') continue
+        const sec: string = k.substring(0, k.length - 8)
+        const info: GuestWifiInfo = {
+          enabled: ApiUtils.strOf(rec, `${sec}.disabled`) !== '1',
+          ssid: ApiUtils.strOf(rec, `${sec}.ssid`),
+          password: ApiUtils.strOf(rec, `${sec}.key`),
+          network: 'guest',
+          device: ApiUtils.strOf(rec, `${sec}.device`),
+          section: sec
+        }
+        return info
+      }
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `getGuestWifiStatus err: ${JSON.stringify(e)}`)
+    }
+    return null
+  }
+
+  /** 开启访客网络（独立网段 + 无线隔离 + 防火墙仅可上外网） */
+  async enableGuestWifi(ssid: string, password: string, device: string): Promise<boolean> {
+    try {
+      // 1. network.guest 接口（命名 section）
+      let netId: string = ''
+      const netP: UciGetParam = new UciGetParam()
+      netP.config = 'network'
+      netP.section = 'guest'
+      const netData: Object | null = await this.ubusCall('uci', 'get', netP)
+      if (netData === null) {
+        netId = await this.uciAddSection('network', 'interface')
+        if (!netId) return false
+        const renameP: UciRenameParam = new UciRenameParam()
+        renameP.config = 'network'
+        renameP.section = netId
+        renameP.value = 'guest'
+        const renameOk: Object | null = await this.ubusCall('uci', 'rename', renameP)
+        if (renameOk === null) return false
+      }
+      const netVals: Record<string, Object> = {
+        'proto': 'static', 'ipaddr': '192.168.2.1', 'netmask': '255.255.255.0'
+      }
+      if (!await this.uciSetSection('network', 'guest', netVals)) return false
+
+      // 2. dhcp.guest（命名 section）
+      const dhcpP: UciGetParam = new UciGetParam()
+      dhcpP.config = 'dhcp'
+      dhcpP.section = 'guest'
+      const dhcpData: Object | null = await this.ubusCall('uci', 'get', dhcpP)
+      if (dhcpData === null) {
+        const dId: string = await this.uciAddSection('dhcp', 'dhcp')
+        if (!dId) return false
+        const rP: UciRenameParam = new UciRenameParam()
+        rP.config = 'dhcp'
+        rP.section = dId
+        rP.value = 'guest'
+        const rOk: Object | null = await this.ubusCall('uci', 'rename', rP)
+        if (rOk === null) return false
+      }
+      const dhcpVals: Record<string, Object> = {
+        'interface': 'guest', 'start': '100', 'limit': '150', 'leasetime': '12h', 'dhcpv4': 'server'
+      }
+      if (!await this.uciSetSection('dhcp', 'guest', dhcpVals)) return false
+
+      // 3. wifi-iface（匿名 section，network=guest 识别）
+      const wifiId: string = await this.uciAddSection('wireless', 'wifi-iface')
+      if (!wifiId) return false
+      const wifiVals: Record<string, Object> = {
+        'device': device, 'mode': 'ap', 'ssid': ssid, 'encryption': 'psk2',
+        'key': password, 'network': 'guest', 'isolate': '1', 'disabled': '0'
+      }
+      if (!await this.uciSetSection('wireless', wifiId, wifiVals)) return false
+
+      // 4. firewall zone（guest 隔离：可出网、禁止互访内网）
+      let zoneId: string = ''
+      const fwP: UciGetParam = new UciGetParam()
+      fwP.config = 'firewall'
+      const fwData: Object | null = await this.ubusCall('uci', 'get', fwP)
+      const fwRec = fwData as Record<string, Object>
+      const fwKeys: string[] = fwData ? Object.keys(fwRec) : []
+      for (let i = 0; i < fwKeys.length; i++) {
+        if (!fwKeys[i].endsWith('.name')) continue
+        const secName: string = fwKeys[i].substring(0, fwKeys[i].length - 5)
+        if (ApiUtils.strOf(fwRec, fwKeys[i]) === 'guest') {
+          zoneId = secName
+          break
+        }
+      }
+      if (!zoneId) {
+        zoneId = await this.uciAddSection('firewall', 'zone')
+        if (!zoneId) return false
+      }
+      const zoneVals: Record<string, Object> = {
+        'name': 'guest', 'network': 'guest', 'input': 'REJECT', 'output': 'ACCEPT',
+        'forward': 'REJECT', 'masq': '1'
+      }
+      if (!await this.uciSetSection('firewall', zoneId, zoneVals)) return false
+
+      // 5. forwarding guest→wan
+      const fwdId: string = await this.uciAddSection('firewall', 'forwarding')
+      if (!fwdId) return false
+      const fwdVals: Record<string, Object> = { 'src': 'guest', 'dest': 'wan' }
+      if (!await this.uciSetSection('firewall', fwdId, fwdVals)) return false
+
+      // 6. 提交全部配置
+      if (!await this.ubusCall('uci', 'commit', this.buildUciConfigParam('network'))) return false
+      if (!await this.ubusCall('uci', 'commit', this.buildUciConfigParam('dhcp'))) return false
+      if (!await this.ubusCall('uci', 'commit', this.buildUciConfigParam('wireless'))) return false
+      if (!await this.commitFirewall()) return false
+      // 无线重载
+      const wp: WirelessReloadParam = new WirelessReloadParam()
+      wp.rollback = false
+      const wOk: Object | null = await this.ubusCall('network.wireless', 'reload', wp)
+      return wOk !== null
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `enableGuestWifi err: ${JSON.stringify(e)}`)
+      return false
+    }
+  }
+
+  /** 关闭访客网络（删除 guest wifi-iface，保留网络接口与防火墙区） */
+  async disableGuestWifi(): Promise<boolean> {
+    try {
+      const p: UciGetParam = new UciGetParam()
+      p.config = 'wireless'
+      const data: Object | null = await this.ubusCall('uci', 'get', p)
+      if (data) {
+        const rec = data as Record<string, Object>
+        const keys: string[] = Object.keys(rec)
+        for (let i = 0; i < keys.length; i++) {
+          const k: string = keys[i]
+          if (!k.endsWith('.network')) continue
+          if (ApiUtils.strOf(rec, k) !== 'guest') continue
+          const sec: string = k.substring(0, k.length - 8)
+          const delP: UciDeleteParam = new UciDeleteParam()
+          delP.config = 'wireless'
+          delP.section = sec
+          const delOk: Object | null = await this.ubusCall('uci', 'delete', delP)
+          if (delOk === null) return false
+          break
+        }
+      }
+      if (!await this.ubusCall('uci', 'commit', this.buildUciConfigParam('wireless'))) return false
+      const wp: WirelessReloadParam = new WirelessReloadParam()
+      wp.rollback = false
+      const wOk: Object | null = await this.ubusCall('network.wireless', 'reload', wp)
+      return wOk !== null
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `disableGuestWifi err: ${JSON.stringify(e)}`)
+      return false
+    }
   }
 }

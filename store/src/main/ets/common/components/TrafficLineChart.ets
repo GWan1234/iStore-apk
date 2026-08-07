@@ -94,7 +94,7 @@ export struct TrafficLineChart {
             Path()
               .commands(this.smoothPath(this.rxData, this.chartWidth, this.chartHeight, 12))
               .stroke('#00D4FF')
-              .strokeWidth(1.5)
+              .strokeWidth(0.7)
               .antiAlias(true)
           }
           .width(this.chartWidth)
@@ -107,7 +107,7 @@ export struct TrafficLineChart {
             Path()
               .commands(this.smoothPath(this.txData, this.chartWidth, this.chartHeight, 12))
               .stroke('#FF9800')
-              .strokeWidth(1.5)
+              .strokeWidth(0.7)
               .antiAlias(true)
           }
           .width(this.chartWidth)

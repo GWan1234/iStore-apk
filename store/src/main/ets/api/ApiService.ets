@@ -23,6 +23,8 @@ import {
   DockerOverview,
   DockerContainer,
   DockerStats,
+  DockerImage,
+  DockerNetwork,
   OafStatus,
   AppFilterBase,
   AppClass,
@@ -34,7 +36,7 @@ import {
   DeviceVisitRecord,
   TimeSlot
 } from '../models/Models'
-import { ConnectionConfig } from '../models/Models'
+import { ConnectionConfig, DhcpBindingInfo, GuestWifiInfo } from '../models/Models'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { ObjectUtil } from '@pura/harmony-utils'
 import { FormatUtils } from '../common/utils/FormatUtils'
@@ -1145,6 +1147,86 @@ export class ApiService {
     return false
   }
 
+  /** 获取 DHCP 静态绑定列表 */
+  async listDhcpBindings(): Promise<DhcpBindingInfo[]> {
+    try {
+      return await this.client.listDhcpBindings()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'listDhcpBindings err')
+    }
+    return []
+  }
+
+  /** 添加 DHCP 静态绑定 */
+  async addDhcpBinding(mac: string, ip: string, name: string): Promise<boolean> {
+    try {
+      return await this.client.addDhcpBinding(mac, ip, name)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'addDhcpBinding err')
+    }
+    return false
+  }
+
+  /** 移除 DHCP 静态绑定 */
+  async removeDhcpBinding(mac: string): Promise<boolean> {
+    try {
+      return await this.client.removeDhcpBinding(mac)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'removeDhcpBinding err')
+    }
+    return false
+  }
+
+  /** 查询指定 MAC 是否已有静态绑定 */
+  async isDhcpBound(mac: string): Promise<boolean> {
+    try {
+      return await this.client.isDhcpBound(mac)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'isDhcpBound err')
+    }
+    return false
+  }
+
+  /** 获取访客网络状态 */
+  async getGuestWifiStatus(): Promise<GuestWifiInfo | null> {
+    try {
+      return await this.client.getGuestWifiStatus()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'getGuestWifiStatus err')
+    }
+    return null
+  }
+
+  /** 开启访客网络 */
+  async enableGuestWifi(ssid: string, password: string, device: string): Promise<boolean> {
+    try {
+      return await this.client.enableGuestWifi(ssid, password, device)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'enableGuestWifi err')
+    }
+    return false
+  }
+
+  /** 关闭访客网络 */
+  async disableGuestWifi(): Promise<boolean> {
+    try {
+      return await this.client.disableGuestWifi()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'disableGuestWifi err')
+    }
+    return false
+  }
+
+  /** 获取 WAN 接口累计收发字节数（流量统计用，返回 [rx, tx]） */
+  async fetchWanTrafficBytes(): Promise<number[]> {
+    try {
+      return await this.client.getWanTrafficBytes()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'fetchWanTrafficBytes err')
+    }
+    return [0, 0]
+  }
+
   /**
    * 读取 WiFi 配置项（uci get wireless.<device>.<option>）
    */
@@ -1412,6 +1494,50 @@ export class ApiService {
       hilog.error(DOMAIN, TAG, `dockerContainerAction err: ${String(e)}`)
     }
     return false
+  }
+
+  /** 获取 Docker 镜像列表（仅 Docker API 可用时返回数据） */
+  async fetchDockerImages(): Promise<DockerImage[]> {
+    try {
+      const result = await this.client.getDockerImages()
+      const arr = result.length > 0 ? result[0] as Object[] : []
+      const list: DockerImage[] = []
+      for (let i = 0; i < arr.length; i++) {
+        const c = arr[i]
+        list.push({
+          id: ObjectHelper.getString(c, 'id', ''),
+          repoTag: ObjectHelper.getString(c, 'repoTag', '<none>:<none>'),
+          size: ObjectHelper.getNumber(c, 'size', 0),
+          created: ObjectHelper.getNumber(c, 'created', 0)
+        })
+      }
+      return list
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `fetchDockerImages err: ${String(e)}`)
+    }
+    return []
+  }
+
+  /** 获取 Docker 网络列表（仅 Docker API 可用时返回数据） */
+  async fetchDockerNetworks(): Promise<DockerNetwork[]> {
+    try {
+      const result = await this.client.getDockerNetworks()
+      const arr = result.length > 0 ? result[0] as Object[] : []
+      const list: DockerNetwork[] = []
+      for (let i = 0; i < arr.length; i++) {
+        const c = arr[i]
+        list.push({
+          id: ObjectHelper.getString(c, 'id', ''),
+          name: ObjectHelper.getString(c, 'name', ''),
+          driver: ObjectHelper.getString(c, 'driver', ''),
+          scope: ObjectHelper.getString(c, 'scope', '')
+        })
+      }
+      return list
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `fetchDockerNetworks err: ${String(e)}`)
+    }
+    return []
   }
 
   async fetchDockerStats(): Promise<DockerStats[]> {

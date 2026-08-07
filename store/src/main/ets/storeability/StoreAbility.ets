@@ -39,6 +39,16 @@ export default class StoreAbility extends UIAbility {
       hilog.error(DOMAIN, 'StoreAbility', 'Failed to set full-screen layout: %{public}s', JSON.stringify(err))
     })
 
+    // 沉浸式：状态栏/导航栏透明，图标默认白色（App 默认深色主题）
+    mainWindow.setWindowSystemBarProperties({
+      statusBarColor: '#00000000',
+      navigationBarColor: '#00000000',
+      statusBarContentColor: '#FFFFFF',
+      navigationBarContentColor: '#FFFFFF'
+    }).catch((err: BusinessError) => {
+      hilog.error(DOMAIN, 'StoreAbility', 'Failed to set system bar transparent: %{public}s', JSON.stringify(err))
+    })
+
     windowStage.loadContent('pages/entry/LoginPage', (err) => {
       if (err.code) {
         hilog.error(DOMAIN, 'StoreAbility', 'Failed to load content: %{public}s', JSON.stringify(err))

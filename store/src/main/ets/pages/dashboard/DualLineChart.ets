@@ -50,7 +50,7 @@ export struct DualLineChart {
             Path()
               .commands(this.smoothPath(this.cpuData, this.chartWidth, this.chartHeight, 12))
               .stroke('#FF9800')
-              .strokeWidth(1.5)
+              .strokeWidth(0.7)
               .antiAlias(true)
           }
           .width(this.chartWidth)
@@ -62,7 +62,7 @@ export struct DualLineChart {
             Path()
               .commands(this.smoothPath(this.memData, this.chartWidth, this.chartHeight, 12))
               .stroke('#64B5F6')
-              .strokeWidth(1.5)
+              .strokeWidth(0.7)
               .antiAlias(true)
           }
           .width(this.chartWidth)

@@ -1,7 +1,7 @@
 {
-  "version": "2.8.6",
+  "version": "2.8.9",
   "versionCode": 2,
-  "description": "优化immich相册管理，增加智能通知和定时任务，增加设备静止联网、备注、下线，还有更美观的首页",
+  "description": "iStore 改名为iStore 路由管家，增加ai检测助手和SSH功能",
   "releaseDate": "2026-08-05",
   "downloadUrl": "https://github.com/HWYWL/iStore/releases"
 }

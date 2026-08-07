@@ -6,15 +6,23 @@
     },
     {
       "name": "StoreAbility_desc",
-      "value": "description"
+      "value": "软路由管理工具，支持设备管理、Docker、相册、流量统计"
     },
     {
       "name": "StoreAbility_label",
-      "value": "iStore"
+      "value": "iStore 路由管家"
     },
     {
       "name": "internet_permission_reason",
       "value": "需要网络权限用于连接 iStoreOS 设备"
+    },
+    {
+      "name": "widget_network_name",
+      "value": "网络状态"
+    },
+    {
+      "name": "widget_network_desc",
+      "value": "桌面实时查看路由器状态"
     }
   ]
 }

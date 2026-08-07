@@ -124,8 +124,8 @@ struct AboutPage {
                 .objectFit(ImageFit.Cover)
                 .margin({ bottom: 12 })
 
-              Text('iStore')
-                .fontSize(26)
+              Text('iStore 路由管家')
+                .fontSize(24)
                 .fontColor(this.theme.textPrimary)
                 .fontWeight(FontWeight.Bold)
                 .margin({ bottom: 4 })

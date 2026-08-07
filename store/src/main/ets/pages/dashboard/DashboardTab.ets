@@ -3,6 +3,8 @@ import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
 import { SystemInfo, WanStatus, ConnectedDevice, NetworkInterface, MountPoint, ConntrackInfo, WirelessClient } from '../../models/Models'
 import { FormatUtils } from '../../common/utils/FormatUtils'
 import { ApiService } from '../../api/ApiService'
+import { TrafficStatStore } from '../../common/store/TrafficStatStore'
+import { WidgetDataStore } from '../../common/store/WidgetDataStore'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 
 // ============================================================
@@ -35,8 +37,16 @@ export struct DashboardTab {
   private gaugeCurrent: number[] = [0, 0, 0, 0]
   private gaugeTarget: number[] = [0, 0, 0, 0]
   private gaugeAnimTimer: number = -1
+  // 流量统计（WAN 累计字节快照）
+  private lastWanBytes: number[] | null = null
 
   aboutToAppear(): void {
+    // 流量统计存储初始化
+    const hostCtx = this.getUIContext().getHostContext()
+    if (hostCtx) {
+      TrafficStatStore.getInstance().init(hostCtx as Context)
+      WidgetDataStore.init(hostCtx as Context)
+    }
     // 前台感知：仅当本 Tab（首页 index 0）可见时轮询
     this.isVisible = AppState.getInstance().getCurrentTab() === 0
     this.tabChangeListener = (tab: number) => {
@@ -149,11 +159,57 @@ export struct DashboardTab {
       this.conntrack = results[3]
       this.onlineClientCount = this.countOnlineClients(results[4])
       this.isOnline = true
+      // 流量统计：累计字节增量记入当天
+      this.recordTraffic()
+      // 桌面小组件数据同步（下载/上传速率 + 在线设备数）
+      this.syncWidgetData()
     } catch (refErr) {
       // 刷新失败静默处理，不打断用户操作
     }
     this.updateTimestamp()
     this.redrawGauges()
+  }
+
+  /** 同步数据到桌面小组件 */
+  private syncWidgetData(): void {
+    try {
+      const device = AppState.getInstance().getActiveDevice()
+      let memPct: number = 0
+      if (this.systemInfo.memoryTotal > 0) {
+        memPct = Math.round(this.systemInfo.memoryUsed / this.systemInfo.memoryTotal * 100)
+      }
+      WidgetDataStore.save({
+        rxRate: this.wanStatus.rxRate,
+        txRate: this.wanStatus.txRate,
+        deviceCount: this.onlineClientCount,
+        online: this.isOnline,
+        deviceName: device ? (device.label || device.host) : 'iStore 路由管家',
+        cpuUsage: this.systemInfo.cpuUsage,
+        memPercent: memPct,
+        ip: this.wanStatus.ipAddress
+      })
+    } catch (e) {
+      // 同步失败不影响主流程
+    }
+  }
+
+  /** 累计当日流量（WAN 累计字节差值） */
+  private async recordTraffic(): Promise<void> {
+    try {
+      const api = new ApiService()
+      const bytes: number[] = await api.fetchWanTrafficBytes()
+      if (this.lastWanBytes) {
+        const drx: number = bytes[0] - this.lastWanBytes[0]
+        const dtx: number = bytes[1] - this.lastWanBytes[1]
+        // 计数器重置（路由器重启）时跳过本次
+        if (drx >= 0 && dtx >= 0 && (drx > 0 || dtx > 0)) {
+          TrafficStatStore.getInstance().addToday(drx, dtx)
+        }
+      }
+      this.lastWanBytes = bytes
+    } catch (e) {
+      // 统计失败不影响主流程
+    }
   }
 
   updateTimestamp(): void {

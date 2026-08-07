@@ -369,3 +369,37 @@ export interface DockerStats {
   memUsage: string
   memPercent: number
 }
+
+/** DHCP 静态绑定（host section） */
+export interface DhcpBindingInfo {
+  section: string
+  mac: string
+  ip: string
+  name: string
+}
+
+/** WiFi 访客网络配置信息 */
+export interface GuestWifiInfo {
+  enabled: boolean
+  ssid: string
+  password: string
+  network: string
+  device: string
+  section: string
+}
+
+/** Docker 镜像信息 */
+export interface DockerImage {
+  id: string
+  repoTag: string   // 仓库名:标签
+  size: number      // 大小（字节）
+  created: number   // 创建时间戳
+}
+
+/** Docker 网络信息 */
+export interface DockerNetwork {
+  id: string
+  name: string
+  driver: string
+  scope: string
+}
