@@ -1,5 +1,5 @@
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { NetworkInterface, WanStatus } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -11,8 +11,8 @@ import { FormatUtils } from '../../common/utils/FormatUtils'
 @Entry
 @Component
 struct NetworkPage {
-  @State theme: ThemePalette = DARK_THEME
-  @State isDark: boolean = true
+  @State theme: ThemePalette = LIGHT_THEME
+  @State isDark: boolean = false
   @State interfaces: NetworkInterface[] = []
   @State wanStatus: WanStatus = this.emptyWan()
   @State lanStatus: WanStatus = this.emptyWan()
@@ -20,13 +20,8 @@ struct NetworkPage {
   @State errorText: string = ''
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-    this.loadData()
+this.theme = AppState.getInstance().getTheme()
+        this.loadData()
   }
 
   async loadData(): Promise<void> {
@@ -90,22 +85,21 @@ struct NetworkPage {
       Column()
         .width('100%').height('100%')
         .linearGradient({
-          angle: 180,
+          angle: 135,
           colors: this.isDark
             ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+            : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
         // 顶栏
         Row() {
           Row() {
-            Text('←').fontSize(18).fontColor(this.theme.primary)
             Text(' 网络管理').fontSize(16).fontColor(this.theme.textPrimary)
               .fontWeight(FontWeight.Medium)
           }
           .padding({ left: 12, right: 16, top: 6, bottom: 6 })
-          .borderRadius(100).backgroundColor(this.theme.bgCard).backdropBlur(20)
+          .borderRadius(100).backgroundColor('transparent')
           .border({ width: 0.5, color: this.theme.borderGlass })
           .onClick(() => this.getUIContext().getRouter().back())
 

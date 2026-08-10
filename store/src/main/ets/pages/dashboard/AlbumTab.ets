@@ -1,5 +1,5 @@
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import {ThemePalette} from '../../common/theme/ThemeColors'
 import { ImmichStore, ImmichConfig } from '../../common/store/ImmichStore'
 import { ImmichClient, ImmichAlbum, ImmichServerInfo, ImmichAsset } from '../../api/ImmichClient'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -28,7 +28,7 @@ interface PhotoDay {
 @Component
 export struct AlbumTab {
   @Prop theme: ThemePalette
-  @State isDark: boolean = true
+  @State isDark: boolean = false
   @State configured: boolean = false
   @State baseUrl: string = ''
   @State apiKey: string = ''
@@ -101,12 +101,10 @@ export struct AlbumTab {
   private themeListener: (() => void) | null = null
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
+this.theme = AppState.getInstance().getTheme()
     // 订阅主题变化（胶囊导航条颜色随主题切换）
     this.themeListener = () => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
+this.theme = AppState.getInstance().getTheme()
     }
     AppState.getInstance().onThemeChange(this.themeListener)
     // 底部导航 inset（相对布局，避免被主页悬浮导航遮挡）
@@ -1420,18 +1418,11 @@ export struct AlbumTab {
   @Builder
   albumDetailView(): void {
     Column() {
-      // 相册头部
+      // 相册头部（无返回按钮，侧滑返回）
       Row() {
-        Row() {
-          Text('←').fontSize(18).fontColor(this.theme.primary)
-          Text(' ' + (this.activeAlbum ? this.activeAlbum.albumName : ''))
-            .fontSize(15).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Medium)
-            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .padding({ left: 12, right: 16, top: 6, bottom: 6 })
-        .borderRadius(100).backgroundColor(this.theme.bgCard)
-        .border({ width: 0.5, color: this.theme.borderGlass })
-        .onClick(() => { this.activeAlbum = null; this.assets = []; AppState.getInstance().setAlbumSubView(false) })
+        Text(' ' + (this.activeAlbum ? this.activeAlbum.albumName : ''))
+          .fontSize(16).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
 
         Blank()
         Text(`${this.assets.length} 张`)

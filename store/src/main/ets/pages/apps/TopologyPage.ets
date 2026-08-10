@@ -3,7 +3,7 @@
  * 可视化设备连接关系：路由器在中心，无线设备（下半区）/ 有线设备（上半区）围绕分布
  */
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { ConnectedDevice } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
 import { window } from '@kit.ArkUI'
@@ -11,8 +11,8 @@ import { window } from '@kit.ArkUI'
 @Entry
 @Component
 struct TopologyPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State isDark: boolean = false
+  @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44
   @State isLoading: boolean = true
   @State errorText: string = ''
@@ -24,14 +24,8 @@ struct TopologyPage {
   private deviceName: string = '路由器'
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-      this.draw()
-    })
-    const device = AppState.getInstance().getActiveDevice()
+this.theme = AppState.getInstance().getTheme()
+        const device = AppState.getInstance().getActiveDevice()
     this.deviceName = device ? (device.label || device.host) : '路由器'
     this.loadTopSafeArea()
     this.loadData()
@@ -194,9 +188,6 @@ struct TopologyPage {
       // 标题栏
       Row() {
         Row() {
-          Text('←')
-            .fontSize(18)
-            .fontColor(this.theme.primary)
           Text(' 网络拓扑')
             .fontSize(16)
             .fontColor(this.theme.textPrimary)
@@ -270,10 +261,10 @@ struct TopologyPage {
     .width('100%')
     .height('100%')
     .linearGradient({
-      angle: 180,
+      angle: 135,
       colors: this.isDark
         ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-        : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+        : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
     })
   }
 }

@@ -17,7 +17,9 @@
 import { http } from '@kit.NetworkKit'
 import { ConnectionConfig, DhcpBindingInfo, GuestWifiInfo } from '../models/Models'
 import { hilog } from '@kit.PerformanceAnalysisKit'
-import { connect, Client, DisconnectReason as SshDisconnectReason } from '@ohos-rs/ssh'
+import { SshService } from '../common/ssh/SshService'
+import { SavedDevice } from '../common/store/DeviceStore'
+import { AppState } from '../common/store/AppState'
 import { ApiUtils } from './ApiUtils'
 
 
@@ -1027,34 +1029,40 @@ export class ApiClient {
    */
   private async qwrtAutoFix(): Promise<boolean> {
     this.lastError = 'QWRT 自动授权中…'
-    let client: Client | null = null
+    // 复用 SshService（libssh2 会话）
+    const sshSvc: SshService = SshService.getInstance()
     try {
+      // 用当前登录设备的连接参数（不能用 activeDevice——登录失败时 activeDeviceId
+      // 尚未更新到当前设备，会连错到旧设备！）
       const host: string = this.getConfigHost()
-      client = await connect(`${host}:22`)
-
-      const authOk: boolean = await client.authenticatePassword(this.username, this.password)
-      if (!authOk) {
+      if (!host || !this.username || !this.password) {
+        this.lastError = '未配置设备 SSH 账号'
+        return false
+      }
+      const device: SavedDevice = {
+        id: '', label: host, host: host, port: '22', token: '',
+        useHttps: false, lastConnected: 0, version: 0,
+        username: this.username, password: this.password
+      }
+      const connOk: boolean = await sshSvc.connect(device)
+      if (!connOk) {
         this.lastError = 'SSH 密码认证失败'
         return false
       }
 
       const aclJson: string = ApiClient.getQwrtAclJson()
       const escaped: string = ApiClient.shellEscape(aclJson)
-      const cmd: string = `printf '%s' '${escaped}' > /usr/share/rpcd/acl.d/istore-app.json && /etc/init.d/rpcd restart && echo FIX_OK`
+      // 写入 ACL + 回读验证 + 重启 rpcd（mkdir -p 保证目录存在）
+      const cmd: string = `mkdir -p /usr/share/rpcd/acl.d && ` +
+        `printf '%s' '${escaped}' > /usr/share/rpcd/acl.d/istore-app.json && ` +
+        `cat /usr/share/rpcd/acl.d/istore-app.json > /dev/null && ` +
+        `/etc/init.d/rpcd restart && echo FIX_OK`
 
-      const output = await client.exec(cmd)
-      client.disconnect(SshDisconnectReason.ByApplication, '', '')
-      client = null
-
-      // Decode ArrayBuffer to string
-      const bytes = new Uint8Array(output.output as ArrayBuffer)
-      let result = ''
-      for (let i = 0; i < bytes.length; i++) {
-        result += String.fromCharCode(bytes[i])
-      }
+      const result: string = await sshSvc.exec(cmd)
+      sshSvc.disconnect()
 
       if (result.indexOf('FIX_OK') < 0) {
-        this.lastError = 'SSH 命令执行失败'
+        this.lastError = `SSH 命令执行失败：${result.substring(0, 80)}`
         return false
       }
 
@@ -1074,10 +1082,6 @@ export class ApiClient {
       hilog.error(DOMAIN, TAG, `qwrtAutoFix error: ${e}`)
       this.lastError = 'SSH 连接失败，请确认路由器已开启 SSH（端口 22）'
       return false
-    } finally {
-      if (client !== null) {
-        try { client.disconnect(SshDisconnectReason.ByApplication, '', '') } catch (_e) {}
-      }
     }
   }
 

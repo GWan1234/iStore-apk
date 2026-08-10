@@ -1,4 +1,4 @@
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { AppState } from '../../common/store/AppState'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { http } from '@kit.NetworkKit'
@@ -24,8 +24,8 @@ interface ToolGroup {
 @Entry
 @Component
 struct AppsPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State isDark: boolean = false
+  @State theme: ThemePalette = LIGHT_THEME
   @State itemSlides: number[] = []
   @State deviceName: string = '未连接设备'
   @State deviceHost: string = ''
@@ -57,6 +57,7 @@ struct AppsPage {
         { emoji: '⏰', name: '定时任务',  desc: '定时重启与定时开关 WiFi', route: 'pages/apps/SchedulePage' },
         { emoji: '🤖', name: 'AI 网络助手', desc: '自然语言查询网络状态', route: 'pages/apps/AiAssistantPage' },
         { emoji: '⌨️', name: 'SSH 终端',   desc: '命令行管理路由器', route: 'pages/apps/SshTerminalPage' },
+        { emoji: '📁', name: '文件管理',   desc: '浏览管理 OpenWrt 文件', route: 'pages/apps/FileManagerPage' },
       ]
     },
     {
@@ -131,13 +132,8 @@ struct AppsPage {
   }
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-
+this.theme = AppState.getInstance().getTheme()
+    
     // 填充设备信息（仿应用商店「我的」个人卡片）
     const active = AppState.getInstance().getActiveDevice()
     this.deviceConnected = AppState.getInstance().isConnected()
@@ -170,27 +166,71 @@ struct AppsPage {
     return idx + itemIdx
   }
 
+  /** 分组内双列分组（每行 2 个） */
+  groupRows(items: ToolEntry[]): ToolEntry[][] {
+    const rows: ToolEntry[][] = []
+    for (let i = 0; i < items.length; i += 2) {
+      rows.push(items.slice(i, i + 2))
+    }
+    return rows
+  }
+
+  /** 双列功能方块（图标 + 名称，紧凑应用商店风格） */
+  @Builder
+  toolCard(tool: ToolEntry, slideIdx: number) {
+    Column() {
+      // 图标方块
+      Row() {
+        if (tool.iconResource) {
+          Image(tool.iconResource).width(20).height(20).objectFit(ImageFit.Contain)
+        } else {
+          Text(tool.emoji).fontSize(20)
+        }
+      }
+      .width(44).height(44).borderRadius(14)
+      .backgroundColor(this.theme.bgGlassLight)
+      .justifyContent(FlexAlign.Center)
+
+      Text(tool.name)
+        .fontSize(11)
+        .fontColor(this.theme.textPrimary)
+        .fontWeight(FontWeight.Medium)
+        .margin({ top: 5 })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .width('48%')
+    .padding(8)
+    .borderRadius(14)
+    .backgroundColor(this.theme.bgCard)
+    .backdropBlur(20)
+    .border({ width: 0.5, color: this.theme.borderGlass })
+    .alignItems(HorizontalAlign.Center)
+    .opacity(this.itemSlides.length > slideIdx && this.itemSlides[slideIdx] === 0 ? 1 : 0)
+    .translate({ x: this.itemSlides.length > slideIdx ? this.itemSlides[slideIdx] : 300 })
+    .onClick(() => this.handleClick(tool))
+  }
+
   build() {
     Stack() {
       Column()
         .width('100%').height('100%')
         .linearGradient({
-          angle: 180,
+          angle: 135,
           colors: this.isDark
             ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+            : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
         // 顶栏
         Row() {
           Row() {
-            Text('←').fontSize(18).fontColor(this.theme.primary)
             Text(' 应用中心').fontSize(16).fontColor(this.theme.textPrimary)
               .fontWeight(FontWeight.Medium)
           }
           .padding({ left: 12, right: 16, top: 6, bottom: 6 })
-          .borderRadius(100).backgroundColor(this.theme.bgCard).backdropBlur(20)
+          .borderRadius(100).backgroundColor('transparent')
           .border({ width: 0.5, color: this.theme.borderGlass })
           .onClick(() => {
             try { this.getUIContext().getRouter().back() }
@@ -198,15 +238,6 @@ struct AppsPage {
           })
 
           Blank()
-
-          Row() {
-            Text(this.isDark ? '☀' : '🌙').fontSize(16)
-          }
-          .width(34).height(34).borderRadius(17)
-          .backgroundColor(this.theme.bgCard)
-          .border({ width: 0.5, color: this.theme.borderGlass })
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => AppState.getInstance().toggleTheme())
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 48, bottom: 12 })
@@ -265,81 +296,47 @@ struct AppsPage {
               .alignItems(HorizontalAlign.Center)
               .padding({ left: 12, right: 4 })
             }
-            .width('100%')
+            .width('calc(100% - 56px)')
             .padding(18)
             .borderRadius(20)
             .backgroundColor(this.theme.bgCard)
             .backdropBlur(20)
             .border({ width: 0.5, color: this.theme.borderGlass })
-            .margin({ left: 16, right: 16, top: 8 })
+            .margin({ left: 28, right: 28, top: 8 })
 
-            // ===== 分组大卡片（行间分割线）=====
+            // ===== 分组（横线式标题 + 双列方块，无大卡片框）=====
             ForEach(this.groups, (group: ToolGroup, gIdx: number) => {
               Column() {
-                // 分类标题
-                Text(group.title)
-                  .fontSize(13).fontColor(this.theme.textSecondary)
-                  .width('100%')
-                  .padding({ left: 18, right: 18, top: 20, bottom: 8 })
-
-                // 整组一张大卡片
-                Column() {
-                  ForEach(group.items, (tool: ToolEntry, tIdx: number) => {
-                    Column() {
-                      Row() {
-                        // 左侧图标
-                        Row() {
-                          if (tool.iconResource) {
-                            Image(tool.iconResource).width(22).height(22).objectFit(ImageFit.Contain)
-                          } else {
-                            Text(tool.emoji).fontSize(20)
-                          }
-                        }
-                        .width(40).height(40).borderRadius(12)
-                        .backgroundColor(this.theme.bgGlassLight)
-                        .justifyContent(FlexAlign.Center)
-
-                        // 中间文字
-                        Column() {
-                          Text(tool.name)
-                            .fontSize(15).fontColor(this.theme.textPrimary)
-                            .fontWeight(FontWeight.Medium)
-                          Text(tool.desc)
-                            .fontSize(11).fontColor(this.theme.textTertiary)
-                            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                            .margin({ top: 2 })
-                        }
-                        .alignItems(HorizontalAlign.Start)
-                        .layoutWeight(1)
-                        .margin({ left: 12 })
-
-                        // 右侧箭头
-                        Text('›').fontSize(20).fontColor(this.theme.textTertiary)
-                      }
-                      .width('100%')
-                      .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-                      .onClick(() => this.handleClick(tool))
-
-                      // 行间分割线（除最后一项）
-                      if (tIdx < group.items.length - 1) {
-                        Row()
-                          .width('calc(100% - 28px)')
-                          .height(0.5)
-                          .backgroundColor(this.theme.borderGlass)
-                          .margin({ left: 14 })
-                      }
-                    }
-                    .width('100%')
-                    .opacity(this.getSlideIndex(gIdx, tIdx) < this.itemSlides.length && this.itemSlides[this.getSlideIndex(gIdx, tIdx)] === 0 ? 1 : 0)
-                    .translate({ x: this.itemSlides.length > this.getSlideIndex(gIdx, tIdx) ? this.itemSlides[this.getSlideIndex(gIdx, tIdx)] : 300 })
-                  })
+                // 横线式分类标题：———— 网络 ————
+                Row() {
+                  Row()
+                    .layoutWeight(1)
+                    .height(0.5)
+                    .backgroundColor(this.theme.borderGlass)
+                  Text(group.title)
+                    .fontSize(12)
+                    .fontColor(this.theme.textSecondary)
+                    .margin({ left: 12, right: 12 })
+                  Row()
+                    .layoutWeight(1)
+                    .height(0.5)
+                    .backgroundColor(this.theme.borderGlass)
                 }
                 .width('100%')
-                .borderRadius(18)
-                .backgroundColor(this.theme.bgCard)
-                .backdropBlur(20)
-                .border({ width: 0.5, color: this.theme.borderGlass })
-                .padding({ top: 4, bottom: 4 })
+                .padding({ left: 18, right: 18, top: 20, bottom: 6 })
+
+                // 双列方块网格（无卡片容器，直接浮在背景上）
+                ForEach(this.groupRows(group.items), (row: ToolEntry[], rowIdx: number) => {
+                  Row() {
+                    ForEach(row, (tool: ToolEntry, colIdx: number) => {
+                      this.toolCard(tool, this.getSlideIndex(gIdx, rowIdx * 2 + colIdx))
+                    }, (tool: ToolEntry): string => tool.name + tool.desc)
+                  }
+                  .width('100%')
+                  .justifyContent(FlexAlign.SpaceBetween)
+                  .padding({ left: 12, right: 12 })
+                  .margin({ top: 8 })
+                }, (row: ToolEntry[], rowIdx: number): string => `row_${rowIdx}`)
               }
               .width('100%')
               .margin({ left: 16, right: 16 })

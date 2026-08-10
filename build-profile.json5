@@ -5,13 +5,13 @@
         "name": "debug",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_JVsaF1FOT4EpNziw1_A8WYJuPhAdrKAY7zUQ8mwWAIc=.cer",
+          "certpath": "C:\\Users\\Administrator\\.ohos\\config\\debug_iStore_JVsaF1FOT4EpNziw1_A8WYJuPhAdrKAY7zUQ8mwWAIc=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001BA45F4C950D0FE468ED5D0A3C95D1C27BED42C1A9B50A783529C125A45F56048338BE4E8EB39BD7",
-          "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_JVsaF1FOT4EpNziw1_A8WYJuPhAdrKAY7zUQ8mwWAIc=.p7b",
+          "keyPassword": "0000001B15CF8FD701D54C21938D4C8356A19A1BD8D83CB75BD6E838DA23B0E4D7B66EFA75EE54D923A452",
+          "profile": "C:\\Users\\Administrator\\.ohos\\config\\debug_iStore_JVsaF1FOT4EpNziw1_A8WYJuPhAdrKAY7zUQ8mwWAIc=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_iStore_JVsaF1FOT4EpNziw1_A8WYJuPhAdrKAY7zUQ8mwWAIc=.p12",
-          "storePassword": "0000001B88F7E41E6C1FDEDC058BBB647A8875B0B5F91A1957F30F4FDFAB93598337F2AAE46697CD894669"
+          "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\debug_iStore_JVsaF1FOT4EpNziw1_A8WYJuPhAdrKAY7zUQ8mwWAIc=.p12",
+          "storePassword": "0000001B0DC5FC74FD9FDB9365B458FC6BC7B178FA5BB6458F9DC2CFF622DC63B428F58187BD809ACB5873"
         }
       },
       {
@@ -31,7 +31,7 @@
     "products": [
       {
         "name": "default",
-        "signingConfig": "release",
+        "signingConfig": "debug",
         "targetSdkVersion": "6.1.0(23)",
         "compatibleSdkVersion": "6.1.0(23)",
         "runtimeOS": "HarmonyOS",

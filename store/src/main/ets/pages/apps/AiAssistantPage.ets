@@ -3,7 +3,7 @@
  * 本地规则引擎：快捷提问 + 自由输入，实时拉取路由器数据回答
  */
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { AiHelper, ChatMsg } from '../../common/ai/AiHelper'
 import { window } from '@kit.ArkUI'
 
@@ -19,8 +19,8 @@ const QUICK_QUESTIONS: string[] = [
 @Entry
 @Component
 struct AiAssistantPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State isDark: boolean = false
+  @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44
   @State messages: ChatMsg[] = []
   @State inputText: string = ''
@@ -28,13 +28,8 @@ struct AiAssistantPage {
   private listScroller: Scroller = new Scroller()
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-    this.loadTopSafeArea()
+this.theme = AppState.getInstance().getTheme()
+        this.loadTopSafeArea()
     // 开场白
     this.messages.push({
       role: 'ai',
@@ -135,9 +130,6 @@ struct AiAssistantPage {
       // 标题栏
       Row() {
         Row() {
-          Text('←')
-            .fontSize(18)
-            .fontColor(this.theme.primary)
           Text(' AI 网络助手')
             .fontSize(16)
             .fontColor(this.theme.textPrimary)
@@ -238,10 +230,10 @@ struct AiAssistantPage {
     .width('100%')
     .height('100%')
     .linearGradient({
-      angle: 180,
+      angle: 135,
       colors: this.isDark
         ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-        : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+        : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
     })
   }
 }

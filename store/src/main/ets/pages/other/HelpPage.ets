@@ -1,4 +1,4 @@
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 /**
  * 帮助页面
  * FAQ 常见问题解答，支持展开/折叠查看
@@ -14,8 +14,8 @@ interface FaqItem {
 @Entry
 @Component
 struct HelpPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State isDark: boolean = false
+  @State theme: ThemePalette = LIGHT_THEME
   @State expandedStates: boolean[] = [false, false, false, false, false, false]
   private faqs: FaqItem[] = [
     {
@@ -41,14 +41,9 @@ struct HelpPage {
   ]
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
+this.theme = AppState.getInstance().getTheme()
 
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-  }
+      }
 
   build() {
     Stack() {
@@ -56,18 +51,15 @@ struct HelpPage {
         .width('100%')
         .height('100%')
         .linearGradient({
-          angle: 180,
+          angle: 135,
           colors: this.isDark
             ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+            : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
         Row() {
           Row() {
-            Text('←')
-              .fontSize(18)
-              .fontColor(this.theme.primary)
             Text(' 帮助')
               .fontSize(16)
               .fontColor(this.theme.textPrimary)
@@ -85,22 +77,7 @@ struct HelpPage {
               hilog.error(0x0001, 'HelpPage', `router.back failed: ${e}`)
             }
           })
-
           Blank()
-
-          Row() {
-            Text(this.isDark ? '☀️' : '🌙')
-              .fontSize(18)
-          }
-          .width(36)
-          .height(36)
-          .borderRadius(18)
-          .backgroundColor(this.theme.bgCard)
-          .border({ width: 0.5, color: this.theme.borderGlass })
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => {
-            AppState.getInstance().toggleTheme()
-          })
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 48, bottom: 8 })

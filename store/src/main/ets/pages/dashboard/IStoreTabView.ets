@@ -1,5 +1,5 @@
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import {ThemePalette} from '../../common/theme/ThemeColors'
 import { IStoreApp } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
 import { hilog } from '@kit.PerformanceAnalysisKit'

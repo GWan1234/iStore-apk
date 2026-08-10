@@ -15,7 +15,7 @@ import { preferences } from '@kit.ArkData'
 import { ApiClient } from '../../api/ApiClient'
 import { ConnectionConfig } from '../../models/Models'
 import { DeviceStore, SavedDevice } from './DeviceStore'
-import { DARK_THEME, LIGHT_THEME, ThemePalette } from '../theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../theme/ThemeColors'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 
 const TAG = 'AppState'
@@ -33,7 +33,6 @@ export class AppState {
   // ========== 公开状态（会被 UI 组件绑定） ==========
   devices: SavedDevice[] = []          // 设备列表
   activeDeviceId: string = ''          // 当前活动设备 ID
-  isDarkMode: boolean = true           // 是否为深色模式（默认深色）
 
   // ========== 内部状态 ==========
   private connected: boolean = false   // 当前是否已连接
@@ -75,12 +74,11 @@ export class AppState {
       hilog.error(DOMAIN, TAG, `Settings pref init failed: ${JSON.stringify(e)}`)
     }
 
-    // 从持久化存储加载主题和设备列表
-    await this.loadTheme()
+    // 从持久化存储加载设备列表
     await this.loadDevices()
 
     this.initialized = true
-    hilog.info(DOMAIN, TAG, `Initialized: ${this.devices.length} devices, ${this.isDarkMode ? 'dark' : 'light'}`)
+    hilog.info(DOMAIN, TAG, `Initialized: ${this.devices.length} devices`)
   }
 
   private navHidden: boolean = false
@@ -224,51 +222,16 @@ export class AppState {
   // ========== 主题管理 ==========
 
   /**
-   * 获取当前主题调色板
+   * 获取当前主题调色板（统一亮色米色风格，无黑夜模式）
    */
   getTheme(): ThemePalette {
-    return this.isDarkMode ? DARK_THEME : LIGHT_THEME
+    return LIGHT_THEME
   }
 
-  /**
-   * 切换深色/浅色主题，持久化并通知所有监听器
-   */
-  toggleTheme(): void {
-    this.isDarkMode = !this.isDarkMode
-    this.saveTheme()
-    this.notifyThemeListeners()
-  }
+  // ========== 主题变更监听（兼容桩，不再有主题切换） ==========
 
   /**
-   * 从 Preferences 加载主题偏好
-   */
-  private async loadTheme(): Promise<void> {
-    if (!this.settingsPrefs) return
-    try {
-      const val: preferences.ValueType = this.settingsPrefs.getSync('isDarkMode', true)
-      if (typeof val === 'boolean') this.isDarkMode = val
-    } catch (e) {
-      this.isDarkMode = true  // 加载失败时默认深色模式
-    }
-  }
-
-  /**
-   * 保存主题偏好到 Preferences
-   */
-  private async saveTheme(): Promise<void> {
-    if (!this.settingsPrefs) return
-    try {
-      await this.settingsPrefs.put('isDarkMode', this.isDarkMode)
-      await this.settingsPrefs.flush()  // 确保写入磁盘
-    } catch (e) {
-      hilog.error(DOMAIN, TAG, `Save theme failed: ${JSON.stringify(e)}`)
-    }
-  }
-
-  // ========== 主题变更监听（观察者模式） ==========
-
-  /**
-   * 注册主题变化监听器
+   * 注册主题变化监听器（保留兼容，实际不再触发）
    */
   onThemeChange(listener: ThemeListener): void {
     if (!this.themeListeners.includes(listener)) {
@@ -284,14 +247,6 @@ export class AppState {
     if (idx >= 0) this.themeListeners.splice(idx, 1)
   }
 
-  /**
-   * 通知所有主题监听器（各组件收到通知后更新 @State theme）
-   */
-  private notifyThemeListeners(): void {
-    for (const l of this.themeListeners) {
-      try { l() } catch (e) {}
-    }
-  }
 
   // ========== 设备变更监听（观察者模式） ==========
 

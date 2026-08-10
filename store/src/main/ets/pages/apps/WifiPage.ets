@@ -1,5 +1,5 @@
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { ApiService } from '../../api/ApiService'
 import { WifiApInfo, WifiClientDetail } from '../../models/Models'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -7,8 +7,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 @Entry
 @Component
 struct WifiPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State isDark: boolean = false
+  @State theme: ThemePalette = LIGHT_THEME
   @State isLoading: boolean = true
   @State errorText: string = ''
   @State aps: WifiApInfo[] = []
@@ -38,13 +38,8 @@ struct WifiPage {
   @State guestErr: string = ''
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-    this.loadData()
+this.theme = AppState.getInstance().getTheme()
+        this.loadData()
     this.loadGuestStatus()
   }
 
@@ -448,7 +443,7 @@ struct WifiPage {
               .height(44)
           }
           .width('100%').height(44).borderRadius(20)
-          .backgroundColor(this.theme.bgCard).backdropBlur(10)
+          .backgroundColor('transparent').backdropBlur(10)
           .border({ width: 0.5, color: this.theme.borderGlass })
           .padding({ left: 12, right: 12 })
           .margin({ bottom: 10 })
@@ -462,7 +457,7 @@ struct WifiPage {
               .height(44)
           }
           .width('100%').height(44).borderRadius(20)
-          .backgroundColor(this.theme.bgCard).backdropBlur(10)
+          .backgroundColor('transparent').backdropBlur(10)
           .border({ width: 0.5, color: this.theme.borderGlass })
           .padding({ left: 12, right: 12 })
           .margin({ bottom: 10 })
@@ -524,22 +519,21 @@ struct WifiPage {
       Column()
         .width('100%').height('100%')
         .linearGradient({
-          angle: 180,
+          angle: 135,
           colors: this.isDark
             ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+            : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
         // 顶栏
         Row() {
           Row() {
-            Text('←').fontSize(18).fontColor(this.theme.primary)
             Text(' WiFi 管理').fontSize(16).fontColor(this.theme.textPrimary)
               .fontWeight(FontWeight.Medium)
           }
           .padding({ left: 12, right: 16, top: 6, bottom: 6 })
-          .borderRadius(100).backgroundColor(this.theme.bgCard).backdropBlur(20)
+          .borderRadius(100).backgroundColor('transparent')
           .border({ width: 0.5, color: this.theme.borderGlass })
           .onClick(() => this.getUIContext().getRouter().back())
 

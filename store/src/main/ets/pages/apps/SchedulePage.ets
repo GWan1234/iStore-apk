@@ -5,7 +5,7 @@
  * 注意：@Builder 参数不能为函数类型，用 tag 分发处理各行的回调
  */
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { ScheduleStore, ScheduleTask } from '../../common/store/ScheduleStore'
 import { window } from '@kit.ArkUI'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -15,8 +15,8 @@ const WEEK_LABELS: string[] = ['一', '二', '三', '四', '五', '六', '日']
 @Entry
 @Component
 struct SchedulePage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State isDark: boolean = false
+  @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44  // 状态栏高度（默认 44vp）
   // 定时重启
   @State rebootEnabled: boolean = false
@@ -37,13 +37,8 @@ struct SchedulePage {
   private wifiPickerIsOff: boolean = true
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-    const hostCtx = this.getUIContext().getHostContext()
+this.theme = AppState.getInstance().getTheme()
+        const hostCtx = this.getUIContext().getHostContext()
     if (hostCtx) {
       this.store.init(hostCtx as Context)
     }
@@ -318,9 +313,6 @@ struct SchedulePage {
         // 标题栏
         Row() {
           Row() {
-            Text('←')
-              .fontSize(18)
-              .fontColor(this.theme.primary)
             Text(' 定时任务')
               .fontSize(16)
               .fontColor(this.theme.textPrimary)
@@ -486,10 +478,10 @@ struct SchedulePage {
     .width('100%')
     .height('100%')
     .linearGradient({
-      angle: 180,
+      angle: 135,
       colors: this.isDark
         ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-        : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+        : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
     })
   }
 }
