@@ -319,27 +319,11 @@ struct LoginPage {
   build() {
     Stack() {
       Column() {
-        Row() {
-          Blank()
-          Row() {
-            Text('⚙️').fontSize(20)
-          }
-          .width(40).height(40).borderRadius(20)
-          .backgroundColor(this.theme.bgCard)
-          .border({ width: 0.5, color: this.theme.borderGlass })
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => {
-            // 设置入口（主题切换已移除，统一亮色风格）
-          })
-          .margin({ right: 16, top: this.topSafeArea + 4 })
-        }
-        .width('100%')
-
         Column() {
           Image($r('app.media.logo'))
             .width(80).height(80).borderRadius(20)
             .objectFit(ImageFit.Cover)
-            .margin({ top: 24 })
+            .margin({ top: this.topSafeArea + 46 })
 
           Text('iStore 路由管家')
             .fontSize(34).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
@@ -427,12 +411,14 @@ struct LoginPage {
                     }
                     .margin({ left: 10 }).alignItems(HorizontalAlign.Start).layoutWeight(1)
 
-                    SymbolGlyph($r('sys.symbol.square_and_pencil'))
-                      .fontSize(16).fontColor([this.theme.textTertiary]).padding(8)
+                    Image($r('app.media.app_edit'))
+                      .width(17).height(17)
+                      .padding(8)
                       .onClick(() => { this.fillForm(device) })
 
-                    SymbolGlyph($r('sys.symbol.trash'))
-                      .fontSize(16).fontColor([this.theme.textTertiary]).padding(8)
+                    Image($r('app.media.app_trash'))
+                      .width(17).height(17)
+                      .padding(8)
                       .onClick(() => { this.deleteDevice(device.id) })
                   }
                   .width('100%')

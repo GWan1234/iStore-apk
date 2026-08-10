@@ -254,6 +254,20 @@ export struct DashboardTab {
     return '#FF5252'
   }
 
+  /** 磁盘使用色阶：≤35 绿 / 36-60 蓝 / 61-80 黄 / >80 红 */
+  diskColor(usage: number): string {
+    if (usage <= 35) {
+      return '#00C853'
+    }
+    if (usage <= 60) {
+      return '#1872FF'
+    }
+    if (usage <= 80) {
+      return '#E6A800'
+    }
+    return '#E84040'
+  }
+
   /** 内存使用率（%） */
   memoryPercent(): number {
     return this.systemInfo.memoryTotal > 0
@@ -261,12 +275,44 @@ export struct DashboardTab {
       : 0
   }
 
-  /** 磁盘占用率（取第一个挂载点，通常为根分区） */
+  /**
+   * 磁盘占用率（跨固件稳定方案）
+   * 不依赖 device 命名（/dev/root、mtdblock、PARTUUID 等各衍生版差异大），
+   * 按「挂载点语义 + 类型过滤」统计：
+   *   - 只统计真实块设备（/dev/ 开头，排除 tmpfs/overlay/squashfs/mtd/loop）
+   *   - 排除系统保留挂载点（/boot /rom /overlay /tmp /proc /sys 等）
+   *   - 剩余 = 根分区 + 用户数据盘 → 每块硬盘的真实总占用
+   */
   diskPercent(): number {
     if (this.mountPoints.length === 0) {
       return 0
     }
-    return Math.min(100, this.mountPoints[0].usedPercent)
+    let totalSize: number = 0
+    let totalUsed: number = 0
+    const seenDevices: Set<string> = new Set()
+    for (let i = 0; i < this.mountPoints.length; i++) {
+      const m = this.mountPoints[i]
+      const dev: string = m.device
+      // 排除虚拟/只读设备：非 /dev/ 开头（tmpfs/overlay/squashfs/rootfs）或 mtd/loop
+      if (!dev.startsWith('/dev/') || dev.indexOf('/mtd') >= 0 || dev.indexOf('/loop') >= 0) {
+        continue
+      }
+      // 排除系统保留挂载点（同一物理盘的分区碎片，避免重复统计）
+      // 保留：/（根分区）与 /mnt、/media 等用户数据挂载
+      const mp: string = m.mountPoint
+      if (mp === '/overlay' || mp === '/boot' || mp === '/rom' ||
+        mp.startsWith('/overlay') || mp.startsWith('/boot') || mp.startsWith('/rom')) {
+        continue
+      }
+      // 同一设备多次挂载只统计一次
+      if (seenDevices.has(dev)) {
+        continue
+      }
+      seenDevices.add(dev)
+      totalSize += m.size
+      totalUsed += m.used
+    }
+    return totalSize > 0 ? Math.min(100, Math.round(totalUsed * 100 / totalSize)) : 0
   }
 
   /** 设备显示名（优先用户标签） */
@@ -577,12 +623,12 @@ export struct DashboardTab {
 
   /** 快捷功能图标项（2 行 5 列，圆形马卡龙色底 + 白色线性图标） */
   @Builder
-  quickItem(name: string, route: string, bg: string, symId: Resource) {
+  quickItem(name: string, route: string, bg: string, icon: Resource) {
     Column() {
       Row() {
-        SymbolGlyph(symId)
-          .fontSize(22)
-          .fontColor(['#FFFFFF'])
+        Image(icon)
+          .width(24)
+          .height(24)
       }
       .width(48)
       .height(48)
@@ -598,7 +644,13 @@ export struct DashboardTab {
     .justifyContent(FlexAlign.Center)
     .padding({ top: 4, bottom: 4 })
     .onClick(() => {
-      this.getUIContext().getRouter().pushUrl({ url: route })
+      if (route.startsWith('tab:')) {
+        // 切换主 Tab（iStore 商店 / Docker）
+        const idx: number = Number(route.substring(4))
+        AppState.getInstance().setCurrentTab(idx)
+      } else {
+        this.getUIContext().getRouter().pushUrl({ url: route })
+      }
     })
   }
 
@@ -642,16 +694,16 @@ export struct DashboardTab {
   @Builder
   kvRow(label: string, value: string) {
     Row() {
-      Text(label)
+      Text(`${label}：`)
         .fontSize(10)
         .fontColor(this.theme.textTertiary)
-      Blank()
       Text(value)
         .fontSize(10)
         .fontColor(this.theme.textSecondary)
+        .layoutWeight(1)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .margin({ left: 8 })
+        .margin({ left: 4 })
     }
     .width('100%')
     .margin({ top: 12 })
@@ -735,26 +787,17 @@ export struct DashboardTab {
     Column() {
       // ========== 顶部标题栏（仪表盘 + 副标题 + 铃铛角标） ==========
       Row() {
-        // 左侧双层堆叠图标（浅橙线条）
-        Stack() {
-          Row()
+        // 左侧仪表盘图标（AppScope SVG）
+        Row() {
+          Image($r('app.media.dashboard'))
             .width(22)
             .height(22)
-            .borderRadius(6)
-            .border({ width: 1.5, color: 'rgba(255,138,61,0.5)' })
-            .rotate({ angle: 8 })
-          Row()
-            .width(22)
-            .height(22)
-            .borderRadius(6)
-            .border({ width: 1.5, color: 'rgba(255,138,61,0.9)' })
-            .rotate({ angle: -8 })
         }
         .width(40)
         .height(40)
         .borderRadius(12)
         .backgroundColor('#FDF0E4')
-        .alignContent(Alignment.Center)
+        .justifyContent(FlexAlign.Center)
 
         Column() {
           Text('仪表盘')
@@ -773,9 +816,9 @@ export struct DashboardTab {
 
         // 右侧：铃铛（无角标）
         Stack() {
-          SymbolGlyph($r('sys.symbol.bell_fill'))
-            .fontSize(20)
-            .fontColor([this.theme.textPrimary])
+          Image($r('app.media.app_bell'))
+            .width(22)
+            .height(22)
         }
         .width(36)
         .height(36)
@@ -877,19 +920,19 @@ export struct DashboardTab {
             // ============ 2 快捷功能区（2 行 5 列，直接浮在主背景上，无卡片框） ============
             Column() {
               Row() {
-                this.quickItem('WiFi', 'pages/apps/WifiPage', '#8FB8E8', $r('sys.symbol.figure_walk_wifi'))
-                this.quickItem('网络', 'pages/apps/NetworkPage', '#7FD6D0', $r('sys.symbol.network_acceleration'))
-                this.quickItem('流量', 'pages/apps/TrafficReportPage', '#F0A8C0', $r('sys.symbol.gauge_with_dots_needle_33percent'))
-                this.quickItem('排行', 'pages/apps/TrafficRankPage', '#F2D08A', $r('sys.symbol.bolt_fill'))
-                this.quickItem('AI 助手', 'pages/apps/AiAssistantPage', '#B8A6E8', $r('sys.symbol.memory_module'))
+                this.quickItem('文件', 'pages/apps/FileManagerPage', '#A8C8A0', $r('app.media.folder_file'))
+                this.quickItem('AI 助手', 'pages/apps/AiAssistantPage', '#B8A6E8', $r('app.media.ai_assistant'))
+                this.quickItem('Docker', 'tab:4', '#9FB8E8', $r('app.media.docker'))
+                this.quickItem('SSH', 'pages/apps/SshTerminalPage', '#A0B8D8', $r('app.media.terminal'))
+                this.quickItem('应用中心', 'pages/apps/AppsPage', '#FFB37A', $r('app.media.app_center'))
               }
               .width('100%')
               Row() {
-                this.quickItem('SSH', 'pages/apps/SshTerminalPage', '#A0B8D8', $r('sys.symbol.keyboard'))
-                this.quickItem('通知', 'pages/apps/NotifySettingsPage', '#F0A0A0', $r('sys.symbol.bell_fill'))
-                this.quickItem('定时', 'pages/apps/SchedulePage', '#C0C090', $r('sys.symbol.clock'))
-                this.quickItem('拓扑', 'pages/apps/TopologyPage', '#8FD6A5', $r('sys.symbol.externaldrive_3'))
-                this.quickItem('应用中心', 'pages/apps/AppsPage', '#FFB37A', $r('sys.symbol.house'))
+                this.quickItem('排行', 'pages/apps/TrafficRankPage', '#F2D08A', $r('app.media.ranking'))
+                this.quickItem('WiFi', 'pages/apps/WifiPage', '#8FB8E8', $r('app.media.wifi_icon'))
+                this.quickItem('定时', 'pages/apps/SchedulePage', '#C0C090', $r('app.media.schedule'))
+                this.quickItem('拓扑', 'pages/apps/TopologyPage', '#8FD6A5', $r('app.media.topology'))
+                this.quickItem('商店', 'tab:3', '#F0A8C0', $r('app.media.app_store'))
               }
               .width('100%')
               .margin({ top: 2 })
@@ -902,7 +945,7 @@ export struct DashboardTab {
               // 卡片1：处理器（大字 CPU% + 折线趋势 + 型号）
               Column() {
                 Row() {
-                  Text('🧠').fontSize(13)
+                  Image($r('app.media.cpu')).width(16).height(16)
                   Text('处理器').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
                   Blank()
                   Text('›').fontSize(14).fontColor(this.theme.textTertiary)
@@ -951,7 +994,7 @@ export struct DashboardTab {
               // 卡片2：系统资源（进度条列表：内存/硬盘/存储/日志）
               Column() {
                 Row() {
-                  Text('💾').fontSize(13)
+                  Image($r('app.media.system_resources')).width(16).height(16)
                   Text('系统资源').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
                   Blank()
                   Text('›').fontSize(14).fontColor(this.theme.textTertiary)
@@ -977,7 +1020,7 @@ export struct DashboardTab {
               // 卡片3：主板（型号大字 + 制造商/版本键值）
               Column() {
                 Row() {
-                  Text('🖥').fontSize(13)
+                  Image($r('app.media.motherboard')).width(16).height(16)
                   Text('主板').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
                   Blank()
                   Text('›').fontSize(14).fontColor(this.theme.textTertiary)
@@ -1006,7 +1049,7 @@ export struct DashboardTab {
               // 卡片4：网络（状态 + 实时速率）
               Column() {
                 Row() {
-                  Text('🌐').fontSize(13)
+                  Image($r('app.media.network')).width(16).height(16)
                   Text('网络').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
                   Blank()
                   Text('›').fontSize(14).fontColor(this.theme.textTertiary)
@@ -1060,7 +1103,7 @@ export struct DashboardTab {
             Row() {
               Column() {
                 Row() {
-                  Text('👥').fontSize(13)
+                  Image($r('app.media.online_devices')).width(16).height(16)
                   Text('在线设备').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
                   Blank()
                 }
@@ -1087,7 +1130,7 @@ export struct DashboardTab {
 
               Column() {
                 Row() {
-                  Text('🔗').fontSize(13)
+                  Image($r('app.media.active_connections')).width(16).height(16)
                   Text('连接数').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
                   Blank()
                 }
@@ -1118,10 +1161,16 @@ export struct DashboardTab {
 
             // ============ 磁盘详情 ============
             Column() {
-              Text('💾 磁盘使用')
-                .fontSize(13)
-                .fontColor(this.theme.textPrimary)
-                .fontWeight(FontWeight.Medium)
+              Row() {
+                Image($r('app.media.disk'))
+                  .width(16)
+                  .height(16)
+                Text('磁盘使用')
+                  .fontSize(13)
+                  .fontColor(this.theme.textPrimary)
+                  .fontWeight(FontWeight.Medium)
+                  .margin({ left: 5 })
+              }
                 .width('100%')
                 .margin({ bottom: 10 })
               if (this.mountPoints.length === 0) {
@@ -1142,7 +1191,7 @@ export struct DashboardTab {
                         .layoutWeight(1)
                       Text(`${mp.usedPercent.toFixed(1)}%`)
                         .fontSize(13)
-                        .fontColor(this.getCpuColor(mp.usedPercent))
+                        .fontColor(this.diskColor(mp.usedPercent))
                         .fontWeight(FontWeight.Bold)
                     }
                     .width('100%')
@@ -1167,16 +1216,10 @@ export struct DashboardTab {
                         .width(`${Math.max(0, Math.min(100, mp.usedPercent))}%`)
                         .height(4)
                         .borderRadius(2)
-                        .linearGradient({
-                          angle: 90,
-                          colors: [
-                            [this.getCpuColor(mp.usedPercent), 0],
-                            [this.getCpuColor(mp.usedPercent) + '44', 1]
-                          ]
-                        })
+                        .backgroundColor(this.diskColor(mp.usedPercent))
                     }
                     .width('100%')
-                    .alignContent(Alignment.End)
+                    .alignContent(Alignment.Start)
                     .margin({ top: 8 })
                   }
                   .width('100%')

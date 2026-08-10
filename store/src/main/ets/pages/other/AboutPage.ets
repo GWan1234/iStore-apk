@@ -164,9 +164,8 @@ this.theme = AppState.getInstance().getTheme()
                 Blank()
                 // 复制按钮（save 图标）
                 Row() {
-                  SymbolGlyph($r('sys.symbol.save'))
-                    .fontSize(14)
-                    .fontColor([this.theme.primary])
+                  Image($r('app.media.app_copy'))
+                    .width(16).height(16)
                 }
                 .width(28).height(28).borderRadius(14)
                 .backgroundColor('rgba(68,138,255,0.1)')

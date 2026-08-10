@@ -146,7 +146,8 @@ this.theme = AppState.getInstance().getTheme()
                     Blank()
 
                     Column() {
-                      Text(this.isWireless(dev) ? '📶' : '🔌').fontSize(14)
+                      Image(this.isWireless(dev) ? $r('app.media.wifi_icon') : $r('app.media.green_network_port'))
+                        .width(16).height(16)
                       Text(this.isWireless(dev) ? 'WiFi' : '有线').fontSize(9)
                         .fontColor(this.theme.textTertiary)
                     }.alignItems(HorizontalAlign.Center)

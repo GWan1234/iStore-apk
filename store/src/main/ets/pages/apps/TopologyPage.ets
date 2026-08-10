@@ -187,6 +187,9 @@ this.theme = AppState.getInstance().getTheme()
       // 标题栏
       Row() {
         Row() {
+          Image($r('app.media.topology'))
+            .width(16)
+            .height(16)
           Text(' 网络拓扑')
             .fontSize(16)
             .fontColor(this.theme.textPrimary)
@@ -200,8 +203,14 @@ this.theme = AppState.getInstance().getTheme()
           this.getUIContext().getRouter().back()
         })
         Blank()
-        Text('↻ 刷新')
-          .fontSize(12).fontColor(this.theme.primary)
+        Row() {
+          Image($r('app.media.app_restart'))
+            .width(13)
+            .height(13)
+          Text('刷新')
+            .fontSize(12).fontColor(this.theme.primary)
+            .margin({ left: 4 })
+        }
           .padding({ left: 14, right: 14, top: 7, bottom: 7 })
           .borderRadius(16)
           .backgroundColor('rgba(68,138,255,0.1)')
@@ -240,10 +249,22 @@ this.theme = AppState.getInstance().getTheme()
 
         // 拓扑说明
         Column() {
-          Text('📶 绿色节点 = 无线连接（WiFi）')
-            .fontSize(11).fontColor(this.theme.textSecondary)
-          Text('🔌 蓝色节点 = 有线连接（网线）')
-            .fontSize(11).fontColor(this.theme.textSecondary).margin({ top: 4 })
+          Row() {
+            Image($r('app.media.wifi_icon'))
+              .width(14)
+              .height(14)
+            Text('绿色节点 = 无线连接（WiFi）')
+              .fontSize(11).fontColor(this.theme.textSecondary)
+              .margin({ left: 5 })
+          }
+          Row() {
+            Image($r('app.media.green_network_port'))
+              .width(14)
+              .height(14)
+            Text('蓝色节点 = 有线连接（网线）')
+              .fontSize(11).fontColor(this.theme.textSecondary)
+              .margin({ left: 5, top: 4 })
+          }
           Text('最多展示前 12 台无线 + 12 台有线设备')
             .fontSize(10).fontColor(this.theme.textTertiary).margin({ top: 4 })
         }

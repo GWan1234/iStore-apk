@@ -50,6 +50,13 @@ struct MainPage {
       } catch (e) {}
     })
 
+    // 订阅外部主 Tab 切换请求（首页快捷区：iStore 商店 / Docker）
+    AppState.getInstance().onTabChange((tab: number) => {
+      if (tab >= 0 && tab <= 5) {
+        this.tabsController.changeIndex(tab)
+      }
+    })
+
     AppState.getInstance().onNavChange(() => {
       // 用 duration 0 的显式动画覆盖 .animation(300) 隐式动画，
       // 避免导航条 barBottomMargin 从底部位置突变到 -100 时播放"从顶部滑下"的大位移动画

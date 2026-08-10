@@ -194,8 +194,9 @@ auto SftpSession::executeNonBlocking(Func operation, const char* opName) -> decl
     // 非阻塞模式下处理EAGAIN
     if (nonBlocking) {
         int retryCount = 0;
-        // 操作超时：8 秒（避免 SFTP 服务器无响应时无限等待，导致 UI 长时间转圈）
-        const int maxTimeoutSec = 8;
+        // 操作超时：默认 8 秒（避免 SFTP 服务器无响应时无限等待，导致 UI 长时间转圈）；
+        // 下载 read 放宽到 30 秒（慢网络/大文件时单次读可能超过 8 秒，防止下载中断）
+        const int maxTimeoutSec = (strcmp(opName, "read") == 0) ? 30 : 8;
         time_t startTime = time(nullptr);
         
         // 针对指针类型返回值

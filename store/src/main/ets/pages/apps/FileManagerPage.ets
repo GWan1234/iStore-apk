@@ -612,11 +612,13 @@ struct FileManagerPage {
 
                   // 下载按钮（文件）
                   if (!entry.isDir && !this.selectMode) {
-                    Text('↓')
-                      .fontSize(15).fontColor(this.theme.primary)
+                    Row() {
+                      Image($r('app.media.download_circle'))
+                        .width(18).height(18)
+                    }
                       .width(32).height(32).borderRadius(10)
                       .backgroundColor('rgba(255,138,61,0.12)')
-                      .textAlign(TextAlign.Center).lineHeight(32)
+                      .justifyContent(FlexAlign.Center)
                       .onClick(() => { this.download(entry) })
                   }
                   if (!this.selectMode) {
@@ -669,8 +671,14 @@ struct FileManagerPage {
               Text('📄 新建文件').fontSize(12).fontColor(this.theme.primary)
                 .layoutWeight(1)
                 .onClick(() => { this.showSheetDialog('新建文件', 1, '') })
-              Text('⬆ 上传').fontSize(12).fontColor(this.theme.primary)
+              Row() {
+                Image($r('app.media.upload_doc'))
+                  .width(15).height(15)
+                Text('上传').fontSize(12).fontColor(this.theme.primary)
+                  .margin({ left: 3 })
+              }
                 .layoutWeight(1)
+                .justifyContent(FlexAlign.Center)
                 .onClick(() => { this.upload() })
               Text('🔄 刷新').fontSize(12).fontColor(this.theme.textSecondary)
                 .onClick(() => { this.refresh() })

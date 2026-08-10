@@ -200,11 +200,21 @@ export class FileManagerService {
     }
   }
 
-  /** 下载文件到指定本地路径（文件管理"下载"用） */
+  /** 下载文件到指定本地路径（文件管理"下载"用，120 秒超时保护 + 确保关闭 fd） */
   async downloadToPath(remotePath: string, localPath: string): Promise<void> {
-    const wf = fs.openSync(localPath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC)
-    await this.ssh.sftpDownload(remotePath, wf.fd)
-    fs.closeSync(wf)
+    let wf: fs.File | null = null
+    try {
+      wf = fs.openSync(localPath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC)
+      await FileManagerService.withTimeout(
+        this.ssh.sftpDownload(remotePath, wf.fd), 120000,
+        '下载超时：路由器响应缓慢或文件过大，请重试')
+    } finally {
+      try {
+        if (wf) {
+          fs.closeSync(wf)
+        }
+      } catch (e) {}
+    }
   }
 
   /** 上传本地文件（文件管理"上传"用） */

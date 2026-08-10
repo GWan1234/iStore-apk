@@ -36,36 +36,36 @@ struct AppsPage {
     {
       title: '网络',
       items: [
-        { emoji: '📶', name: 'WiFi 管理', desc: '无线网络状态与配置管理', route: 'pages/apps/WifiPage' },
-        { emoji: '🌐', name: '网络管理', desc: '接口状态与网络信息', route: 'pages/apps/NetworkPage' },
-        { emoji: '📊', name: '流量排行',  desc: '按速率排名的客户端活跃度', route: 'pages/apps/TrafficRankPage' },
-        { emoji: '🔗', name: '连接排行',  desc: '发现 NAT 连接数最多的设备', route: 'pages/apps/ConntrackRankPage' },
+        { emoji: '📶', name: 'WiFi 管理', desc: '无线网络状态与配置管理', route: 'pages/apps/WifiPage', iconResource: $r('app.media.wifi_icon') },
+        { emoji: '🌐', name: '网络管理', desc: '接口状态与网络信息', route: 'pages/apps/NetworkPage', iconResource: $r('app.media.network_mgmt') },
+        { emoji: '📊', name: '流量排行',  desc: '按速率排名的客户端活跃度', route: 'pages/apps/TrafficRankPage', iconResource: $r('app.media.ranking') },
+        { emoji: '🔗', name: '连接排行',  desc: '发现 NAT 连接数最多的设备', route: 'pages/apps/ConntrackRankPage', iconResource: $r('app.media.active_connections') },
         { emoji: '',  name: '网口流量',  desc: '各接口实时速率与累计统计', route: 'pages/apps/PortTrafficPage', iconResource: $r('app.media.flow_monitoring') },
-        { emoji: '🖧', name: '物理网口',  desc: '查看物理端口连接状态与速率', route: 'pages/apps/EthPortPage' },
-        { emoji: '📈', name: '流量统计',  desc: '近 7/30 天每日流量趋势', route: 'pages/apps/TrafficReportPage' },
-        { emoji: '🗺', name: '网络拓扑',  desc: '可视化设备连接关系图', route: 'pages/apps/TopologyPage' },
+        { emoji: '🖧', name: '物理网口',  desc: '查看物理端口连接状态与速率', route: 'pages/apps/EthPortPage', iconResource: $r('app.media.green_network_port') },
+        { emoji: '📈', name: '流量统计',  desc: '近 7/30 天每日流量趋势', route: 'pages/apps/TrafficReportPage', iconResource: $r('app.media.traffic_pipe') },
+        { emoji: '🗺', name: '网络拓扑',  desc: '可视化设备连接关系图', route: 'pages/apps/TopologyPage', iconResource: $r('app.media.topology') },
       ]
     },
     {
       title: '管理',
       items: [
-        { emoji: '🛡️', name: '家长控制',  desc: 'OAF 应用过滤引擎配置', route: 'pages/apps/OafPage' },
-        { emoji: '⚙️', name: '系统进程',  desc: '查看和管理运行中的进程', route: 'pages/process/ProcessListPage' },
-        { emoji: '🚀', name: '启动项',   desc: '管理开机自启服务', route: 'pages/process/StartupPage' },
-        { emoji: '🔔', name: '智能通知',  desc: '断网告警与新设备接入提醒', route: 'pages/apps/NotifySettingsPage' },
-        { emoji: '⏰', name: '定时任务',  desc: '定时重启与定时开关 WiFi', route: 'pages/apps/SchedulePage' },
-        { emoji: '🤖', name: 'AI 网络助手', desc: '自然语言查询网络状态', route: 'pages/apps/AiAssistantPage' },
-        { emoji: '⌨️', name: 'SSH 终端',   desc: '命令行管理路由器', route: 'pages/apps/SshTerminalPage' },
-        { emoji: '📁', name: '文件管理',   desc: '浏览管理 OpenWrt 文件', route: 'pages/apps/FileManagerPage' },
+        { emoji: '🛡️', name: '家长控制',  desc: 'OAF 应用过滤引擎配置', route: 'pages/apps/OafPage', iconResource: $r('app.media.app_shield') },
+        { emoji: '⚙️', name: '系统进程',  desc: '查看和管理运行中的进程', route: 'pages/process/ProcessListPage', iconResource: $r('app.media.app_gear') },
+        { emoji: '🚀', name: '启动项',   desc: '管理开机自启服务', route: 'pages/process/StartupPage', iconResource: $r('app.media.app_rocket') },
+        { emoji: '🔔', name: '智能通知',  desc: '断网告警与新设备接入提醒', route: 'pages/apps/NotifySettingsPage', iconResource: $r('app.media.app_bell') },
+        { emoji: '⏰', name: '定时任务',  desc: '定时重启与定时开关 WiFi', route: 'pages/apps/SchedulePage', iconResource: $r('app.media.schedule') },
+        { emoji: '🤖', name: 'AI 网络助手', desc: '自然语言查询网络状态', route: 'pages/apps/AiAssistantPage', iconResource: $r('app.media.ai_assistant') },
+        { emoji: '⌨️', name: 'SSH 终端',   desc: '命令行管理路由器', route: 'pages/apps/SshTerminalPage', iconResource: $r('app.media.terminal') },
+        { emoji: '📁', name: '文件管理',   desc: '浏览管理 OpenWrt 文件', route: 'pages/apps/FileManagerPage', iconResource: $r('app.media.folder_file') },
       ]
     },
     {
       title: '系统',
       items: [
-        { emoji: '🔄', name: '重启',     desc: '重启路由器设备', route: 'pages/system/RebootPage' },
-        { emoji: '🔙', name: '恢复出厂', desc: '恢复设备到出厂设置', route: 'pages/system/FactoryResetPage' },
-        { emoji: '🌐', name: 'OpenWRT 首页', desc: '打开路由器管理后台', route: 'pages/apps/WebViewPage' },
-        { emoji: 'ℹ️', name: '关于',     desc: '版本信息与更新检查', route: '__about__' },
+        { emoji: '🔄', name: '重启',     desc: '重启路由器设备', route: 'pages/system/RebootPage', iconResource: $r('app.media.app_restart') },
+        { emoji: '🔙', name: '恢复出厂', desc: '恢复设备到出厂设置', route: 'pages/system/FactoryResetPage', iconResource: $r('app.media.app_reset') },
+        { emoji: '🌐', name: 'OpenWRT 首页', desc: '打开路由器管理后台', route: 'pages/apps/WebViewPage', iconResource: $r('app.media.app_globe') },
+        { emoji: 'ℹ️', name: '关于',     desc: '版本信息与更新检查', route: '__about__', iconResource: $r('app.media.app_info') },
       ]
     },
   ]
@@ -178,28 +178,26 @@ this.theme = AppState.getInstance().getTheme()
   @Builder
   toolCard(tool: ToolEntry, slideIdx: number) {
     Column() {
-      // 图标方块
+      // 图标（直接显示，不包内层方框）
       Row() {
         if (tool.iconResource) {
-          Image(tool.iconResource).width(20).height(20).objectFit(ImageFit.Contain)
+          Image(tool.iconResource).width(26).height(26).objectFit(ImageFit.Contain)
         } else {
-          Text(tool.emoji).fontSize(20)
+          Text(tool.emoji).fontSize(24)
         }
       }
-      .width(44).height(44).borderRadius(14)
-      .backgroundColor(this.theme.bgGlassLight)
       .justifyContent(FlexAlign.Center)
 
       Text(tool.name)
         .fontSize(11)
         .fontColor(this.theme.textPrimary)
         .fontWeight(FontWeight.Medium)
-        .margin({ top: 5 })
+        .margin({ top: 6 })
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .width('48%')
-    .padding(8)
+    .padding(10)
     .borderRadius(14)
     .backgroundColor(this.theme.bgCard)
     .backdropBlur(20)
@@ -246,9 +244,8 @@ this.theme = AppState.getInstance().getTheme()
             Row() {
               // 圆形设备头像
               Row() {
-                SymbolGlyph($r('sys.symbol.externaldrive_fill_3'))
-                  .fontSize(30)
-                  .fontColor([this.theme.primary])
+                Image($r('app.media.app_drive'))
+                  .width(32).height(32)
               }
               .width(64).height(64).borderRadius(32)
               .backgroundColor(this.deviceConnected ? 'rgba(68,138,255,0.15)' : 'rgba(255,82,82,0.12)')

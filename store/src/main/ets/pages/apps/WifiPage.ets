@@ -301,8 +301,8 @@ this.theme = AppState.getInstance().getTheme()
       // 操作按钮
       Row() {
         Row() {
-          SymbolGlyph($r('sys.symbol.square_and_pencil'))
-            .fontSize(13).fontColor([this.theme.primary])
+          Image($r('app.media.app_edit'))
+            .width(15).height(15)
           Text(' 编辑')
             .fontSize(12).fontColor(this.theme.primary)
         }

@@ -765,9 +765,9 @@ this.theme = AppState.getInstance().getTheme()
                     .width('100%').height('100%')
                     .objectFit(ImageFit.Contain)
                   // 播放按钮
-                  SymbolGlyph($r('sys.symbol.play_circle_fill'))
-                    .fontSize(64)
-                    .fontColor([Color.White])
+                  Image($r('app.media.app_play'))
+                    .width(64)
+                    .height(64)
                     .opacity(0.92)
                 }
                 .width('100%').height('100%')
@@ -819,15 +819,13 @@ this.theme = AppState.getInstance().getTheme()
                       Row() {
                         // 播放/暂停
                         if (this.videoPaused[idx]) {
-                          SymbolGlyph($r('sys.symbol.play_circle_fill'))
-                            .fontSize(30)
-                            .fontColor([Color.White])
+                          Image($r('app.media.app_play'))
+                            .width(30).height(30)
                             .padding(6)
                             .onClick(() => this.toggleVideoPlayPause(idx))
                         } else {
-                          SymbolGlyph($r('sys.symbol.pause_circle_fill'))
-                            .fontSize(30)
-                            .fontColor([Color.White])
+                          Image($r('app.media.app_pause'))
+                            .width(30).height(30)
                             .padding(6)
                             .onClick(() => this.toggleVideoPlayPause(idx))
                         }
@@ -858,15 +856,13 @@ this.theme = AppState.getInstance().getTheme()
                           .margin({ right: 6 })
                         // 全屏按钮（点按自动横屏）
                         if (this.videoFullscreen) {
-                          SymbolGlyph($r('sys.symbol.arrow_down_right_and_arrow_up_left'))
-                            .fontSize(22)
-                            .fontColor([Color.White])
+                          Image($r('app.media.app_expand'))
+                            .width(22).height(22)
                             .padding(8)
                             .onClick(() => this.toggleVideoFullscreen())
                         } else {
-                          SymbolGlyph($r('sys.symbol.arrow_up_left_and_arrow_down_right'))
-                            .fontSize(22)
-                            .fontColor([Color.White])
+                          Image($r('app.media.app_expand'))
+                            .width(22).height(22)
                             .padding(8)
                             .onClick(() => this.toggleVideoFullscreen())
                         }
@@ -1145,8 +1141,8 @@ this.theme = AppState.getInstance().getTheme()
       // 照片
       Column() {
         Row() {
-          SymbolGlyph($r('sys.symbol.picture'))
-            .fontSize(13).fontColor([this.theme.textSecondary])
+          Image($r('app.media.app_picture'))
+            .width(15).height(15)
           Text(' 相册')
             .fontSize(10).fontColor(this.theme.textSecondary)
         }
@@ -1160,8 +1156,8 @@ this.theme = AppState.getInstance().getTheme()
       // 视频
       Column() {
         Row() {
-          SymbolGlyph($r('sys.symbol.resolution_video'))
-            .fontSize(13).fontColor([this.theme.textSecondary])
+          Image($r('app.media.app_video'))
+            .width(15).height(15)
           Text(' 视频')
             .fontSize(10).fontColor(this.theme.textSecondary)
         }
@@ -1175,8 +1171,8 @@ this.theme = AppState.getInstance().getTheme()
       // 存储占用
       Column() {
         Row() {
-          SymbolGlyph($r('sys.symbol.externaldrive'))
-            .fontSize(13).fontColor([this.theme.textSecondary])
+          Image($r('app.media.app_drive'))
+            .width(15).height(15)
           Text(' 占用')
             .fontSize(10).fontColor(this.theme.textSecondary)
         }
@@ -1190,8 +1186,8 @@ this.theme = AppState.getInstance().getTheme()
       // 版本
       Column() {
         Row() {
-          SymbolGlyph($r('sys.symbol.label'))
-            .fontSize(13).fontColor([this.theme.textSecondary])
+          Image($r('app.media.app_info'))
+            .width(15).height(15)
           Text(' 版本')
             .fontSize(10).fontColor(this.theme.textSecondary)
         }
@@ -1451,9 +1447,8 @@ this.theme = AppState.getInstance().getTheme()
                       .borderRadius(8)
                     // 视频角标
                     if (asset.type === 'VIDEO') {
-                      SymbolGlyph($r('sys.symbol.play_video_fill'))
-                        .fontSize(13)
-                        .fontColor([Color.White])
+                      Image($r('app.media.app_play'))
+                        .width(15).height(15)
                         .padding(4)
                         .borderRadius(6)
                         .backgroundColor('rgba(0,0,0,0.55)')
@@ -1502,9 +1497,9 @@ this.theme = AppState.getInstance().getTheme()
   bottomNavBar(): void {
     Row() {
       // 相片
-      this.navItem(0, '相片', $r('sys.symbol.picture'))
+      this.navItem(0, '相片', $r('app.media.album_photo'))
       // 相册
-      this.navItem(1, '相册', $r('sys.symbol.rectangle_stack'))
+      this.navItem(1, '相册', $r('app.media.album'))
     }
     .width(240)
     .height(44)
@@ -1524,9 +1519,9 @@ this.theme = AppState.getInstance().getTheme()
   navItem(tab: number, label: string, icon: Resource): void {
     Column() {
       // 图标
-      SymbolGlyph(icon)
-        .fontSize(17)
-        .fontColor([this.mainTab === tab ? this.theme.primary : this.theme.textTertiary])
+      Image(icon)
+        .width(19)
+        .height(19)
       // 文字
       Text(label)
         .fontSize(10)
