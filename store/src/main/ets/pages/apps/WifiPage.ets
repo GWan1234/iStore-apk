@@ -7,7 +7,6 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 @Entry
 @Component
 struct WifiPage {
-  @State isDark: boolean = false
   @State theme: ThemePalette = LIGHT_THEME
   @State isLoading: boolean = true
   @State errorText: string = ''
@@ -520,9 +519,7 @@ this.theme = AppState.getInstance().getTheme()
         .width('100%').height('100%')
         .linearGradient({
           angle: 135,
-          colors: this.isDark
-            ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
@@ -606,7 +603,7 @@ this.theme = AppState.getInstance().getTheme()
               Text('SSID').fontSize(13).fontColor(this.theme.textSecondary).width(72)
               TextInput({ placeholder: '网络名称', text: this.editSsid })
                 .fontSize(14).fontColor(this.theme.textPrimary)
-                .backgroundColor(this.isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.04)')
+                .backgroundColor('rgba(0,0,0,0.04)')
                 .layoutWeight(1)
                 .onChange((v: string) => this.editSsid = v)
             }.width('100%').margin({ bottom: 10 })
@@ -615,7 +612,7 @@ this.theme = AppState.getInstance().getTheme()
               Text('密码').fontSize(13).fontColor(this.theme.textSecondary).width(72)
               TextInput({ placeholder: '留空则不修改密码', text: this.editKey })
                 .fontSize(14).fontColor(this.theme.textPrimary)
-                .backgroundColor(this.isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.04)')
+                .backgroundColor('rgba(0,0,0,0.04)')
                 .layoutWeight(1)
                 .type(InputType.Password)
                 .onChange((v: string) => this.editKey = v)
@@ -625,7 +622,7 @@ this.theme = AppState.getInstance().getTheme()
               Text('信道').fontSize(13).fontColor(this.theme.textSecondary).width(72)
               TextInput({ placeholder: '留空则不修改信道', text: this.editChannel })
                 .fontSize(14).fontColor(this.theme.textPrimary)
-                .backgroundColor(this.isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.04)')
+                .backgroundColor('rgba(0,0,0,0.04)')
                 .layoutWeight(1)
                 .type(InputType.Number)
                 .onChange((v: string) => this.editChannel = v)

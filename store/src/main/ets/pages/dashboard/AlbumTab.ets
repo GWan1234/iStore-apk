@@ -28,7 +28,6 @@ interface PhotoDay {
 @Component
 export struct AlbumTab {
   @Prop theme: ThemePalette
-  @State isDark: boolean = false
   @State configured: boolean = false
   @State baseUrl: string = ''
   @State apiKey: string = ''
@@ -1510,12 +1509,12 @@ this.theme = AppState.getInstance().getTheme()
     .width(240)
     .height(44)
     .borderRadius(22)
-    .backgroundColor(this.isDark ? 'rgba(30,34,64,0.72)' : 'rgba(255,255,255,0.75)')
+    .backgroundColor('rgba(255,255,255,0.75)')
     .backdropBlur(20)
     .border({ width: 0.5, color: this.theme.borderGlass })
     .shadow({
       radius: 12,
-      color: this.isDark ? 'rgba(0,0,0,0.35)' : 'rgba(31,47,94,0.10)',
+      color: 'rgba(31,47,94,0.10)',
       offsetY: 4
     })
   }

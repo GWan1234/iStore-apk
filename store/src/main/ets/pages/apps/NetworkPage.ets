@@ -12,7 +12,6 @@ import { FormatUtils } from '../../common/utils/FormatUtils'
 @Component
 struct NetworkPage {
   @State theme: ThemePalette = LIGHT_THEME
-  @State isDark: boolean = false
   @State interfaces: NetworkInterface[] = []
   @State wanStatus: WanStatus = this.emptyWan()
   @State lanStatus: WanStatus = this.emptyWan()
@@ -86,9 +85,7 @@ this.theme = AppState.getInstance().getTheme()
         .width('100%').height('100%')
         .linearGradient({
           angle: 135,
-          colors: this.isDark
-            ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {

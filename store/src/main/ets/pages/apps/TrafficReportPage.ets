@@ -10,7 +10,6 @@ import { window } from '@kit.ArkUI'
 @Entry
 @Component
 struct TrafficReportPage {
-  @State isDark: boolean = false
   @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44
   @State range: number = 7  // 7 天 / 30 天
@@ -274,9 +273,7 @@ this.theme = AppState.getInstance().getTheme()
     .height('100%')
     .linearGradient({
       angle: 135,
-      colors: this.isDark
-        ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-        : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+      colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
     })
   }
 }

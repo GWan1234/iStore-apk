@@ -37,7 +37,6 @@ struct LoginPage {
   @State editingId: string = ''
   @State connectingId: string = ''
   @State formVersion: number = 0
-  @State isDark: boolean = false
   @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44  // 状态栏高度（默认 44vp，覆盖大部分设备）
   private appState: AppState = AppState.getInstance()
@@ -464,8 +463,8 @@ struct LoginPage {
               }
               .width('100%').padding({ left: 14, right: 14, top: 12, bottom: 12 })
               .borderRadius(12).margin({ top: 14 })
-              .backgroundColor(this.isDark ? 'rgba(255, 82, 82, 0.1)' : 'rgba(255, 82, 82, 0.05)')
-              .border({ width: 0.5, color: this.isDark ? 'rgba(255, 82, 82, 0.25)' : 'rgba(255, 82, 82, 0.15)' })
+              .backgroundColor('rgba(255, 82, 82, 0.05)')
+              .border({ width: 0.5, color: 'rgba(255, 82, 82, 0.15)' })
             }
 
             if (this.successMessage) {
@@ -584,8 +583,8 @@ struct LoginPage {
         }
         .width('100%').padding({ left: 14, right: 14, top: 10, bottom: 10 })
         .borderRadius(12).margin({ bottom: 12 })
-        .backgroundColor(this.isDark ? 'rgba(255, 82, 82, 0.1)' : 'rgba(255, 82, 82, 0.05)')
-        .border({ width: 0.5, color: this.isDark ? 'rgba(255, 82, 82, 0.25)' : 'rgba(255, 82, 82, 0.15)' })
+        .backgroundColor('rgba(255, 82, 82, 0.05)')
+        .border({ width: 0.5, color: 'rgba(255, 82, 82, 0.15)' })
       }
 
       // 按钮

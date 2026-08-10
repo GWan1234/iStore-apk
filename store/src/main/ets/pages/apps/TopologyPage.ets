@@ -11,7 +11,6 @@ import { window } from '@kit.ArkUI'
 @Entry
 @Component
 struct TopologyPage {
-  @State isDark: boolean = false
   @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44
   @State isLoading: boolean = true
@@ -131,7 +130,7 @@ this.theme = AppState.getInstance().getTheme()
     ctx.fill()
     ctx.beginPath()
     ctx.arc(cx, cy, 27, 0, Math.PI * 2)
-    ctx.fillStyle = this.isDark ? '#0A0E27' : '#FFFFFF'
+    ctx.fillStyle = '#FFFFFF'
     ctx.fill()
     ctx.fillStyle = this.theme.primary
     ctx.font = '22vp sans-serif'
@@ -262,9 +261,7 @@ this.theme = AppState.getInstance().getTheme()
     .height('100%')
     .linearGradient({
       angle: 135,
-      colors: this.isDark
-        ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-        : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+      colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
     })
   }
 }

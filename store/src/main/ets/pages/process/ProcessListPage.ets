@@ -12,7 +12,6 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 @Entry
 @Component
 struct ProcessListPage {
-  @State isDark: boolean = false
   @State theme: ThemePalette = LIGHT_THEME
   @State isLoading: boolean = true
   @State errorText: string = ''
@@ -62,9 +61,7 @@ this.theme = AppState.getInstance().getTheme()
         .height('100%')
         .linearGradient({
           angle: 135,
-          colors: this.isDark
-            ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
@@ -223,7 +220,7 @@ this.theme = AppState.getInstance().getTheme()
                     }
                     .width('100%')
                     .padding({ left: 12, right: 12, top: 8, bottom: 12 })
-                    .backgroundColor(this.isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)')
+                    .backgroundColor('rgba(0,0,0,0.02)')
                     .border({ width: { top: 0.5 }, color: this.theme.borderGlass })
                   }
                 }

@@ -17,7 +17,6 @@ import { AlbumTab } from './AlbumTab'
 @Component
 struct MainPage {
   @State theme: ThemePalette = LIGHT_THEME
-  @State isDark: boolean = false
   @State deviceName: string = ''
   @State navHidden: boolean = false
   @State bottomSafeArea: number = 20  // 默认 20vp，覆盖大部分设备的导航指示条高度
@@ -117,9 +116,7 @@ struct MainPage {
         .height('100%')
         .linearGradient({
           angle: 135,
-          colors: this.isDark
-            ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
@@ -214,7 +211,7 @@ struct MainPage {
         .barFloatingStyle({
           barWidth: { smallWidth: 320, mediumWidth: 400, largeWidth: 480 },
           barBottomMargin: this.navHidden ? -100 : (28 + this.bottomSafeArea),
-          gradientMask: { maskColor: this.isDark ? '#22000000' : '#33F5F1EE', maskHeight: 88 },
+          gradientMask: { maskColor: '#33F5F1EE', maskHeight: 88 },
           systemMaterialEffect: {
             materialType: hdsMaterial.MaterialType.IMMERSIVE,
             materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE

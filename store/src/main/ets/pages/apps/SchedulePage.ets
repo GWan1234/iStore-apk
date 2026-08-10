@@ -15,7 +15,6 @@ const WEEK_LABELS: string[] = ['一', '二', '三', '四', '五', '六', '日']
 @Entry
 @Component
 struct SchedulePage {
-  @State isDark: boolean = false
   @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44  // 状态栏高度（默认 44vp）
   // 定时重启
@@ -479,9 +478,7 @@ this.theme = AppState.getInstance().getTheme()
     .height('100%')
     .linearGradient({
       angle: 135,
-      colors: this.isDark
-        ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-        : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+      colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
     })
   }
 }

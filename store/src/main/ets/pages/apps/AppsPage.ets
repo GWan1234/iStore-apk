@@ -24,7 +24,6 @@ interface ToolGroup {
 @Entry
 @Component
 struct AppsPage {
-  @State isDark: boolean = false
   @State theme: ThemePalette = LIGHT_THEME
   @State itemSlides: number[] = []
   @State deviceName: string = '未连接设备'
@@ -217,9 +216,7 @@ this.theme = AppState.getInstance().getTheme()
         .width('100%').height('100%')
         .linearGradient({
           angle: 135,
-          colors: this.isDark
-            ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
