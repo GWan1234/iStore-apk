@@ -1,5 +1,5 @@
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { ConnectedDevice } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
 
@@ -17,8 +17,7 @@ class IpRank {
 @Entry
 @Component
 struct ConntrackRankPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State theme: ThemePalette = LIGHT_THEME
   @State isLoading: boolean = true
   @State items: IpRank[] = []
   @State totalConns: number = 0
@@ -28,13 +27,8 @@ struct ConntrackRankPage {
   private rankBadges: string[] = ['🥇', '🥈', '🥉']
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-    this.loadData()
+this.theme = AppState.getInstance().getTheme()
+        this.loadData()
     this.timerId = setInterval(() => this.loadData(), 5000)
   }
 
@@ -116,21 +110,18 @@ struct ConntrackRankPage {
       Column()
         .width('100%').height('100%')
         .linearGradient({
-          angle: 180,
-          colors: this.isDark
-            ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+          angle: 135,
+          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
         Row() {
           Row() {
-            Text('←').fontSize(18).fontColor(this.theme.primary)
             Text(' 连接排行').fontSize(16).fontColor(this.theme.textPrimary)
               .fontWeight(FontWeight.Medium)
           }
           .padding({ left: 12, right: 16, top: 6, bottom: 6 })
-          .borderRadius(100).backgroundColor(this.theme.bgCard).backdropBlur(20)
+          .borderRadius(100).backgroundColor('transparent')
           .border({ width: 0.5, color: this.theme.borderGlass })
           .onClick(() => this.getUIContext().getRouter().back())
 
@@ -211,7 +202,7 @@ struct ConntrackRankPage {
                   top: 8, left: 16, right: 16,
                   bottom: idx < this.items.length - 1 ? 0 : 0
                 })
-                .backgroundColor(this.theme.bgCard).backdropBlur(20)
+                .backgroundColor('transparent')
                 .border({ width: 0.5, color: this.theme.borderGlass })
               })
 

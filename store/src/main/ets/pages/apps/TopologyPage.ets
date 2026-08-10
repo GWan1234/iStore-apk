@@ -3,7 +3,7 @@
  * 可视化设备连接关系：路由器在中心，无线设备（下半区）/ 有线设备（上半区）围绕分布
  */
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { ConnectedDevice } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
 import { window } from '@kit.ArkUI'
@@ -11,8 +11,7 @@ import { window } from '@kit.ArkUI'
 @Entry
 @Component
 struct TopologyPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44
   @State isLoading: boolean = true
   @State errorText: string = ''
@@ -24,14 +23,8 @@ struct TopologyPage {
   private deviceName: string = '路由器'
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-      this.draw()
-    })
-    const device = AppState.getInstance().getActiveDevice()
+this.theme = AppState.getInstance().getTheme()
+        const device = AppState.getInstance().getActiveDevice()
     this.deviceName = device ? (device.label || device.host) : '路由器'
     this.loadTopSafeArea()
     this.loadData()
@@ -137,7 +130,7 @@ struct TopologyPage {
     ctx.fill()
     ctx.beginPath()
     ctx.arc(cx, cy, 27, 0, Math.PI * 2)
-    ctx.fillStyle = this.isDark ? '#0A0E27' : '#FFFFFF'
+    ctx.fillStyle = '#FFFFFF'
     ctx.fill()
     ctx.fillStyle = this.theme.primary
     ctx.font = '22vp sans-serif'
@@ -194,9 +187,9 @@ struct TopologyPage {
       // 标题栏
       Row() {
         Row() {
-          Text('←')
-            .fontSize(18)
-            .fontColor(this.theme.primary)
+          Image($r('app.media.topology'))
+            .width(16)
+            .height(16)
           Text(' 网络拓扑')
             .fontSize(16)
             .fontColor(this.theme.textPrimary)
@@ -210,8 +203,14 @@ struct TopologyPage {
           this.getUIContext().getRouter().back()
         })
         Blank()
-        Text('↻ 刷新')
-          .fontSize(12).fontColor(this.theme.primary)
+        Row() {
+          Image($r('app.media.app_restart'))
+            .width(13)
+            .height(13)
+          Text('刷新')
+            .fontSize(12).fontColor(this.theme.primary)
+            .margin({ left: 4 })
+        }
           .padding({ left: 14, right: 14, top: 7, bottom: 7 })
           .borderRadius(16)
           .backgroundColor('rgba(68,138,255,0.1)')
@@ -250,10 +249,22 @@ struct TopologyPage {
 
         // 拓扑说明
         Column() {
-          Text('📶 绿色节点 = 无线连接（WiFi）')
-            .fontSize(11).fontColor(this.theme.textSecondary)
-          Text('🔌 蓝色节点 = 有线连接（网线）')
-            .fontSize(11).fontColor(this.theme.textSecondary).margin({ top: 4 })
+          Row() {
+            Image($r('app.media.wifi_icon'))
+              .width(14)
+              .height(14)
+            Text('绿色节点 = 无线连接（WiFi）')
+              .fontSize(11).fontColor(this.theme.textSecondary)
+              .margin({ left: 5 })
+          }
+          Row() {
+            Image($r('app.media.green_network_port'))
+              .width(14)
+              .height(14)
+            Text('蓝色节点 = 有线连接（网线）')
+              .fontSize(11).fontColor(this.theme.textSecondary)
+              .margin({ left: 5, top: 4 })
+          }
           Text('最多展示前 12 台无线 + 12 台有线设备')
             .fontSize(10).fontColor(this.theme.textTertiary).margin({ top: 4 })
         }
@@ -270,10 +281,8 @@ struct TopologyPage {
     .width('100%')
     .height('100%')
     .linearGradient({
-      angle: 180,
-      colors: this.isDark
-        ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-        : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+      angle: 135,
+      colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
     })
   }
 }

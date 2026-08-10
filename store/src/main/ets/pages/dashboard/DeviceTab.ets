@@ -1,5 +1,5 @@
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import {ThemePalette} from '../../common/theme/ThemeColors'
 import { ConnectedDevice, WirelessClient } from '../../models/Models'
 import { FormatUtils } from '../../common/utils/FormatUtils'
 import { ApiService } from '../../api/ApiService'
@@ -130,6 +130,101 @@ export struct DeviceTab {
     }
   }
 
+  /** 设备双列分组（每行 2 个） */
+  deviceRows(): ConnectedDevice[][] {
+    const all: ConnectedDevice[] = this.getFilteredDevices()
+    const rows: ConnectedDevice[][] = []
+    for (let i = 0; i < all.length; i += 2) {
+      rows.push(all.slice(i, i + 2))
+    }
+    return rows
+  }
+
+  /** 双列设备卡片（图标 + 名称 + IP + 状态，竖排布局） */
+  @Builder
+  deviceCard(device: ConnectedDevice) {
+    Column() {
+      Row() {
+        // 设备图标
+        Row() {
+          if (this.getDeviceEmoji(device.mac, device.hostname)) {
+            Text(this.getDeviceEmoji(device.mac, device.hostname))
+              .fontSize(22)
+          } else {
+            Image($r('app.media.device'))
+              .width(20).height(20).objectFit(ImageFit.Contain)
+          }
+        }
+        .width(40)
+        .height(40)
+        .borderRadius(14)
+        .backgroundColor(this.theme.bgGlassLight)
+        .justifyContent(FlexAlign.Center)
+
+        Blank()
+
+        // 在线状态
+        Circle()
+          .width(8)
+          .height(8)
+          .foregroundColor(device.isOnline ? this.theme.success : this.theme.textTertiary)
+      }
+      .width('100%')
+
+      // 设备名称
+      Text(this.deviceDisplayName(device))
+        .fontSize(14)
+        .fontColor(this.theme.textPrimary)
+        .fontWeight(FontWeight.Medium)
+        .width('100%')
+        .margin({ top: 8 })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      // IP 地址
+      Text(device.ip)
+        .fontSize(11)
+        .fontColor(this.theme.textSecondary)
+        .fontFamily('monospace')
+        .width('100%')
+        .margin({ top: 3 })
+        .maxLines(1)
+
+      // MAC + 厂商
+      Row() {
+        Text(FormatUtils.formatMac(device.mac))
+          .fontSize(9)
+          .fontColor(this.theme.textTertiary)
+        if (FormatUtils.getVendorName(device.mac) !== 'Unknown') {
+          Text(` · ${FormatUtils.getVendorName(device.mac)}`)
+            .fontSize(9)
+            .fontColor(this.theme.textTertiary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+      }
+      .width('100%')
+      .margin({ top: 3 })
+    }
+    .width('48%')
+    .padding(14)
+    .borderRadius(18)
+    .backgroundColor(this.theme.bgCard)
+    .backdropBlur(20)
+    .border({ width: 0.5, color: this.theme.borderGlass })
+    .alignItems(HorizontalAlign.Start)
+    .onClick(() => {
+      try {
+        this.getUIContext().getRouter().pushUrl({
+          url: 'pages/devices/ClientDetailPage',
+          params: { mac: device.mac, hostname: device.hostname }
+        })
+      } catch (e) {
+        hilog.error(0x0001, 'DeviceTab', `pushUrl failed: ${e}`)
+      }
+    })
+  }
+
   build() {
     Column() {
       // 标题栏
@@ -255,82 +350,17 @@ export struct DeviceTab {
             .border({ width: 0.5, color: this.theme.borderGlass })
             .alignItems(HorizontalAlign.Center)
           } else {
-            ForEach(this.getFilteredDevices(), (device: ConnectedDevice, index: number) => {
+            // 设备双列网格（每行 2 个，仿应用商店列表）
+            ForEach(this.deviceRows(), (row: ConnectedDevice[], rowIdx: number) => {
               Row() {
-                // 设备图标
-                Row() {
-                  if (this.getDeviceEmoji(device.mac, device.hostname)) {
-                    Text(this.getDeviceEmoji(device.mac, device.hostname))
-                      .fontSize(28)
-                  } else {
-                    Image($r('app.media.device'))
-                      .width(24).height(24).objectFit(ImageFit.Contain)
-                  }
-                }
-                .width(44)
-                .height(44)
-                .borderRadius(20)
-                .backgroundColor(this.theme.bgGlassLight)
-                .justifyContent(FlexAlign.Center)
-
-                // 设备信息
-                Column() {
-                  Text(this.deviceDisplayName(device))
-                    .fontSize(15)
-                    .fontColor(this.theme.textPrimary)
-                    .fontWeight(FontWeight.Medium)
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  Row() {
-                    Text(FormatUtils.formatMac(device.mac))
-                      .fontSize(10)
-                      .fontColor(this.theme.textTertiary)
-                    if (FormatUtils.getVendorName(device.mac) !== 'Unknown') {
-                      Text(` · ${FormatUtils.getVendorName(device.mac)}`)
-                        .fontSize(10)
-                        .fontColor(this.theme.textTertiary)
-                    }
-                  }
-                }
-                .margin({ left: 12 })
-                .layoutWeight(1)
-                .alignItems(HorizontalAlign.Start)
-
-                // IP 地址
-                Column() {
-                  Text(device.ip)
-                    .fontSize(12)
-                    .fontColor(this.theme.textPrimary)
-                    .fontWeight(FontWeight.Medium)
-                    .fontFamily('monospace')
-                }
-                .alignItems(HorizontalAlign.End)
-
-                // 在线状态
-                Circle()
-                  .width(8)
-                  .height(8)
-                  .foregroundColor(device.isOnline ? this.theme.success : this.theme.textTertiary)
-                  .margin({ left: 8 })
+                ForEach(row, (device: ConnectedDevice) => {
+                  this.deviceCard(device)
+                }, (device: ConnectedDevice): string => device.mac + device.ip)
               }
               .width('100%')
-              .padding(16)
-              .borderRadius(20)
+              .justifyContent(FlexAlign.SpaceBetween)
               .margin({ top: 10 })
-              .backgroundColor(this.theme.bgCard)
-              .backdropBlur(20)
-              .border({ width: 0.5, color: this.theme.borderGlass })
-              .onClick(() => {
-                try {
-                  this.getUIContext().getRouter().pushUrl({
-                    url: 'pages/devices/ClientDetailPage',
-                    params: { mac: device.mac, hostname: device.hostname }
-                  })
-                } catch (e) {
-                  hilog.error(0x0001, 'MainPage', `pushUrl failed: ${e}`)
-                }
-              })
-            }, (item: ConnectedDevice): string => item.mac + item.ip)
+            }, (row: ConnectedDevice[], rowIdx: number): string => `row_${rowIdx}`)
           }
         }
         .width('100%')

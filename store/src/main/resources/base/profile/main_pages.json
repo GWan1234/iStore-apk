@@ -24,6 +24,7 @@
     "pages/apps/TrafficReportPage",
     "pages/apps/TopologyPage",
     "pages/apps/AiAssistantPage",
-    "pages/apps/SshTerminalPage"
+    "pages/apps/SshTerminalPage",
+    "pages/apps/FileManagerPage"
   ]
 }

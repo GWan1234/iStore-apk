@@ -6,15 +6,14 @@
 import { notificationManager } from '@kit.NotificationKit'
 import { window } from '@kit.ArkUI'
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { NotifyStore } from '../../common/store/NotifyStore'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 
 @Entry
 @Component
 struct NotifySettingsPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44  // 状态栏高度（默认 44vp）
   @State masterEnabled: boolean = false
   @State offlineAlert: boolean = false
@@ -23,13 +22,8 @@ struct NotifySettingsPage {
   private store: NotifyStore = NotifyStore.getInstance()
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-    const hostCtx = this.getUIContext().getHostContext()
+this.theme = AppState.getInstance().getTheme()
+        const hostCtx = this.getUIContext().getHostContext()
     if (hostCtx) {
       this.store.init(hostCtx as Context)
     }
@@ -134,9 +128,6 @@ struct NotifySettingsPage {
       // 标题栏
       Row() {
         Row() {
-          Text('←')
-            .fontSize(18)
-            .fontColor(this.theme.primary)
           Text(' 智能通知')
             .fontSize(16)
             .fontColor(this.theme.textPrimary)
@@ -272,10 +263,8 @@ struct NotifySettingsPage {
     .width('100%')
     .height('100%')
     .linearGradient({
-      angle: 180,
-      colors: this.isDark
-        ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-        : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+      angle: 135,
+      colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
     })
   }
 }

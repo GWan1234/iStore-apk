@@ -1,5 +1,5 @@
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import {LIGHT_THEME, ThemePalette} from '../../common/theme/ThemeColors'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit'
 import { SymbolGlyphModifier, window } from '@kit.ArkUI'
@@ -16,8 +16,7 @@ import { AlbumTab } from './AlbumTab'
 @Entry
 @Component
 struct MainPage {
-  @State theme: ThemePalette = DARK_THEME
-  @State isDark: boolean = true
+  @State theme: ThemePalette = LIGHT_THEME
   @State deviceName: string = ''
   @State navHidden: boolean = false
   @State bottomSafeArea: number = 20  // 默认 20vp，覆盖大部分设备的导航指示条高度
@@ -26,7 +25,6 @@ struct MainPage {
   private tabsController: HdsTabsController = new HdsTabsController()
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
     this.theme = AppState.getInstance().getTheme()
     const device = AppState.getInstance().getActiveDevice()
     this.deviceName = device ? (device.label || device.host) : '未连接'
@@ -42,15 +40,21 @@ struct MainPage {
     }
 
     AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
       this.theme = AppState.getInstance().getTheme()
-      // 主题切换后同步状态栏图标颜色（沉浸式）
+      // 统一亮色主题：状态栏图标同步为深色
       try {
         const ctx = this.getUIContext().getHostContext()
         if (ctx) {
-          applyImmersiveBar(ctx as Context, this.isDark)
+          applyImmersiveBar(ctx as Context, false)
         }
       } catch (e) {}
+    })
+
+    // 订阅外部主 Tab 切换请求（首页快捷区：iStore 商店 / Docker）
+    AppState.getInstance().onTabChange((tab: number) => {
+      if (tab >= 0 && tab <= 5) {
+        this.tabsController.changeIndex(tab)
+      }
     })
 
     AppState.getInstance().onNavChange(() => {
@@ -118,10 +122,8 @@ struct MainPage {
         .width('100%')
         .height('100%')
         .linearGradient({
-          angle: 180,
-          colors: this.isDark
-            ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+          angle: 135,
+          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
@@ -216,7 +218,7 @@ struct MainPage {
         .barFloatingStyle({
           barWidth: { smallWidth: 320, mediumWidth: 400, largeWidth: 480 },
           barBottomMargin: this.navHidden ? -100 : (28 + this.bottomSafeArea),
-          gradientMask: { maskColor: this.isDark ? '#22000000' : '#33E8ECF1', maskHeight: 88 },
+          gradientMask: { maskColor: '#33F5F1EE', maskHeight: 88 },
           systemMaterialEffect: {
             materialType: hdsMaterial.MaterialType.IMMERSIVE,
             materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE

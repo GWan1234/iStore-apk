@@ -1,4 +1,4 @@
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { AppState } from '../../common/store/AppState'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { http } from '@kit.NetworkKit'
@@ -24,8 +24,7 @@ interface ToolGroup {
 @Entry
 @Component
 struct AppsPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State theme: ThemePalette = LIGHT_THEME
   @State itemSlides: number[] = []
   @State deviceName: string = '未连接设备'
   @State deviceHost: string = ''
@@ -37,35 +36,36 @@ struct AppsPage {
     {
       title: '网络',
       items: [
-        { emoji: '📶', name: 'WiFi 管理', desc: '无线网络状态与配置管理', route: 'pages/apps/WifiPage' },
-        { emoji: '🌐', name: '网络管理', desc: '接口状态与网络信息', route: 'pages/apps/NetworkPage' },
-        { emoji: '📊', name: '流量排行',  desc: '按速率排名的客户端活跃度', route: 'pages/apps/TrafficRankPage' },
-        { emoji: '🔗', name: '连接排行',  desc: '发现 NAT 连接数最多的设备', route: 'pages/apps/ConntrackRankPage' },
+        { emoji: '📶', name: 'WiFi 管理', desc: '无线网络状态与配置管理', route: 'pages/apps/WifiPage', iconResource: $r('app.media.wifi_icon') },
+        { emoji: '🌐', name: '网络管理', desc: '接口状态与网络信息', route: 'pages/apps/NetworkPage', iconResource: $r('app.media.network_mgmt') },
+        { emoji: '📊', name: '流量排行',  desc: '按速率排名的客户端活跃度', route: 'pages/apps/TrafficRankPage', iconResource: $r('app.media.ranking') },
+        { emoji: '🔗', name: '连接排行',  desc: '发现 NAT 连接数最多的设备', route: 'pages/apps/ConntrackRankPage', iconResource: $r('app.media.active_connections') },
         { emoji: '',  name: '网口流量',  desc: '各接口实时速率与累计统计', route: 'pages/apps/PortTrafficPage', iconResource: $r('app.media.flow_monitoring') },
-        { emoji: '🖧', name: '物理网口',  desc: '查看物理端口连接状态与速率', route: 'pages/apps/EthPortPage' },
-        { emoji: '📈', name: '流量统计',  desc: '近 7/30 天每日流量趋势', route: 'pages/apps/TrafficReportPage' },
-        { emoji: '🗺', name: '网络拓扑',  desc: '可视化设备连接关系图', route: 'pages/apps/TopologyPage' },
+        { emoji: '🖧', name: '物理网口',  desc: '查看物理端口连接状态与速率', route: 'pages/apps/EthPortPage', iconResource: $r('app.media.green_network_port') },
+        { emoji: '📈', name: '流量统计',  desc: '近 7/30 天每日流量趋势', route: 'pages/apps/TrafficReportPage', iconResource: $r('app.media.traffic_pipe') },
+        { emoji: '🗺', name: '网络拓扑',  desc: '可视化设备连接关系图', route: 'pages/apps/TopologyPage', iconResource: $r('app.media.topology') },
       ]
     },
     {
       title: '管理',
       items: [
-        { emoji: '🛡️', name: '家长控制',  desc: 'OAF 应用过滤引擎配置', route: 'pages/apps/OafPage' },
-        { emoji: '⚙️', name: '系统进程',  desc: '查看和管理运行中的进程', route: 'pages/process/ProcessListPage' },
-        { emoji: '🚀', name: '启动项',   desc: '管理开机自启服务', route: 'pages/process/StartupPage' },
-        { emoji: '🔔', name: '智能通知',  desc: '断网告警与新设备接入提醒', route: 'pages/apps/NotifySettingsPage' },
-        { emoji: '⏰', name: '定时任务',  desc: '定时重启与定时开关 WiFi', route: 'pages/apps/SchedulePage' },
-        { emoji: '🤖', name: 'AI 网络助手', desc: '自然语言查询网络状态', route: 'pages/apps/AiAssistantPage' },
-        { emoji: '⌨️', name: 'SSH 终端',   desc: '命令行管理路由器', route: 'pages/apps/SshTerminalPage' },
+        { emoji: '🛡️', name: '家长控制',  desc: 'OAF 应用过滤引擎配置', route: 'pages/apps/OafPage', iconResource: $r('app.media.app_shield') },
+        { emoji: '⚙️', name: '系统进程',  desc: '查看和管理运行中的进程', route: 'pages/process/ProcessListPage', iconResource: $r('app.media.app_gear') },
+        { emoji: '🚀', name: '启动项',   desc: '管理开机自启服务', route: 'pages/process/StartupPage', iconResource: $r('app.media.app_rocket') },
+        { emoji: '🔔', name: '智能通知',  desc: '断网告警与新设备接入提醒', route: 'pages/apps/NotifySettingsPage', iconResource: $r('app.media.app_bell') },
+        { emoji: '⏰', name: '定时任务',  desc: '定时重启与定时开关 WiFi', route: 'pages/apps/SchedulePage', iconResource: $r('app.media.schedule') },
+        { emoji: '🤖', name: 'AI 网络助手', desc: '自然语言查询网络状态', route: 'pages/apps/AiAssistantPage', iconResource: $r('app.media.ai_assistant') },
+        { emoji: '⌨️', name: 'SSH 终端',   desc: '命令行管理路由器', route: 'pages/apps/SshTerminalPage', iconResource: $r('app.media.terminal') },
+        { emoji: '📁', name: '文件管理',   desc: '浏览管理 OpenWrt 文件', route: 'pages/apps/FileManagerPage', iconResource: $r('app.media.folder_file') },
       ]
     },
     {
       title: '系统',
       items: [
-        { emoji: '🔄', name: '重启',     desc: '重启路由器设备', route: 'pages/system/RebootPage' },
-        { emoji: '🔙', name: '恢复出厂', desc: '恢复设备到出厂设置', route: 'pages/system/FactoryResetPage' },
-        { emoji: '🌐', name: 'OpenWRT 首页', desc: '打开路由器管理后台', route: 'pages/apps/WebViewPage' },
-        { emoji: 'ℹ️', name: '关于',     desc: '版本信息与更新检查', route: '__about__' },
+        { emoji: '🔄', name: '重启',     desc: '重启路由器设备', route: 'pages/system/RebootPage', iconResource: $r('app.media.app_restart') },
+        { emoji: '🔙', name: '恢复出厂', desc: '恢复设备到出厂设置', route: 'pages/system/FactoryResetPage', iconResource: $r('app.media.app_reset') },
+        { emoji: '🌐', name: 'OpenWRT 首页', desc: '打开路由器管理后台', route: 'pages/apps/WebViewPage', iconResource: $r('app.media.app_globe') },
+        { emoji: 'ℹ️', name: '关于',     desc: '版本信息与更新检查', route: '__about__', iconResource: $r('app.media.app_info') },
       ]
     },
   ]
@@ -131,13 +131,8 @@ struct AppsPage {
   }
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-
+this.theme = AppState.getInstance().getTheme()
+    
     // 填充设备信息（仿应用商店「我的」个人卡片）
     const active = AppState.getInstance().getActiveDevice()
     this.deviceConnected = AppState.getInstance().isConnected()
@@ -170,27 +165,67 @@ struct AppsPage {
     return idx + itemIdx
   }
 
+  /** 分组内双列分组（每行 2 个） */
+  groupRows(items: ToolEntry[]): ToolEntry[][] {
+    const rows: ToolEntry[][] = []
+    for (let i = 0; i < items.length; i += 2) {
+      rows.push(items.slice(i, i + 2))
+    }
+    return rows
+  }
+
+  /** 双列功能方块（图标 + 名称，紧凑应用商店风格） */
+  @Builder
+  toolCard(tool: ToolEntry, slideIdx: number) {
+    Column() {
+      // 图标（直接显示，不包内层方框）
+      Row() {
+        if (tool.iconResource) {
+          Image(tool.iconResource).width(26).height(26).objectFit(ImageFit.Contain)
+        } else {
+          Text(tool.emoji).fontSize(24)
+        }
+      }
+      .justifyContent(FlexAlign.Center)
+
+      Text(tool.name)
+        .fontSize(11)
+        .fontColor(this.theme.textPrimary)
+        .fontWeight(FontWeight.Medium)
+        .margin({ top: 6 })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .width('48%')
+    .padding(10)
+    .borderRadius(14)
+    .backgroundColor(this.theme.bgCard)
+    .backdropBlur(20)
+    .border({ width: 0.5, color: this.theme.borderGlass })
+    .alignItems(HorizontalAlign.Center)
+    .opacity(this.itemSlides.length > slideIdx && this.itemSlides[slideIdx] === 0 ? 1 : 0)
+    .translate({ x: this.itemSlides.length > slideIdx ? this.itemSlides[slideIdx] : 300 })
+    .onClick(() => this.handleClick(tool))
+  }
+
   build() {
     Stack() {
       Column()
         .width('100%').height('100%')
         .linearGradient({
-          angle: 180,
-          colors: this.isDark
-            ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+          angle: 135,
+          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
         // 顶栏
         Row() {
           Row() {
-            Text('←').fontSize(18).fontColor(this.theme.primary)
             Text(' 应用中心').fontSize(16).fontColor(this.theme.textPrimary)
               .fontWeight(FontWeight.Medium)
           }
           .padding({ left: 12, right: 16, top: 6, bottom: 6 })
-          .borderRadius(100).backgroundColor(this.theme.bgCard).backdropBlur(20)
+          .borderRadius(100).backgroundColor('transparent')
           .border({ width: 0.5, color: this.theme.borderGlass })
           .onClick(() => {
             try { this.getUIContext().getRouter().back() }
@@ -198,15 +233,6 @@ struct AppsPage {
           })
 
           Blank()
-
-          Row() {
-            Text(this.isDark ? '☀' : '🌙').fontSize(16)
-          }
-          .width(34).height(34).borderRadius(17)
-          .backgroundColor(this.theme.bgCard)
-          .border({ width: 0.5, color: this.theme.borderGlass })
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => AppState.getInstance().toggleTheme())
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 48, bottom: 12 })
@@ -218,9 +244,8 @@ struct AppsPage {
             Row() {
               // 圆形设备头像
               Row() {
-                SymbolGlyph($r('sys.symbol.externaldrive_fill_3'))
-                  .fontSize(30)
-                  .fontColor([this.theme.primary])
+                Image($r('app.media.app_drive'))
+                  .width(32).height(32)
               }
               .width(64).height(64).borderRadius(32)
               .backgroundColor(this.deviceConnected ? 'rgba(68,138,255,0.15)' : 'rgba(255,82,82,0.12)')
@@ -265,81 +290,47 @@ struct AppsPage {
               .alignItems(HorizontalAlign.Center)
               .padding({ left: 12, right: 4 })
             }
-            .width('100%')
+            .width('calc(100% - 56px)')
             .padding(18)
             .borderRadius(20)
             .backgroundColor(this.theme.bgCard)
             .backdropBlur(20)
             .border({ width: 0.5, color: this.theme.borderGlass })
-            .margin({ left: 16, right: 16, top: 8 })
+            .margin({ left: 28, right: 28, top: 8 })
 
-            // ===== 分组大卡片（行间分割线）=====
+            // ===== 分组（横线式标题 + 双列方块，无大卡片框）=====
             ForEach(this.groups, (group: ToolGroup, gIdx: number) => {
               Column() {
-                // 分类标题
-                Text(group.title)
-                  .fontSize(13).fontColor(this.theme.textSecondary)
-                  .width('100%')
-                  .padding({ left: 18, right: 18, top: 20, bottom: 8 })
-
-                // 整组一张大卡片
-                Column() {
-                  ForEach(group.items, (tool: ToolEntry, tIdx: number) => {
-                    Column() {
-                      Row() {
-                        // 左侧图标
-                        Row() {
-                          if (tool.iconResource) {
-                            Image(tool.iconResource).width(22).height(22).objectFit(ImageFit.Contain)
-                          } else {
-                            Text(tool.emoji).fontSize(20)
-                          }
-                        }
-                        .width(40).height(40).borderRadius(12)
-                        .backgroundColor(this.theme.bgGlassLight)
-                        .justifyContent(FlexAlign.Center)
-
-                        // 中间文字
-                        Column() {
-                          Text(tool.name)
-                            .fontSize(15).fontColor(this.theme.textPrimary)
-                            .fontWeight(FontWeight.Medium)
-                          Text(tool.desc)
-                            .fontSize(11).fontColor(this.theme.textTertiary)
-                            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                            .margin({ top: 2 })
-                        }
-                        .alignItems(HorizontalAlign.Start)
-                        .layoutWeight(1)
-                        .margin({ left: 12 })
-
-                        // 右侧箭头
-                        Text('›').fontSize(20).fontColor(this.theme.textTertiary)
-                      }
-                      .width('100%')
-                      .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-                      .onClick(() => this.handleClick(tool))
-
-                      // 行间分割线（除最后一项）
-                      if (tIdx < group.items.length - 1) {
-                        Row()
-                          .width('calc(100% - 28px)')
-                          .height(0.5)
-                          .backgroundColor(this.theme.borderGlass)
-                          .margin({ left: 14 })
-                      }
-                    }
-                    .width('100%')
-                    .opacity(this.getSlideIndex(gIdx, tIdx) < this.itemSlides.length && this.itemSlides[this.getSlideIndex(gIdx, tIdx)] === 0 ? 1 : 0)
-                    .translate({ x: this.itemSlides.length > this.getSlideIndex(gIdx, tIdx) ? this.itemSlides[this.getSlideIndex(gIdx, tIdx)] : 300 })
-                  })
+                // 横线式分类标题：———— 网络 ————
+                Row() {
+                  Row()
+                    .layoutWeight(1)
+                    .height(0.5)
+                    .backgroundColor(this.theme.borderGlass)
+                  Text(group.title)
+                    .fontSize(12)
+                    .fontColor(this.theme.textSecondary)
+                    .margin({ left: 12, right: 12 })
+                  Row()
+                    .layoutWeight(1)
+                    .height(0.5)
+                    .backgroundColor(this.theme.borderGlass)
                 }
                 .width('100%')
-                .borderRadius(18)
-                .backgroundColor(this.theme.bgCard)
-                .backdropBlur(20)
-                .border({ width: 0.5, color: this.theme.borderGlass })
-                .padding({ top: 4, bottom: 4 })
+                .padding({ left: 18, right: 18, top: 20, bottom: 6 })
+
+                // 双列方块网格（无卡片容器，直接浮在背景上）
+                ForEach(this.groupRows(group.items), (row: ToolEntry[], rowIdx: number) => {
+                  Row() {
+                    ForEach(row, (tool: ToolEntry, colIdx: number) => {
+                      this.toolCard(tool, this.getSlideIndex(gIdx, rowIdx * 2 + colIdx))
+                    }, (tool: ToolEntry): string => tool.name + tool.desc)
+                  }
+                  .width('100%')
+                  .justifyContent(FlexAlign.SpaceBetween)
+                  .padding({ left: 12, right: 12 })
+                  .margin({ top: 8 })
+                }, (row: ToolEntry[], rowIdx: number): string => `row_${rowIdx}`)
               }
               .width('100%')
               .margin({ left: 16, right: 16 })

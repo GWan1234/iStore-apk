@@ -1,13 +1,13 @@
 {
   "name": "store",
-  "version": "2.8.9",
+  "version": "3.0.0",
   "description": "Please describe the basic information.",
   "main": "",
   "author": "",
   "license": "",
   "dependencies": {
-    "@ohos-rs/ssh": "^0.0.1",
-    "@pura/harmony-utils": "^1.4.2"
+    "@pura/harmony-utils": "^1.4.2",
+    "libentry.so": "file:./src/main/cpp/types/libentry"
   },
   "devDependencies": {},
   "dynamicDependencies": {}

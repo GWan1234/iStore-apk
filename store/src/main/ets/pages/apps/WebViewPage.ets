@@ -4,7 +4,7 @@ import { webview } from '@kit.ArkWeb'
  * 通过 WebView 加载路由器的 Web 管理界面
  * 支持自动登录（注入用户名密码到登录表单）
  */
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { AppState } from '../../common/store/AppState'
 import { SavedDevice } from '../../common/store/DeviceStore'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -15,8 +15,7 @@ const DOMAIN = 0x0001
 @Entry
 @Component
 struct WebViewPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State theme: ThemePalette = LIGHT_THEME
   @State loadingProgress: number = 0
   @State isLoading: boolean = true
   @State webUrl: string = ''
@@ -28,14 +27,9 @@ struct WebViewPage {
   private autoLoginDone: boolean = false
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
+this.theme = AppState.getInstance().getTheme()
 
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-
+    
     const activeDevice: SavedDevice | undefined = AppState.getInstance().getActiveDevice()
     if (activeDevice) {
       this.username = activeDevice.username || 'root'
@@ -245,18 +239,13 @@ struct WebViewPage {
         .width('100%')
         .height('100%')
         .linearGradient({
-          angle: 180,
-          colors: this.isDark
-            ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+          angle: 135,
+          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
         Row() {
           Row() {
-            Text('←')
-              .fontSize(18)
-              .fontColor(this.theme.primary)
             Text(this.pageTitle)
               .fontSize(16)
               .fontColor(this.theme.textPrimary)
@@ -274,22 +263,7 @@ struct WebViewPage {
               hilog.error(DOMAIN, TAG, `router.back failed: ${e}`)
             }
           })
-
           Blank()
-
-          Row() {
-            Text(this.isDark ? '☀️' : '🌙')
-              .fontSize(18)
-          }
-          .width(36)
-          .height(36)
-          .borderRadius(18)
-          .backgroundColor(this.theme.bgCard)
-          .border({ width: 0.5, color: this.theme.borderGlass })
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => {
-            AppState.getInstance().toggleTheme()
-          })
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 48, bottom: 8 })

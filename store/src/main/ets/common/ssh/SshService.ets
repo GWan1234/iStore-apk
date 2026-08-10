@@ -1,18 +1,51 @@
 /**
- * SshService - SSH 终端服务（基于 @ohos-rs/ssh）
- * 复用设备保存的用户名/密码，保持长连接执行命令
+ * SshService - SSH 终端服务（基于 CrossShellNext 的 libssh2 NAPI 封装 libentry）
+ * - openProtocol 建立会话（sessionId 管理）
+ * - sendTerminalCommand 走 channel exec（Xshell 阻塞模式），Promise 直接返回输出
+ * - SFTP 完整（listDirectory/upload/download/rename/delete 等）供文件管理使用
  */
-import { connect, Client, DisconnectReason } from '@ohos-rs/ssh'
 import { SavedDevice } from '../store/DeviceStore'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import {
+  openProtocol, sendTerminalCommand, closeProtocol,
+  initSftp, listDirectory, SftpFileInfo,
+  deleteFile, createDirectory, deleteDirectory, rename,
+  uploadFile, downloadFile, cancelTransfer
+} from 'libentry.so'
 
 const DOMAIN = 0x0001
 const TAG = 'SshService'
 
+/** openProtocol 连接配置（C++ cJSON 解析字段） */
+interface ConnectSession {
+  connectionType: string
+  hostName: string
+  port: string
+  userName: string
+  password: string
+  authType: string
+  keepAlive: number
+}
+
+interface ConnectConfig {
+  Session: ConnectSession
+  Connection: ConnectConnection
+}
+
+/** C++ cJSON 解析要求 Connection.keepalive（数字）与 version（字符串）必填 */
+interface ConnectConnection {
+  keepalive: number
+  version: string
+}
+
 export class SshService {
   private static instance: SshService
-  private client: Client | null = null
+  private sessionId: number = -1
+  private connectedFlag: boolean = false
   private hostName: string = ''
+  /** 最近一次操作错误信息（页面诊断用） */
+  lastError: string = ''
+  private sftpInited: boolean = false
 
   static getInstance(): SshService {
     if (!SshService.instance) {
@@ -21,64 +54,259 @@ export class SshService {
     return SshService.instance
   }
 
-  /** 连接路由器（SSH 端口 22） */
+  private constructor() {
+  }
+
+  /** 连接路由器（libssh2 交互会话） */
   async connect(device: SavedDevice): Promise<boolean> {
     this.disconnect()
+    // 等待 closeProtocol 异步完成，避免 C++ 侧 "Session busy" 拒绝
+    await this.sleep(400)
+    this.lastError = ''
     try {
-      const hostPort: string = `${device.host}:22`
-      const client: Client = await connect(hostPort)
-      const authOk: boolean = await client.authenticatePassword(device.username, device.password)
-      if (!authOk) {
-        try { client.disconnect(DisconnectReason.ByApplication, '', '') } catch (_e) {}
-        hilog.error(DOMAIN, TAG, 'SSH 密码认证失败')
+      const sessionCfg: ConnectSession = {
+        connectionType: 'SSH',
+        hostName: device.host,
+        port: '22',
+        userName: device.username,
+        password: device.password,
+        authType: 'password',
+        keepAlive: 60
+      }
+      const connCfg: ConnectConnection = { keepalive: 60, version: '1.0' }
+      const connectCfg: ConnectConfig = { Session: sessionCfg, Connection: connCfg }
+      const cfg: string = JSON.stringify(connectCfg)
+      const sid: number = await openProtocol(cfg)
+      if (sid < 0) {
+        this.lastError = 'SSH 连接失败：请确认路由器已开启 SSH（端口 22）、账号密码正确'
+        hilog.error(DOMAIN, TAG, `openProtocol failed: ${sid}`)
         return false
       }
-      this.client = client
+      this.sessionId = sid
+      this.connectedFlag = true
       this.hostName = device.host
-      hilog.info(DOMAIN, TAG, `SSH connected: ${hostPort}`)
+      this.sftpInited = false
+      hilog.info(DOMAIN, TAG, `SSH connected: ${device.host} sid=${sid}`)
       return true
     } catch (e) {
-      hilog.error(DOMAIN, TAG, `connect err: ${JSON.stringify(e)}`)
+      const msg: string = SshService.errorMessage(e)
+      this.lastError = `连接异常: ${msg}`
+      hilog.error(DOMAIN, TAG, this.lastError)
       return false
     }
   }
 
-  /** 执行命令，返回输出文本 */
-  async exec(cmd: string): Promise<string> {
-    if (!this.client) {
-      return '未连接 SSH，请先连接'
+  /** 提取错误可读信息（Error.message 不可枚举，JSON.stringify 会显示 {}） */
+  static errorMessage(e: Object): string {
+    try {
+      const err = e as Error
+      if (err && err.message && err.message.length > 0) {
+        return err.message
+      }
+      const rec = e as Record<string, Object>
+      if (rec && rec['message'] !== undefined) {
+        return String(rec['message'])
+      }
+    } catch (_e) {}
+    return JSON.stringify(e)
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      setTimeout(resolve, ms)
+    })
+  }
+
+  /** 发送命令（channel exec 直接返回输出，绕开回调链路） */
+  async sendCommand(cmd: string): Promise<string> {
+    hilog.info(DOMAIN, TAG, `sendCommand called: conn=${this.connectedFlag} sid=${this.sessionId}`)
+    if (!this.connectedFlag) {
+      hilog.warn(DOMAIN, TAG, 'sendCommand skipped: not connected')
+      return ''
     }
     try {
-      const output = await this.client.exec(cmd)
-      // Decode ArrayBuffer to string
-      const bytes = new Uint8Array(output.output as ArrayBuffer)
-      let result: string = ''
-      for (let i = 0; i < bytes.length; i++) {
-        result += String.fromCharCode(bytes[i])
-      }
-      return result
+      const out: string = await sendTerminalCommand(this.sessionId, cmd)
+      hilog.info(DOMAIN, TAG, `sendCommand ok, out ${out.length} bytes`)
+      return out
     } catch (e) {
-      hilog.error(DOMAIN, TAG, `exec err: ${JSON.stringify(e)}`)
-      return `命令执行失败：${JSON.stringify(e)}`
+      hilog.error(DOMAIN, TAG, `sendCommand err: ${JSON.stringify(e)}`)
+      return ''
     }
+  }
+
+  /** 一次性执行命令（channel exec 直接返回输出，Xshell 阻塞模式） */
+  async exec(cmd: string): Promise<string> {
+    if (!this.connectedFlag) {
+      return '未连接 SSH，请先连接'
+    }
+    return await this.sendCommand(cmd)
+  }
+
+  /** 在当前目录下执行命令（App 模拟 cd 状态：前缀 cd） */
+  async execInDir(cwd: string, cmd: string): Promise<string> {
+    const dir: string = cwd.endsWith('/') ? cwd.slice(0, -1) : cwd
+    return await this.exec(`cd '${dir}' && ${cmd}`)
+  }
+
+  // ==================== SFTP（文件管理） ====================
+
+  private ensureSftp(): boolean {
+    if (!this.connectedFlag) return false
+    if (!this.sftpInited) {
+      try {
+        this.sftpInited = initSftp(this.sessionId)
+      } catch (e) {
+        hilog.error(DOMAIN, TAG, `initSftp err: ${JSON.stringify(e)}`)
+        return false
+      }
+    }
+    return this.sftpInited
+  }
+
+  /** 列出目录（SFTP） */
+  async sftpList(path: string): Promise<SftpFileInfo[]> {
+    if (!this.ensureSftp()) throw new Error('SFTP 初始化失败（可能未安装 openssh-sftp-server）')
+    return await new Promise<SftpFileInfo[]>((resolve, reject) => {
+      listDirectory(this.sessionId, path, (err: Error | null, result: SftpFileInfo[]) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve(result)
+        }
+      })
+    })
+  }
+
+  /** 删除文件/目录（SFTP） */
+  async sftpDelete(path: string, isDir: boolean): Promise<void> {
+    if (!this.ensureSftp()) throw new Error('SFTP 不可用')
+    const fn: (sid: number, p: string, cb: (err: Error | null, ok: boolean) => void) => void =
+      isDir ? deleteDirectory : deleteFile
+    return await new Promise<void>((resolve, reject) => {
+      fn(this.sessionId, path, (err: Error | null, ok: boolean) => {
+        if (err || !ok) {
+          reject(err || new Error('删除失败'))
+        } else {
+          resolve()
+        }
+      })
+    })
+  }
+
+  /** 新建目录（SFTP） */
+  async sftpMkdir(path: string): Promise<void> {
+    if (!this.ensureSftp()) throw new Error('SFTP 不可用')
+    return await new Promise<void>((resolve, reject) => {
+      createDirectory(this.sessionId, path, (err: Error | null, ok: boolean) => {
+        if (err || !ok) {
+          reject(err || new Error('创建失败'))
+        } else {
+          resolve()
+        }
+      })
+    })
+  }
+
+  /** 重命名/移动（SFTP） */
+  async sftpRename(oldPath: string, newPath: string): Promise<void> {
+    if (!this.ensureSftp()) throw new Error('SFTP 不可用')
+    return await new Promise<void>((resolve, reject) => {
+      rename(this.sessionId, oldPath, newPath, (err: Error | null, ok: boolean) => {
+        if (err || !ok) {
+          reject(err || new Error('重命名失败'))
+        } else {
+          resolve()
+        }
+      })
+    })
+  }
+
+  /** 上传文件（SFTP，带进度） */
+  async sftpUpload(fd: number, targetDir: string, fileName: string): Promise<void> {
+    if (!this.ensureSftp()) throw new Error('SFTP 不可用')
+    return await new Promise<void>((resolve, reject) => {
+      uploadFile(
+        this.sessionId,
+        [{ fd: fd, name: fileName }],
+        targetDir,
+        () => {},
+        (err: Error | null) => {
+          if (err) {
+            reject(err)
+          } else {
+            resolve()
+          }
+        }
+      )
+    })
+  }
+
+  /** 下载文件到本地 fd（SFTP，带进度） */
+  async sftpDownload(remotePath: string, fd: number): Promise<void> {
+    if (!this.ensureSftp()) throw new Error('SFTP 不可用')
+    return await new Promise<void>((resolve, reject) => {
+      downloadFile(
+        this.sessionId,
+        remotePath,
+        fd,
+        () => {},
+        (err: Error | null) => {
+          if (err) {
+            reject(err)
+          } else {
+            resolve()
+          }
+        }
+      )
+    })
+  }
+
+  /** 检测 SFTP 是否可用 */
+  async checkSftp(): Promise<boolean> {
+    try {
+      const list: SftpFileInfo[] = await this.sftpList('/')
+      return list !== null && list.length > 0
+    } catch (e) {
+      return false
+    }
+  }
+
+  /**
+   * 清洗 shell 输出：去提示符行/ANSI 控制符
+   */
+  static cleanShellOut(s: string): string {
+    if (!s) return ''
+    let t: string = s.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '')
+    const lines: string[] = t.split('\n')
+    const out: string[] = []
+    for (let i = 0; i < lines.length; i++) {
+      const ln: string = lines[i]
+      if (/^\s*\S+@\S+[:\s~].*[#$]\s*$/.test(ln) && ln.length < 80) {
+        continue
+      }
+      out.push(ln)
+    }
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').trim()
   }
 
   /** 断开连接 */
   disconnect(): void {
-    if (this.client) {
+    if (this.sessionId >= 0) {
       try {
-        this.client.disconnect(DisconnectReason.ByApplication, '', '')
+        closeProtocol(this.sessionId)
       } catch (e) {
         hilog.error(DOMAIN, TAG, `disconnect err: ${JSON.stringify(e)}`)
       }
-      this.client = null
     }
+    this.sessionId = -1
+    this.connectedFlag = false
     this.hostName = ''
+    this.sftpInited = false
   }
 
   /** 是否已连接 */
   isConnected(): boolean {
-    return this.client !== null
+    return this.connectedFlag
   }
 
   /** 当前连接主机 */

@@ -1,5 +1,5 @@
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { NetworkInterface, ConnectedDevice } from '../../models/Models'
 import { FormatUtils } from '../../common/utils/FormatUtils'
 import { ApiService } from '../../api/ApiService'
@@ -20,8 +20,7 @@ function getTypeColor(t: string): string {
 @Entry
 @Component
 struct PortTrafficPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State theme: ThemePalette = LIGHT_THEME
   @State isLoading: boolean = true
   @State interfaces: NetworkInterface[] = []
   @State errorText: string = ''
@@ -30,13 +29,8 @@ struct PortTrafficPage {
   private rankGolds: string[] = ['🥇', '🥈', '🥉']
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-    this.loadData()
+this.theme = AppState.getInstance().getTheme()
+        this.loadData()
     this.timerId = setInterval(() => this.loadData(), 3000)
   }
 
@@ -95,19 +89,14 @@ struct PortTrafficPage {
         .width('100%')
         .height('100%')
         .linearGradient({
-          angle: 180,
-          colors: this.isDark
-            ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+          angle: 135,
+          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
         // 顶栏
         Row() {
           Row() {
-            Text('←')
-              .fontSize(18)
-              .fontColor(this.theme.primary)
             Text(' 网口流量')
               .fontSize(16)
               .fontColor(this.theme.textPrimary)
@@ -170,7 +159,7 @@ struct PortTrafficPage {
               }
               .width('100%').padding(16).borderRadius(14)
               .margin({ top: 8, left: 16, right: 16 })
-              .backgroundColor(this.theme.bgCard).backdropBlur(20)
+              .backgroundColor('transparent')
               .border({ width: 0.5, color: this.theme.borderGlass })
 
               // ======== 排行列表 ========
@@ -271,7 +260,7 @@ struct PortTrafficPage {
                     left: 16, right: 16,
                     bottom: idx < this.interfaces.length - 1 ? 0 : 0
                   })
-                  .backgroundColor(this.theme.bgCard).backdropBlur(20)
+                  .backgroundColor('transparent')
                   .border({ width: 0.5, color: this.theme.borderGlass })
                 })
               }

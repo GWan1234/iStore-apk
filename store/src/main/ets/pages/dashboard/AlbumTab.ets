@@ -1,5 +1,5 @@
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import {ThemePalette} from '../../common/theme/ThemeColors'
 import { ImmichStore, ImmichConfig } from '../../common/store/ImmichStore'
 import { ImmichClient, ImmichAlbum, ImmichServerInfo, ImmichAsset } from '../../api/ImmichClient'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -28,7 +28,6 @@ interface PhotoDay {
 @Component
 export struct AlbumTab {
   @Prop theme: ThemePalette
-  @State isDark: boolean = true
   @State configured: boolean = false
   @State baseUrl: string = ''
   @State apiKey: string = ''
@@ -101,12 +100,10 @@ export struct AlbumTab {
   private themeListener: (() => void) | null = null
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
+this.theme = AppState.getInstance().getTheme()
     // 订阅主题变化（胶囊导航条颜色随主题切换）
     this.themeListener = () => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
+this.theme = AppState.getInstance().getTheme()
     }
     AppState.getInstance().onThemeChange(this.themeListener)
     // 底部导航 inset（相对布局，避免被主页悬浮导航遮挡）
@@ -768,9 +765,9 @@ export struct AlbumTab {
                     .width('100%').height('100%')
                     .objectFit(ImageFit.Contain)
                   // 播放按钮
-                  SymbolGlyph($r('sys.symbol.play_circle_fill'))
-                    .fontSize(64)
-                    .fontColor([Color.White])
+                  Image($r('app.media.app_play'))
+                    .width(64)
+                    .height(64)
                     .opacity(0.92)
                 }
                 .width('100%').height('100%')
@@ -822,15 +819,13 @@ export struct AlbumTab {
                       Row() {
                         // 播放/暂停
                         if (this.videoPaused[idx]) {
-                          SymbolGlyph($r('sys.symbol.play_circle_fill'))
-                            .fontSize(30)
-                            .fontColor([Color.White])
+                          Image($r('app.media.app_play'))
+                            .width(30).height(30)
                             .padding(6)
                             .onClick(() => this.toggleVideoPlayPause(idx))
                         } else {
-                          SymbolGlyph($r('sys.symbol.pause_circle_fill'))
-                            .fontSize(30)
-                            .fontColor([Color.White])
+                          Image($r('app.media.app_pause'))
+                            .width(30).height(30)
                             .padding(6)
                             .onClick(() => this.toggleVideoPlayPause(idx))
                         }
@@ -861,15 +856,13 @@ export struct AlbumTab {
                           .margin({ right: 6 })
                         // 全屏按钮（点按自动横屏）
                         if (this.videoFullscreen) {
-                          SymbolGlyph($r('sys.symbol.arrow_down_right_and_arrow_up_left'))
-                            .fontSize(22)
-                            .fontColor([Color.White])
+                          Image($r('app.media.app_expand'))
+                            .width(22).height(22)
                             .padding(8)
                             .onClick(() => this.toggleVideoFullscreen())
                         } else {
-                          SymbolGlyph($r('sys.symbol.arrow_up_left_and_arrow_down_right'))
-                            .fontSize(22)
-                            .fontColor([Color.White])
+                          Image($r('app.media.app_expand'))
+                            .width(22).height(22)
                             .padding(8)
                             .onClick(() => this.toggleVideoFullscreen())
                         }
@@ -1148,8 +1141,8 @@ export struct AlbumTab {
       // 照片
       Column() {
         Row() {
-          SymbolGlyph($r('sys.symbol.picture'))
-            .fontSize(13).fontColor([this.theme.textSecondary])
+          Image($r('app.media.app_picture'))
+            .width(15).height(15)
           Text(' 相册')
             .fontSize(10).fontColor(this.theme.textSecondary)
         }
@@ -1163,8 +1156,8 @@ export struct AlbumTab {
       // 视频
       Column() {
         Row() {
-          SymbolGlyph($r('sys.symbol.resolution_video'))
-            .fontSize(13).fontColor([this.theme.textSecondary])
+          Image($r('app.media.app_video'))
+            .width(15).height(15)
           Text(' 视频')
             .fontSize(10).fontColor(this.theme.textSecondary)
         }
@@ -1178,8 +1171,8 @@ export struct AlbumTab {
       // 存储占用
       Column() {
         Row() {
-          SymbolGlyph($r('sys.symbol.externaldrive'))
-            .fontSize(13).fontColor([this.theme.textSecondary])
+          Image($r('app.media.app_drive'))
+            .width(15).height(15)
           Text(' 占用')
             .fontSize(10).fontColor(this.theme.textSecondary)
         }
@@ -1193,8 +1186,8 @@ export struct AlbumTab {
       // 版本
       Column() {
         Row() {
-          SymbolGlyph($r('sys.symbol.label'))
-            .fontSize(13).fontColor([this.theme.textSecondary])
+          Image($r('app.media.app_info'))
+            .width(15).height(15)
           Text(' 版本')
             .fontSize(10).fontColor(this.theme.textSecondary)
         }
@@ -1420,18 +1413,11 @@ export struct AlbumTab {
   @Builder
   albumDetailView(): void {
     Column() {
-      // 相册头部
+      // 相册头部（无返回按钮，侧滑返回）
       Row() {
-        Row() {
-          Text('←').fontSize(18).fontColor(this.theme.primary)
-          Text(' ' + (this.activeAlbum ? this.activeAlbum.albumName : ''))
-            .fontSize(15).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Medium)
-            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .padding({ left: 12, right: 16, top: 6, bottom: 6 })
-        .borderRadius(100).backgroundColor(this.theme.bgCard)
-        .border({ width: 0.5, color: this.theme.borderGlass })
-        .onClick(() => { this.activeAlbum = null; this.assets = []; AppState.getInstance().setAlbumSubView(false) })
+        Text(' ' + (this.activeAlbum ? this.activeAlbum.albumName : ''))
+          .fontSize(16).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
 
         Blank()
         Text(`${this.assets.length} 张`)
@@ -1461,9 +1447,8 @@ export struct AlbumTab {
                       .borderRadius(8)
                     // 视频角标
                     if (asset.type === 'VIDEO') {
-                      SymbolGlyph($r('sys.symbol.play_video_fill'))
-                        .fontSize(13)
-                        .fontColor([Color.White])
+                      Image($r('app.media.app_play'))
+                        .width(15).height(15)
                         .padding(4)
                         .borderRadius(6)
                         .backgroundColor('rgba(0,0,0,0.55)')
@@ -1512,19 +1497,19 @@ export struct AlbumTab {
   bottomNavBar(): void {
     Row() {
       // 相片
-      this.navItem(0, '相片', $r('sys.symbol.picture'))
+      this.navItem(0, '相片', $r('app.media.album_photo'))
       // 相册
-      this.navItem(1, '相册', $r('sys.symbol.rectangle_stack'))
+      this.navItem(1, '相册', $r('app.media.album'))
     }
     .width(240)
     .height(44)
     .borderRadius(22)
-    .backgroundColor(this.isDark ? 'rgba(30,34,64,0.72)' : 'rgba(255,255,255,0.75)')
+    .backgroundColor('rgba(255,255,255,0.75)')
     .backdropBlur(20)
     .border({ width: 0.5, color: this.theme.borderGlass })
     .shadow({
       radius: 12,
-      color: this.isDark ? 'rgba(0,0,0,0.35)' : 'rgba(31,47,94,0.10)',
+      color: 'rgba(31,47,94,0.10)',
       offsetY: 4
     })
   }
@@ -1534,9 +1519,9 @@ export struct AlbumTab {
   navItem(tab: number, label: string, icon: Resource): void {
     Column() {
       // 图标
-      SymbolGlyph(icon)
-        .fontSize(17)
-        .fontColor([this.mainTab === tab ? this.theme.primary : this.theme.textTertiary])
+      Image(icon)
+        .width(19)
+        .height(19)
       // 文字
       Text(label)
         .fontSize(10)

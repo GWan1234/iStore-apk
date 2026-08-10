@@ -1,5 +1,5 @@
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import {ThemePalette} from '../../common/theme/ThemeColors'
 import { SystemInfo, WanStatus, ConnectedDevice, NetworkInterface, MountPoint, ConntrackInfo, WirelessClient } from '../../models/Models'
 import { FormatUtils } from '../../common/utils/FormatUtils'
 import { ApiService } from '../../api/ApiService'
@@ -39,6 +39,10 @@ export struct DashboardTab {
   private gaugeAnimTimer: number = -1
   // 流量统计（WAN 累计字节快照）
   private lastWanBytes: number[] | null = null
+  // CPU 历史采样（处理器卡片折线图，最多 30 点）
+  @State cpuHistory: number[] = []
+  // 处理器折线图画布
+  private cpuChartCtx: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true))
 
   aboutToAppear(): void {
     // 流量统计存储初始化
@@ -163,6 +167,8 @@ export struct DashboardTab {
       this.recordTraffic()
       // 桌面小组件数据同步（下载/上传速率 + 在线设备数）
       this.syncWidgetData()
+      // CPU 历史采样（处理器卡片折线图）
+      this.recordCpuHistory()
     } catch (refErr) {
       // 刷新失败静默处理，不打断用户操作
     }
@@ -248,11 +254,123 @@ export struct DashboardTab {
     return '#FF5252'
   }
 
+  /** 磁盘使用色阶：≤35 绿 / 36-60 蓝 / 61-80 黄 / >80 红 */
+  diskColor(usage: number): string {
+    if (usage <= 35) {
+      return '#00C853'
+    }
+    if (usage <= 60) {
+      return '#1872FF'
+    }
+    if (usage <= 80) {
+      return '#E6A800'
+    }
+    return '#E84040'
+  }
+
   /** 内存使用率（%） */
   memoryPercent(): number {
     return this.systemInfo.memoryTotal > 0
       ? Math.min(100, Math.round(this.systemInfo.memoryUsed * 100 / this.systemInfo.memoryTotal))
       : 0
+  }
+
+  /**
+   * 磁盘占用率（跨固件稳定方案）
+   * 不依赖 device 命名（/dev/root、mtdblock、PARTUUID 等各衍生版差异大），
+   * 按「挂载点语义 + 类型过滤」统计：
+   *   - 只统计真实块设备（/dev/ 开头，排除 tmpfs/overlay/squashfs/mtd/loop）
+   *   - 排除系统保留挂载点（/boot /rom /overlay /tmp /proc /sys 等）
+   *   - 剩余 = 根分区 + 用户数据盘 → 每块硬盘的真实总占用
+   */
+  diskPercent(): number {
+    if (this.mountPoints.length === 0) {
+      return 0
+    }
+    let totalSize: number = 0
+    let totalUsed: number = 0
+    const seenDevices: Set<string> = new Set()
+    for (let i = 0; i < this.mountPoints.length; i++) {
+      const m = this.mountPoints[i]
+      const dev: string = m.device
+      // 排除虚拟/只读设备：非 /dev/ 开头（tmpfs/overlay/squashfs/rootfs）或 mtd/loop
+      if (!dev.startsWith('/dev/') || dev.indexOf('/mtd') >= 0 || dev.indexOf('/loop') >= 0) {
+        continue
+      }
+      // 排除系统保留挂载点（同一物理盘的分区碎片，避免重复统计）
+      // 保留：/（根分区）与 /mnt、/media 等用户数据挂载
+      const mp: string = m.mountPoint
+      if (mp === '/overlay' || mp === '/boot' || mp === '/rom' ||
+        mp.startsWith('/overlay') || mp.startsWith('/boot') || mp.startsWith('/rom')) {
+        continue
+      }
+      // 同一设备多次挂载只统计一次
+      if (seenDevices.has(dev)) {
+        continue
+      }
+      seenDevices.add(dev)
+      totalSize += m.size
+      totalUsed += m.used
+    }
+    return totalSize > 0 ? Math.min(100, Math.round(totalUsed * 100 / totalSize)) : 0
+  }
+
+  /** 设备显示名（优先用户标签） */
+  deviceLabel(): string {
+    const d = AppState.getInstance().getActiveDevice()
+    if (d) {
+      return d.label || d.host
+    }
+    return this.systemInfo.hostname || '路由器'
+  }
+
+  /** 仪表盘卡片背景（米色） */
+  cardBg(): string {
+    return '#F6F2E9'
+  }
+
+  /** 卡片阴影（柔和投影） */
+  cardShadow(): ShadowOptions {
+    return { radius: 14, color: 'rgba(180,160,120,0.12)', offsetX: 0, offsetY: 4 }
+  }
+
+  /** 记录 CPU 采样（折线图数据，保留 30 点） */
+  recordCpuHistory(): void {
+    this.cpuHistory.push(this.systemInfo.cpuUsage)
+    if (this.cpuHistory.length > 30) {
+      this.cpuHistory.shift()
+    }
+    this.drawCpuChart()
+  }
+
+  /** 绘制 CPU 折线趋势图（无坐标轴极简曲线） */
+  private drawCpuChart(): void {
+    try {
+      const ctx: CanvasRenderingContext2D = this.cpuChartCtx
+      const w: number = 140
+      const h: number = 44
+      ctx.clearRect(0, 0, w, h)
+      if (this.cpuHistory.length < 2) {
+        return
+      }
+      const data: number[] = this.cpuHistory
+      ctx.beginPath()
+      const step: number = w / (data.length - 1)
+      for (let i = 0; i < data.length; i++) {
+        const x: number = i * step
+        const y: number = h - 3 - (Math.min(100, data[i]) / 100) * (h - 6)
+        if (i === 0) {
+          ctx.moveTo(x, y)
+        } else {
+          ctx.lineTo(x, y)
+        }
+      }
+      ctx.strokeStyle = '#FF8A3D'
+      ctx.lineWidth = 2
+      ctx.lineJoin = 'round'
+      ctx.lineCap = 'round'
+      ctx.stroke()
+    } catch (e) {}
   }
 
   /** 内存已用/总量文本（如 256MB / 1.9GB） */
@@ -503,40 +621,216 @@ export struct DashboardTab {
     return this.lanStatus.ipAddress !== '0.0.0.0' ? this.lanStatus.ipAddress : '--'
   }
 
-  build() {
+  /** 快捷功能图标项（2 行 5 列，圆形马卡龙色底 + 白色线性图标） */
+  @Builder
+  quickItem(name: string, route: string, bg: string, icon: Resource) {
     Column() {
-      // 顶部：设备名 + 在线状态 + 更新时间
       Row() {
-        Column() {
-          Text(this.systemInfo.hostname || 'OpenWrt')
-            .fontSize(24)
-            .fontColor(this.theme.textPrimary)
-            .fontWeight(FontWeight.Bold)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Row() {
-            Circle()
-              .width(6)
-              .height(6)
-              .foregroundColor(this.isOnline ? this.theme.success : this.theme.danger)
-            Text(this.isOnline ? '在线' : '离线')
-              .fontSize(11)
-              .fontColor(this.isOnline ? this.theme.success : this.theme.textTertiary)
-              .margin({ left: 4 })
-            Text(' · ')
-              .fontSize(11)
-              .fontColor(this.theme.textTertiary)
-            Text(`更新 ${this.lastUpdate}`)
-              .fontSize(11)
-              .fontColor(this.theme.textTertiary)
-          }
-          .margin({ top: 4 })
-        }
+        Image(icon)
+          .width(24)
+          .height(24)
+      }
+      .width(48)
+      .height(48)
+      .borderRadius(24)
+      .backgroundColor(bg)
+      .justifyContent(FlexAlign.Center)
+      Text(name)
+        .fontSize(10)
+        .fontColor(this.theme.textSecondary)
+        .margin({ top: 5 })
+    }
+    .width('20%')
+    .justifyContent(FlexAlign.Center)
+    .padding({ top: 4, bottom: 4 })
+    .onClick(() => {
+      if (route.startsWith('tab:')) {
+        // 切换主 Tab（iStore 商店 / Docker）
+        const idx: number = Number(route.substring(4))
+        AppState.getInstance().setCurrentTab(idx)
+      } else {
+        this.getUIContext().getRouter().pushUrl({ url: route })
+      }
+    })
+  }
 
+  /** 系统资源进度条行（文字标签 + 细进度条 + 百分比） */
+  @Builder
+  resBar(label: string, percent: number, color: string) {
+    Column() {
+      Row() {
+        Text(label)
+          .fontSize(10)
+          .fontColor(this.theme.textTertiary)
+        Blank()
+        Text(`${Math.round(percent)}%`)
+          .fontSize(10)
+          .fontColor(this.theme.textSecondary)
+          .fontFamily('monospace')
+      }
+      .width('100%')
+
+      Stack() {
+        Row()
+          .width('100%')
+          .height(4)
+          .borderRadius(2)
+          .backgroundColor('#F0EBE0')
+        Row()
+          .width(`${Math.max(0, Math.min(100, percent))}%`)
+          .height(4)
+          .borderRadius(2)
+          .backgroundColor(color)
+      }
+      .width('100%')
+      .alignContent(Alignment.Start)
+      .margin({ top: 4 })
+    }
+    .width('100%')
+    .margin({ top: 10 })
+  }
+
+  /** 键值对行（主板卡） */
+  @Builder
+  kvRow(label: string, value: string) {
+    Row() {
+      Text(`${label}：`)
+        .fontSize(10)
+        .fontColor(this.theme.textTertiary)
+      Text(value)
+        .fontSize(10)
+        .fontColor(this.theme.textSecondary)
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .margin({ left: 4 })
+    }
+    .width('100%')
+    .margin({ top: 12 })
+  }
+
+  /** 日志占用率（挂载点含 log 优先，否则第二个挂载点，无则 0） */
+  logPercent(): number {
+    if (this.mountPoints.length === 0) {
+      return 0
+    }
+    for (let i = 0; i < this.mountPoints.length; i++) {
+      if (this.mountPoints[i].mountPoint.indexOf('log') >= 0) {
+        return Math.min(100, this.mountPoints[i].usedPercent)
+      }
+    }
+    if (this.mountPoints.length > 1) {
+      return Math.min(100, this.mountPoints[1].usedPercent)
+    }
+    return 0
+  }
+
+  /** 数据面板卡片（2×2） */
+  @Builder
+  dataCard(title: string, icon: string, value: string, sub: string, barPercent: number, barColor: string) {
+    Column() {
+      Row() {
+        Text(icon)
+          .fontSize(13)
+        Text(title)
+          .fontSize(12)
+          .fontColor(this.theme.textTertiary)
+          .margin({ left: 5 })
         Blank()
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+
+      Text(value)
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(barColor)
+        .fontFamily('monospace')
+        .width('100%')
+        .margin({ top: 8 })
+        .maxLines(1)
+
+      Text(sub)
+        .fontSize(10)
+        .fontColor(this.theme.textTertiary)
+        .width('100%')
+        .margin({ top: 3 })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      if (barPercent >= 0) {
+        Stack() {
+          Row()
+            .width('100%')
+            .height(4)
+            .borderRadius(2)
+            .backgroundColor('#F0EBE0')
+          Row()
+            .width(`${Math.max(0, Math.min(100, barPercent))}%`)
+            .height(4)
+            .borderRadius(2)
+            .backgroundColor(barColor)
+        }
+        .width('100%')
+        .alignContent(Alignment.Start)
+        .margin({ top: 10 })
+      }
+    }
+    .width('48%')
+    .padding(16)
+    .borderRadius(20)
+    .backgroundColor(this.cardBg())
+    .shadow(this.cardShadow())
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  build() {
+    Column() {
+      // ========== 顶部标题栏（仪表盘 + 副标题 + 铃铛角标） ==========
+      Row() {
+        // 左侧仪表盘图标（AppScope SVG）
+        Row() {
+          Image($r('app.media.dashboard'))
+            .width(22)
+            .height(22)
+        }
+        .width(40)
+        .height(40)
+        .borderRadius(12)
+        .backgroundColor('#FDF0E4')
+        .justifyContent(FlexAlign.Center)
+
+        Column() {
+          Text('仪表盘')
+            .fontSize(20)
+            .fontColor(this.theme.textPrimary)
+            .fontWeight(FontWeight.Bold)
+          Text(`${this.deviceLabel()}${this.isOnline ? ' · 已连接' : ' · 未连接'}`)
+            .fontSize(11)
+            .fontColor(this.theme.textTertiary)
+            .margin({ top: 2 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .margin({ left: 10 })
+
+        Blank()
+
+        // 右侧：铃铛（无角标）
+        Stack() {
+          Image($r('app.media.app_bell'))
+            .width(22)
+            .height(22)
+        }
+        .width(36)
+        .height(36)
+        .borderRadius(18)
+        .backgroundColor('#F5F0E6')
+        .alignContent(Alignment.Center)
+        .onClick(() => {
+          this.getUIContext().getRouter().pushUrl({ url: 'pages/apps/NotifySettingsPage' })
+        })
+      }
+      .width('100%')
+      .padding({ left: 18, right: 18, top: 4, bottom: 10 })
 
       if (this.isLoading) {
         Column() {
@@ -570,205 +864,320 @@ export struct DashboardTab {
               .border({ width: 0.5, color: this.theme.borderGlass })
             }
 
-            // ============ 第一行：下载/上传 两个大卡片 ============
+            // ============ ① 设备总览大卡片 ============
             Row() {
-              // 下载速度
               Column() {
-                Text('⇩ 下载')
-                  .fontSize(11)
+                Text('ⓘ 系统信息')
+                  .fontSize(10)
                   .fontColor(this.theme.textTertiary)
-                  .margin({ bottom: 6 })
-                Text(FormatUtils.formatSpeed(this.wanStatus.rxRate))
-                  .fontSize(22)
-                  .fontColor('#00E676')
+                Text(this.deviceLabel())
+                  .fontSize(18)
+                  .fontColor(this.theme.textPrimary)
                   .fontWeight(FontWeight.Bold)
-                  .fontFamily('monospace')
-              }
-              .width('47%')
-              .padding(14)
-              .borderRadius(14)
-              .backgroundColor(this.theme.bgCard)
-              .backdropBlur(20)
-              .border({ width: 0.5, color: this.theme.borderGlass })
-              .alignItems(HorizontalAlign.Start)
-
-              // 上传速度
-              Column() {
-                Text('⇧ 上传')
-                  .fontSize(11)
+                  .margin({ top: 6 })
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                Row() {
+                  Circle()
+                    .width(6)
+                    .height(6)
+                    .foregroundColor(this.isOnline ? '#00C853' : '#FF5252')
+                  Text(this.isOnline ? '已连接' : '未连接')
+                    .fontSize(12)
+                    .fontColor(this.isOnline ? '#00A94F' : '#FF5252')
+                    .fontWeight(FontWeight.Medium)
+                    .margin({ left: 5 })
+                }
+                .margin({ top: 5 })
+                Text(`版本 ${this.systemInfo.releaseVersion || this.systemInfo.firmwareVersion || '--'}`)
+                  .fontSize(10)
                   .fontColor(this.theme.textTertiary)
-                  .margin({ bottom: 6 })
-                Text(FormatUtils.formatSpeed(this.wanStatus.txRate))
-                  .fontSize(22)
-                  .fontColor('#448AFF')
-                  .fontWeight(FontWeight.Bold)
-                  .fontFamily('monospace')
+                  .margin({ top: 5 })
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(`运行 ${this.systemInfo.uptime > 0 ? FormatUtils.formatUptime(this.systemInfo.uptime) : '--'}`)
+                  .fontSize(10)
+                  .fontColor(this.theme.textTertiary)
+                  .margin({ top: 3 })
               }
-              .width('47%')
-              .padding(14)
-              .borderRadius(14)
-              .backgroundColor(this.theme.bgCard)
-              .backdropBlur(20)
-              .border({ width: 0.5, color: this.theme.borderGlass })
               .alignItems(HorizontalAlign.Start)
-            }
-            .width('100%')
-            .justifyContent(FlexAlign.SpaceBetween)
-            .margin({ top: 8 })
+              .layoutWeight(1)
 
-            // ============ 实时监控仪表盘：CPU / 内存 / 内存占用 / 温度 环形仪表（统一绿/蓝/黄/红渐变）============
-            Row() {
-              // CPU 仪表
-              this.gaugeCard('CPU', FormatUtils.formatPercent(this.systemInfo.cpuUsage),
-                this.systemInfo.cpuUsage, this.getGaugeGradient(this.systemInfo.cpuUsage)[0], this.gaugeCtx0, [])
-              // 内存仪表
-              this.gaugeCard('内存', FormatUtils.formatPercent(this.memoryPercent()),
-                this.memoryPercent(), this.getGaugeGradient(this.memoryPercent())[0], this.gaugeCtx1, [])
-              // 内存容量占用仪表（已用/总量）
-              this.gaugeCard('内存占用', this.memoryUsedText(),
-                this.memoryPercent(), this.getGaugeGradient(this.memoryPercent())[0], this.gaugeCtx3, [])
-              // 温度仪表（按温度值分档配色：绿<30°C / 蓝<60°C / 黄<70°C / 红≥70°C）
-              this.gaugeCard('温度', this.systemInfo.cpuTemp > 0 ? `${this.systemInfo.cpuTemp.toFixed(1)}°C` : '--',
-                this.tempPercent(this.systemInfo.cpuTemp), this.getTempGaugeGradient(this.systemInfo.cpuTemp)[0],
-                this.gaugeCtx2, this.getTempGaugeGradient(this.systemInfo.cpuTemp))
+              // 右侧 NAS 机箱插图
+              Image($r('app.media.NAS'))
+                .width(92)
+                .height(92)
+                .objectFit(ImageFit.Contain)
+                .opacity(0.9)
             }
             .width('100%')
-            .justifyContent(FlexAlign.SpaceBetween)
-            .margin({ top: 8 })
-
-            // ============ 系统信息卡片 ============
-            Column() {
-              Text('💻 系统信息')
-                .fontSize(14)
-                .fontColor(this.theme.textPrimary)
-                .fontWeight(FontWeight.Medium)
-                .margin({ bottom: 12 })
-              this.infoRow('主机名', this.systemInfo.hostname || '--')
-              this.infoRow('系统描述', this.systemInfo.model || '--')
-              if (this.systemInfo.cpuModel) {
-                this.infoRow('CPU 型号', this.systemInfo.cpuModel)
-              }
-              if (this.systemInfo.boardName) {
-                this.infoRow('架构/主板', this.systemInfo.boardName)
-              }
-              if (this.systemInfo.distribution) {
-                this.infoRow('发行版', this.systemInfo.distribution)
-              }
-              if (this.systemInfo.releaseVersion) {
-                this.infoRow('固件版本', this.systemInfo.releaseRevision
-                  ? `${this.systemInfo.releaseVersion} (${this.systemInfo.releaseRevision})`
-                  : this.systemInfo.releaseVersion)
-              } else {
-                this.infoRow('固件版本', this.systemInfo.firmwareVersion || '--')
-              }
-              if (this.systemInfo.releaseTarget) {
-                this.infoRow('目标平台', this.systemInfo.releaseTarget)
-              }
-              this.infoRow('内核', this.systemInfo.kernel || '--')
-              this.infoRow('本地时间', this.systemInfo.localTime
-                ? this.formatLocalTime(this.systemInfo.localTime)
-                : '--')
-              this.infoRow('运行时间', this.systemInfo.uptime > 0 ? FormatUtils.formatUptime(this.systemInfo.uptime) : '--')
-            }
-            .width('100%')
-            .padding(20)
+            .padding(18)
             .borderRadius(24)
-            .margin({ top: 10 })
-            .backgroundColor(this.theme.bgCard)
-            .backdropBlur(20)
-            .border({ width: 0.5, color: this.theme.borderGlass })
+            .backgroundColor(this.cardBg())
+            .shadow(this.cardShadow())
+            .margin({ top: 4 })
 
-            // ============ 局域网 ============
+            // ============ 2 快捷功能区（2 行 5 列，直接浮在主背景上，无卡片框） ============
             Column() {
               Row() {
-                Text('🌐 局域网')
-                  .fontSize(13)
-                  .fontColor(this.theme.textPrimary)
-                  .fontWeight(FontWeight.Medium)
+                this.quickItem('文件', 'pages/apps/FileManagerPage', '#A8C8A0', $r('app.media.folder_file'))
+                this.quickItem('AI 助手', 'pages/apps/AiAssistantPage', '#B8A6E8', $r('app.media.ai_assistant'))
+                this.quickItem('Docker', 'tab:4', '#9FB8E8', $r('app.media.docker'))
+                this.quickItem('SSH', 'pages/apps/SshTerminalPage', '#A0B8D8', $r('app.media.terminal'))
+                this.quickItem('应用中心', 'pages/apps/AppsPage', '#FFB37A', $r('app.media.app_center'))
+              }
+              .width('100%')
+              Row() {
+                this.quickItem('排行', 'pages/apps/TrafficRankPage', '#F2D08A', $r('app.media.ranking'))
+                this.quickItem('WiFi', 'pages/apps/WifiPage', '#8FB8E8', $r('app.media.wifi_icon'))
+                this.quickItem('定时', 'pages/apps/SchedulePage', '#C0C090', $r('app.media.schedule'))
+                this.quickItem('拓扑', 'pages/apps/TopologyPage', '#8FD6A5', $r('app.media.topology'))
+                this.quickItem('商店', 'tab:3', '#F0A8C0', $r('app.media.app_store'))
+              }
+              .width('100%')
+              .margin({ top: 2 })
+            }
+            .width('100%')
+            .margin({ top: 14 })
 
-                Blank()
-
-                Text(this.getLanIP())
-                  .fontSize(16)
-                  .fontColor(this.theme.primary)
-                  .fontWeight(FontWeight.Bold)
-                  .fontFamily('monospace')
+            // ============ 3 核心数据卡片区（2×2 四宫格） ============
+            Row() {
+              // 卡片1：处理器（大字 CPU% + 折线趋势 + 型号）
+              Column() {
+                Row() {
+                  Image($r('app.media.cpu')).width(16).height(16)
+                  Text('处理器').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
+                  Blank()
+                  Text('›').fontSize(14).fontColor(this.theme.textTertiary)
+                }
+                .width('100%')
+                Row() {
+                  Text(`${this.systemInfo.cpuUsage.toFixed(0)}%`)
+                    .fontSize(26)
+                    .fontWeight(FontWeight.Bold)
+                    .fontColor('#FF8A3D')
+                    .fontFamily('monospace')
+                  Column() {
+                    Text(this.systemInfo.cpuTemp > 0 ? `温度 ${this.systemInfo.cpuTemp.toFixed(0)}°C` : '温度 --')
+                      .fontSize(10).fontColor(this.theme.textTertiary)
+                    Text(`内存 ${this.memoryPercent()}%`)
+                      .fontSize(10).fontColor(this.theme.textTertiary).margin({ top: 2 })
+                  }
+                  .alignItems(HorizontalAlign.Start)
+                  .margin({ left: 10 })
+                }
+                .width('100%')
+                .margin({ top: 8 })
+                Canvas(this.cpuChartCtx)
+                  .width(140)
+                  .height(38)
+                  .margin({ top: 4 })
+                  .onReady(() => {
+                    this.drawCpuChart()
+                  })
+                Text(this.systemInfo.cpuModel ? `${this.systemInfo.cpuModel}` : '--')
+                  .fontSize(9)
+                  .fontColor(this.theme.textTertiary)
+                  .width('100%')
+                  .margin({ top: 4 })
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
               }
-              .width('100%')
+              .width('48%')
+              .height(158)
+              .padding(16)
+              .borderRadius(20)
+              .backgroundColor(this.cardBg())
+              .shadow(this.cardShadow())
+              .alignItems(HorizontalAlign.Start)
 
-              if (this.lanStatus.gateway) {
+              // 卡片2：系统资源（进度条列表：内存/硬盘/存储/日志）
+              Column() {
                 Row() {
-                  Text('网关')
-                    .fontSize(11)
-                    .fontColor(this.theme.textTertiary)
+                  Image($r('app.media.system_resources')).width(16).height(16)
+                  Text('系统资源').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
                   Blank()
-                  Text(this.lanStatus.gateway)
-                    .fontSize(11)
-                    .fontColor(this.theme.textSecondary)
-                    .fontFamily('monospace')
+                  Text('›').fontSize(14).fontColor(this.theme.textTertiary)
                 }
                 .width('100%')
-                .margin({ top: 4 })
+                this.resBar('内存', this.memoryPercent(), '#00C853')
+                this.resBar('硬盘', this.diskPercent(), '#FF8A3D')
+                this.resBar('日志', this.logPercent(), '#B8A6E8')
               }
+              .width('48%')
+              .height(158)
+              .padding(16)
+              .borderRadius(20)
+              .backgroundColor(this.cardBg())
+              .shadow(this.cardShadow())
+              .alignItems(HorizontalAlign.Start)
             }
             .width('100%')
-            .padding(10)
-            .borderRadius(12)
-            .margin({ top: 10 })
-            .backgroundColor(this.theme.bgCard)
-            .backdropBlur(20)
-            .border({ width: 0.5, color: this.theme.borderGlass })
+            .justifyContent(FlexAlign.SpaceBetween)
+            .margin({ top: 12 })
 
-            // ============ 在线用户数 ============
+            Row() {
+              // 卡片3：主板（型号大字 + 制造商/版本键值）
+              Column() {
+                Row() {
+                  Image($r('app.media.motherboard')).width(16).height(16)
+                  Text('主板').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
+                  Blank()
+                  Text('›').fontSize(14).fontColor(this.theme.textTertiary)
+                }
+                .width('100%')
+                Text(this.systemInfo.boardName || this.systemInfo.model || '--')
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.theme.textPrimary)
+                  .width('100%')
+                  .margin({ top: 14 })
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                this.kvRow('制造商', this.systemInfo.model || '--')
+                this.kvRow('版本', this.systemInfo.releaseVersion || this.systemInfo.firmwareVersion || '--')
+                this.kvRow('内核', this.systemInfo.kernel || '--')
+              }
+              .width('48%')
+              .height(158)
+              .padding(16)
+              .borderRadius(20)
+              .backgroundColor(this.cardBg())
+              .shadow(this.cardShadow())
+              .alignItems(HorizontalAlign.Start)
+
+              // 卡片4：网络（状态 + 实时速率）
+              Column() {
+                Row() {
+                  Image($r('app.media.network')).width(16).height(16)
+                  Text('网络').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
+                  Blank()
+                  Text('›').fontSize(14).fontColor(this.theme.textTertiary)
+                }
+                .width('100%')
+                Row() {
+                  Circle()
+                    .width(6)
+                    .height(6)
+                    .foregroundColor(this.isOnline ? '#00C853' : '#FF5252')
+                  Text(this.wanStatus.interface || 'WAN')
+                    .fontSize(12)
+                    .fontColor(this.theme.textPrimary)
+                    .fontWeight(FontWeight.Medium)
+                    .margin({ left: 5 })
+                  Blank()
+                  Text(this.isOnline ? '已连接' : '未连接')
+                    .fontSize(10)
+                    .fontColor(this.isOnline ? '#00A94F' : '#FF5252')
+                }
+                .width('100%')
+                .margin({ top: 8 })
+                Row() {
+                  Text('↓ 下行').fontSize(10).fontColor(this.theme.textTertiary)
+                  Blank()
+                  Text(FormatUtils.formatSpeed(this.wanStatus.rxRate))
+                    .fontSize(16).fontWeight(FontWeight.Bold).fontColor('#FF8A3D').fontFamily('monospace')
+                }
+                .width('100%')
+                .margin({ top: 8 })
+                Row() {
+                  Text('↑ 上行').fontSize(10).fontColor(this.theme.textTertiary)
+                  Blank()
+                  Text(FormatUtils.formatSpeed(this.wanStatus.txRate))
+                    .fontSize(16).fontWeight(FontWeight.Bold).fontColor('#00C853').fontFamily('monospace')
+                }
+                .width('100%')
+                .margin({ top: 6 })
+              }
+              .width('48%')
+              .height(158)
+              .padding(16)
+              .borderRadius(20)
+              .backgroundColor(this.cardBg())
+              .shadow(this.cardShadow())
+              .alignItems(HorizontalAlign.Start)
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.SpaceBetween)
+            .margin({ top: 12 })
+            Row() {
+              Column() {
+                Row() {
+                  Image($r('app.media.online_devices')).width(16).height(16)
+                  Text('在线设备').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
+                  Blank()
+                }
+                .width('100%')
+                Text(`${this.onlineClientCount}`)
+                  .fontSize(20)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor('#FF8A3D')
+                  .fontFamily('monospace')
+                  .width('100%')
+                  .margin({ top: 6 })
+                Text('台设备当前在线')
+                  .fontSize(10)
+                  .fontColor(this.theme.textTertiary)
+                  .width('100%')
+                  .margin({ top: 2 })
+              }
+              .width('48%')
+              .padding(16)
+              .borderRadius(20)
+              .backgroundColor(this.cardBg())
+              .shadow(this.cardShadow())
+              .alignItems(HorizontalAlign.Start)
+
+              Column() {
+                Row() {
+                  Image($r('app.media.active_connections')).width(16).height(16)
+                  Text('连接数').fontSize(12).fontColor(this.theme.textTertiary).margin({ left: 5 })
+                  Blank()
+                }
+                .width('100%')
+                Text(`${this.conntrack.current}`)
+                  .fontSize(20)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.conntrack.percent > 80 ? '#F5A623' : '#00C853')
+                  .fontFamily('monospace')
+                  .width('100%')
+                  .margin({ top: 6 })
+                Text(`上限 ${this.conntrack.max}`)
+                  .fontSize(10)
+                  .fontColor(this.theme.textTertiary)
+                  .width('100%')
+                  .margin({ top: 2 })
+              }
+              .width('48%')
+              .padding(16)
+              .borderRadius(20)
+              .backgroundColor(this.cardBg())
+              .shadow(this.cardShadow())
+              .alignItems(HorizontalAlign.Start)
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.SpaceBetween)
+            .margin({ top: 12 })
+
+            // ============ 磁盘详情 ============
             Column() {
               Row() {
-                Text('👥 在线用户')
+                Image($r('app.media.disk'))
+                  .width(16)
+                  .height(16)
+                Text('磁盘使用')
                   .fontSize(13)
                   .fontColor(this.theme.textPrimary)
                   .fontWeight(FontWeight.Medium)
-
-                Blank()
-
-                Text(`${this.onlineClientCount}`)
-                  .fontSize(22)
-                  .fontColor(this.theme.primary)
-                  .fontWeight(FontWeight.Bold)
-                  .fontFamily('monospace')
-
-                Text(' 台设备')
-                  .fontSize(12)
-                  .fontColor(this.theme.textSecondary)
-                  .margin({ left: 4 })
+                  .margin({ left: 5 })
               }
-              .width('100%')
-
-              if (this.onlineClientCount === 0) {
-                Text('暂无在线设备')
-                  .fontSize(11)
-                  .fontColor(this.theme.textTertiary)
-                  .margin({ top: 4 })
-              }
-            }
-            .width('100%')
-            .padding(10)
-            .borderRadius(12)
-            .margin({ top: 10 })
-            .backgroundColor(this.theme.bgCard)
-            .backdropBlur(20)
-            .border({ width: 0.5, color: this.theme.borderGlass })
-            Column() {
-              Text('💾 磁盘使用')
-                .fontSize(14)
-                .fontColor(this.theme.textPrimary)
-                .fontWeight(FontWeight.Medium)
-                .margin({ bottom: 12 })
-
+                .width('100%')
+                .margin({ bottom: 10 })
               if (this.mountPoints.length === 0) {
                 Text('暂无挂载点数据')
                   .fontSize(11)
                   .fontColor(this.theme.textTertiary)
+                  .width('100%')
               } else {
                 ForEach(this.mountPoints, (mp: MountPoint, idx: number) => {
                   Column() {
@@ -782,11 +1191,10 @@ export struct DashboardTab {
                         .layoutWeight(1)
                       Text(`${mp.usedPercent.toFixed(1)}%`)
                         .fontSize(13)
-                        .fontColor(this.getCpuColor(mp.usedPercent))
+                        .fontColor(this.diskColor(mp.usedPercent))
                         .fontWeight(FontWeight.Bold)
                     }
                     .width('100%')
-
                     Row() {
                       Text(`${FormatUtils.formatBytes(mp.used)} / ${FormatUtils.formatBytes(mp.size)}`)
                         .fontSize(11)
@@ -798,27 +1206,20 @@ export struct DashboardTab {
                     }
                     .width('100%')
                     .margin({ top: 2 })
-
                     Stack() {
                       Row()
                         .width('100%')
                         .height(4)
                         .borderRadius(2)
-                        .backgroundColor('rgba(255,255,255,0.1)')
+                        .backgroundColor('#F0EBE0')
                       Row()
                         .width(`${Math.max(0, Math.min(100, mp.usedPercent))}%`)
                         .height(4)
                         .borderRadius(2)
-                        .linearGradient({
-                          angle: 90,
-                          colors: [
-                            [this.getCpuColor(mp.usedPercent), 0],
-                            [this.getCpuColor(mp.usedPercent) + '44', 1]
-                          ]
-                        })
+                        .backgroundColor(this.diskColor(mp.usedPercent))
                     }
                     .width('100%')
-                    .alignContent(Alignment.End)
+                    .alignContent(Alignment.Start)
                     .margin({ top: 8 })
                   }
                   .width('100%')
@@ -828,12 +1229,11 @@ export struct DashboardTab {
               }
             }
             .width('100%')
-            .padding(14)
-            .borderRadius(18)
+            .padding(16)
+            .borderRadius(22)
+            .backgroundColor(this.cardBg())
+            .shadow(this.cardShadow())
             .margin({ top: 12 })
-            .backgroundColor(this.theme.bgCard)
-            .backdropBlur(20)
-            .border({ width: 0.5, color: this.theme.borderGlass })
           }
           .width('100%')
           .padding({ left: 12, right: 12, bottom: 130 })
@@ -854,6 +1254,10 @@ export struct DashboardTab {
     }
     .width('100%')
     .height('100%')
+    .linearGradient({
+      angle: 135,
+      colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+    })
   }
 
   @Builder NetInterfaceRow(iface: NetworkInterface) {

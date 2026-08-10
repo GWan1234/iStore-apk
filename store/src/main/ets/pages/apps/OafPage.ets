@@ -1,5 +1,5 @@
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { OafStatus, AppFilterBase, AppClass, AppItem, AppFilterTime, AppFilterUser, TimeSlot } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -10,8 +10,7 @@ const WEEKDAYS: string[] = ['日', '一', '二', '三', '四', '五', '六']
 @Entry
 @Component
 struct OafPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State theme: ThemePalette = LIGHT_THEME
   @State isLoading: boolean = true
   @State errorText: string = ''
   @State oafStatus: OafStatus | null = null
@@ -29,13 +28,8 @@ struct OafPage {
   @State saveError: string = ''
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-    this.loadData()
+this.theme = AppState.getInstance().getTheme()
+        this.loadData()
   }
 
   async loadData(): Promise<void> {
@@ -166,19 +160,14 @@ struct OafPage {
         .width('100%')
         .height('100%')
         .linearGradient({
-          angle: 180,
-          colors: this.isDark
-            ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-            : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+          angle: 135,
+          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
         })
 
       Column() {
         // 顶栏
         Row() {
           Row() {
-            Text('←')
-              .fontSize(18)
-              .fontColor(this.theme.primary)
             Text(' 家长控制')
               .fontSize(16)
               .fontColor(this.theme.textPrimary)
@@ -231,7 +220,7 @@ struct OafPage {
                 }.width('100%').margin({ top: 8 })
               }
               .width('100%').padding(16).borderRadius(14).margin({ top: 8, left: 16, right: 16 })
-              .backgroundColor(this.theme.bgCard).backdropBlur(20)
+              .backgroundColor('transparent')
               .border({ width: 0.5, color: this.theme.borderGlass })
 
               // ======== 基础配置卡片 ========
@@ -259,7 +248,7 @@ struct OafPage {
                 this.configToggle('记录日志', this.baseLog, (v: boolean) => this.baseLog = v)
               }
               .width('100%').padding(16).borderRadius(14).margin({ top: 10, left: 16, right: 16 })
-              .backgroundColor(this.theme.bgCard).backdropBlur(20)
+              .backgroundColor('transparent')
               .border({ width: 0.5, color: this.theme.borderGlass })
 
               // ======== 应用分类管控 ========
@@ -344,7 +333,7 @@ struct OafPage {
                 }
               }
               .width('100%').padding(16).borderRadius(14).margin({ top: 10, left: 16, right: 16 })
-              .backgroundColor(this.theme.bgCard).backdropBlur(20)
+              .backgroundColor('transparent')
               .border({ width: 0.5, color: this.theme.borderGlass })
 
               // ======== 时间段配置 ========
@@ -379,7 +368,7 @@ struct OafPage {
                   }
                 }
                 .width('100%').padding(16).borderRadius(14).margin({ top: 10, left: 16, right: 16 })
-                .backgroundColor(this.theme.bgCard).backdropBlur(20)
+                .backgroundColor('transparent')
                 .border({ width: 0.5, color: this.theme.borderGlass })
               }
 
@@ -392,7 +381,7 @@ struct OafPage {
                   this.statRow('模式', this.appUser.mode === 'auto' ? '自动' : '手动')
                 }
                 .width('100%').padding(16).borderRadius(14).margin({ top: 10, left: 16, right: 16 })
-                .backgroundColor(this.theme.bgCard).backdropBlur(20)
+                .backgroundColor('transparent')
                 .border({ width: 0.5, color: this.theme.borderGlass })
               }
 

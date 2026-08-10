@@ -11,6 +11,11 @@
         "**/armeabi-v7a/**",
         "**/x86_64/**"
       ]
+    },
+    "externalNativeOptions": {
+      "path": "./src/main/cpp/CMakeLists.txt",
+      "arguments": "",
+      "cppFlags": ""
     }
   },
   "buildOptionSet": [

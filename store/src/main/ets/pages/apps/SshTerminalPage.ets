@@ -4,10 +4,14 @@
  * 终端风格：深色底 + 等宽字体 + 快捷命令
  */
 import { AppState } from '../../common/store/AppState'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { SshService } from '../../common/ssh/SshService'
 import { SavedDevice } from '../../common/store/DeviceStore'
 import { window } from '@kit.ArkUI'
+import { hilog } from '@kit.PerformanceAnalysisKit'
+
+const DOMAIN = 0x0001
+const TAG = 'SshTerminal'
 
 /** 快捷命令 */
 const QUICK_CMDS: string[] = [
@@ -32,8 +36,7 @@ interface CmdRecord {
 @Entry
 @Component
 struct SshTerminalPage {
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44
   @State connecting: boolean = true
   @State connected: boolean = false
@@ -41,17 +44,14 @@ struct SshTerminalPage {
   @State records: CmdRecord[] = []
   @State inputText: string = ''
   @State running: boolean = false
+  /** 当前工作目录（App 侧维护，模拟 shell 会话状态） */
+  @State cwd: string = '/root'
   private ssh: SshService = SshService.getInstance()
   private listScroller: Scroller = new Scroller()
 
   aboutToAppear(): void {
-    this.isDark = AppState.getInstance().isDarkMode
-    this.theme = AppState.getInstance().getTheme()
-    AppState.getInstance().onThemeChange(() => {
-      this.isDark = AppState.getInstance().isDarkMode
-      this.theme = AppState.getInstance().getTheme()
-    })
-    this.loadTopSafeArea()
+this.theme = AppState.getInstance().getTheme()
+        this.loadTopSafeArea()
     this.doConnect()
   }
 
@@ -94,24 +94,50 @@ struct SshTerminalPage {
     this.connecting = false
     if (ok) {
       this.connected = true
+      // 命令走 channel exec（Xshell 阻塞模式），输出直接随 Promise 返回，无需回调监听
+      // cwd 用本地 resolveCd 模拟显示
       this.records = [{
         cmd: '',
-        output: `已连接 ${device.host}（SSH）\n输入命令开始，或点击下方快捷命令\n输入 help 查看用法`
+        output: `已连接 ${device.host}（SSH 交互终端）\n输入命令开始，或点击下方快捷命令\n输入 help 查看用法`
       }]
     } else {
-      this.connError = '连接失败：请确认路由器已开启 SSH（系统→管理→SSH 访问），且用户名密码正确'
+      this.connError = this.ssh.lastError || '连接失败：请确认路由器已开启 SSH（系统→管理→SSH 访问），且用户名密码正确'
     }
   }
 
-  /** 执行命令 */
+  /** 解析 cd 参数（支持绝对/相对/.. / ~），返回规范化路径 */
+  resolveCd(arg: string): string {
+    let target: string = arg.trim()
+    if (!target || target === '~') {
+      target = '/root'
+    } else if (target === '-' || target.startsWith('-')) {
+      return this.cwd
+    } else if (!target.startsWith('/')) {
+      target = `${this.cwd}/${target}`
+    }
+    const parts: string[] = target.split('/')
+    const stack: string[] = []
+    for (let i = 0; i < parts.length; i++) {
+      const p: string = parts[i]
+      if (p === '' || p === '.') continue
+      if (p === '..') {
+        if (stack.length > 0) stack.pop()
+      } else {
+        stack.push(p)
+      }
+    }
+    return '/' + stack.join('/')
+  }
+
+  /** 执行命令（流式交互 shell：cd 状态服务器保留，输出实时回调） */
   runCommand(cmdText: string): void {
     const cmd: string = cmdText.trim()
     if (!cmd || this.running) return
     // 本地命令
     if (cmd === 'help') {
       this.records.push({
-        cmd: 'help',
-        output: '快捷命令：top / free -m / df -h / uptime / iwinfo / logread -l 20 / cat /etc/openwrt_release\n'
+        cmd: cmd,
+        output: '快捷命令：top / free -m / df -h / uptime / iwinfo / logread -l 20 / cat /etc/openwrt_release\n支持 cd（切换目录，如 cd /tmp、cd ..、cd）\n'
       })
       this.inputText = ''
       this.scrollToBottom()
@@ -122,15 +148,32 @@ struct SshTerminalPage {
       this.inputText = ''
       return
     }
+    // cd 命令：发给服务器（真实 shell 切换）+ 本地同步显示
+    const cdMatch = cmd.match(/^cd\s+(\S+)?$/)
+    if (cdMatch) {
+      const arg: string = cdMatch[1] || ''
+      const newDir: string = this.resolveCd(arg)
+      this.cwd = newDir
+      this.records.push({ cmd: cmd, output: `已切换到 ${newDir}` })
+      this.inputText = ''
+      this.scrollToBottom()
+      return
+    }
+    // 其他命令：exec 模式（每次独立 channel，无会话状态）→ 前缀 cd 保持目录
     this.inputText = ''
     this.running = true
-    this.ssh.exec(cmd).then((out: string) => {
-      this.records.push({ cmd: cmd, output: out })
+    const execCmd: string = this.cwd === '/' ? cmd : `cd '${this.cwd}' && ${cmd}`
+    this.ssh.sendCommand(execCmd).then((out: string) => {
+      hilog.info(DOMAIN, TAG, `runCommand ok: "${cmd}" out=${out.length}B`)
       this.running = false
+      // 输出到达后直接追加记录（不占位）
+      this.records.push({ cmd: cmd, output: out || '（无输出）' })
       this.scrollToBottom()
     }).catch(() => {
-      this.records.push({ cmd: cmd, output: '执行异常' })
+      hilog.error(DOMAIN, TAG, `runCommand err: "${cmd}"`)
       this.running = false
+      this.records.push({ cmd: cmd, output: '（执行异常）' })
+      this.scrollToBottom()
     })
   }
 
@@ -172,9 +215,6 @@ struct SshTerminalPage {
       // 标题栏
       Row() {
         Row() {
-          Text('←')
-            .fontSize(18)
-            .fontColor(this.theme.primary)
           Text(' SSH 终端')
             .fontSize(16)
             .fontColor(this.theme.textPrimary)
@@ -282,10 +322,13 @@ struct SshTerminalPage {
 
       // 输入栏
       Row() {
-        Text('$')
-          .fontSize(14)
+        Text(this.cwd === '/' ? '/ #' : `${this.cwd} #`)
+          .fontSize(11)
           .fontColor('#00E676')
           .fontFamily('monospace')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .constraintSize({ maxWidth: '38%' })
           .margin({ left: 12, right: 6 })
         TextInput({ placeholder: '输入命令，如 top', text: this.inputText })
           .placeholderColor('#6E7681')
@@ -317,10 +360,8 @@ struct SshTerminalPage {
     .width('100%')
     .height('100%')
     .linearGradient({
-      angle: 180,
-      colors: this.isDark
-        ? [['#0A0E27', 0], ['#121637', 0.5], ['#0A0E27', 1]]
-        : [['#E8ECF1', 0], ['#F5F7FA', 0.5], ['#E8ECF1', 1]]
+      angle: 135,
+      colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
     })
   }
 }

@@ -10,7 +10,7 @@ import { AppState } from '../../common/store/AppState'
 import { SavedDevice } from '../../common/store/DeviceStore'
 import { ImmichStore } from '../../common/store/ImmichStore'
 import { ConnectionConfig } from '../../models/Models'
-import { ThemePalette, DARK_THEME } from '../../common/theme/ThemeColors'
+import {LIGHT_THEME, ThemePalette} from '../../common/theme/ThemeColors'
 import { common } from '@kit.AbilityKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { deviceInfo } from '@kit.BasicServicesKit'
@@ -37,8 +37,7 @@ struct LoginPage {
   @State editingId: string = ''
   @State connectingId: string = ''
   @State formVersion: number = 0
-  @State isDark: boolean = true
-  @State theme: ThemePalette = DARK_THEME
+  @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44  // 状态栏高度（默认 44vp，覆盖大部分设备）
   private appState: AppState = AppState.getInstance()
   private connectTimerId: number = -1  // 连接超时定时器 ID
@@ -54,14 +53,13 @@ struct LoginPage {
       hilog.error(0x0001, 'LoginPage', `immich store init failed: ${e}`)
     }
     this.savedDevices = this.appState.devices
-    this.isDark = this.appState.isDarkMode
     this.theme = this.appState.getTheme()
 
-    // 沉浸式状态栏：跟随主题更新图标颜色
+    // 沉浸式状态栏（亮色主题：深色图标）
     try {
       const hostCtx: common.Context = this.getUIContext().getHostContext() as common.Context
       if (hostCtx) {
-        applyImmersiveBar(hostCtx, this.isDark)
+        applyImmersiveBar(hostCtx, false)
       }
     } catch (e) {
       hilog.error(0x0001, 'LoginPage', `applyImmersiveBar err: ${e}`)
@@ -83,7 +81,6 @@ struct LoginPage {
     }
 
     this.appState.onThemeChange(() => {
-      this.isDark = this.appState.isDarkMode
       this.theme = this.appState.getTheme()
     })
 
@@ -322,34 +319,11 @@ struct LoginPage {
   build() {
     Stack() {
       Column() {
-        Row() {
-          Blank()
-          Row() {
-            Text(this.isDark ? '☀️' : '🌙').fontSize(20)
-          }
-          .width(40).height(40).borderRadius(20)
-          .backgroundColor(this.theme.bgCard)
-          .border({ width: 0.5, color: this.theme.borderGlass })
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => {
-            this.appState.toggleTheme()
-            // 主题切换后同步状态栏图标颜色（沉浸式）
-            try {
-              const hostCtx: common.Context = this.getUIContext().getHostContext() as common.Context
-              if (hostCtx) {
-                applyImmersiveBar(hostCtx, this.appState.isDarkMode)
-              }
-            } catch (e) {}
-          })
-          .margin({ right: 16, top: this.topSafeArea + 4 })
-        }
-        .width('100%')
-
         Column() {
           Image($r('app.media.logo'))
             .width(80).height(80).borderRadius(20)
             .objectFit(ImageFit.Cover)
-            .margin({ top: 24 })
+            .margin({ top: this.topSafeArea + 46 })
 
           Text('iStore 路由管家')
             .fontSize(34).fontColor(this.theme.textPrimary).fontWeight(FontWeight.Bold)
@@ -437,12 +411,14 @@ struct LoginPage {
                     }
                     .margin({ left: 10 }).alignItems(HorizontalAlign.Start).layoutWeight(1)
 
-                    SymbolGlyph($r('sys.symbol.square_and_pencil'))
-                      .fontSize(16).fontColor([this.theme.textTertiary]).padding(8)
+                    Image($r('app.media.app_edit'))
+                      .width(17).height(17)
+                      .padding(8)
                       .onClick(() => { this.fillForm(device) })
 
-                    SymbolGlyph($r('sys.symbol.trash'))
-                      .fontSize(16).fontColor([this.theme.textTertiary]).padding(8)
+                    Image($r('app.media.app_trash'))
+                      .width(17).height(17)
+                      .padding(8)
                       .onClick(() => { this.deleteDevice(device.id) })
                   }
                   .width('100%')
@@ -473,8 +449,8 @@ struct LoginPage {
               }
               .width('100%').padding({ left: 14, right: 14, top: 12, bottom: 12 })
               .borderRadius(12).margin({ top: 14 })
-              .backgroundColor(this.isDark ? 'rgba(255, 82, 82, 0.1)' : 'rgba(255, 82, 82, 0.05)')
-              .border({ width: 0.5, color: this.isDark ? 'rgba(255, 82, 82, 0.25)' : 'rgba(255, 82, 82, 0.15)' })
+              .backgroundColor('rgba(255, 82, 82, 0.05)')
+              .border({ width: 0.5, color: 'rgba(255, 82, 82, 0.15)' })
             }
 
             if (this.successMessage) {
@@ -491,7 +467,10 @@ struct LoginPage {
       .width('100%').height('100%')
     }
     .width('100%').height('100%')
-    .backgroundColor(this.isDark ? '#0A0E27' : '#E8ECF1')
+    .linearGradient({
+      angle: 135,
+      colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+    })
     .bindSheet($$this.showAddSheet, this.deviceFormSheet(), {
       height: 620,
       dragBar: true,
@@ -590,8 +569,8 @@ struct LoginPage {
         }
         .width('100%').padding({ left: 14, right: 14, top: 10, bottom: 10 })
         .borderRadius(12).margin({ bottom: 12 })
-        .backgroundColor(this.isDark ? 'rgba(255, 82, 82, 0.1)' : 'rgba(255, 82, 82, 0.05)')
-        .border({ width: 0.5, color: this.isDark ? 'rgba(255, 82, 82, 0.25)' : 'rgba(255, 82, 82, 0.15)' })
+        .backgroundColor('rgba(255, 82, 82, 0.05)')
+        .border({ width: 0.5, color: 'rgba(255, 82, 82, 0.15)' })
       }
 
       // 按钮

@@ -1,12 +1,11 @@
 /**
- * 主题色彩系统
- * 实现深色/浅色双主题切换，通过 ThemePalette 接口统一管理
- * 组件通过 AppState 获取当前主题，切换时自动更新所有引用了 @State theme 的组件
+ * 主题色彩系统（统一亮色米色风格，无黑夜模式）
+ * 全应用固定使用 LIGHT_THEME 米色主题：浅暖米色底 + 纯白大圆角卡片 + 暖橙高亮
+ * 组件通过 AppState.getTheme() 获取主题，无需关注切换
  */
 
 /**
  * 主题调色板接口
- * 定义深色/浅色双主题所需的全部颜色属性
  * 组件使用 this.theme.xxx 引用，无需硬编码颜色值
  */
 export interface ThemePalette {
@@ -24,7 +23,7 @@ export interface ThemePalette {
 
   // --- 背景色 ---
   bgDark: string            // 页面主背景
-  bgCard: string            // 卡片背景（半透明）
+  bgCard: string            // 卡片背景
   bgCardHover: string       // 卡片悬停/按下背景
   bgGlass: string           // 毛玻璃面板背景
   bgGlassLight: string      // 浅色毛玻璃背景
@@ -46,70 +45,35 @@ export interface ThemePalette {
 }
 
 /**
- * 深色主题调色板（默认主题）
- * 深蓝紫色调背景 + 高明度文本，营造科技感暗色界面
- */
-export const DARK_THEME: ThemePalette = {
-  primary: '#00D4FF',
-  primaryDark: '#0099CC',
-  secondary: '#7B68EE',
-  accent: '#00E5FF',
-
-  success: '#00E676',
-  warning: '#FFD740',
-  danger: '#FF5252',
-  info: '#448AFF',
-
-  bgDark: '#0A0E27',
-  bgCard: 'rgba(255, 255, 255, 0.06)',
-  bgCardHover: 'rgba(255, 255, 255, 0.12)',
-  bgGlass: 'rgba(18, 22, 55, 0.7)',
-  bgGlassLight: 'rgba(255, 255, 255, 0.08)',
-  bgCardSolid: '#1B2140',
-
-  textPrimary: '#FFFFFF',
-  textSecondary: 'rgba(255, 255, 255, 0.7)',
-  textTertiary: 'rgba(255, 255, 255, 0.4)',
-  textAccent: '#00D4FF',
-
-  borderGlass: 'rgba(255, 255, 255, 0.1)',
-  borderGlassFocus: 'rgba(255, 255, 255, 0.25)',
-
-  cardShadow: 'rgba(0, 0, 0, 0.35)',
-  cardShadowRadius: 18
-}
-
-/**
- * 浅色主题调色板
- * 浅灰白色调背景 + 低明度文本，适合日间使用
+ * 统一亮色主题调色板（米色商务风格）
+ * 浅暖米色底 #F6F2EA + 纯白卡片 + 暖橙色高亮 #FF8A3D + 绿色在线 + 黄色告警
  */
 export const LIGHT_THEME: ThemePalette = {
-  primary: '#0077CC',
-  primaryDark: '#005599',
+  primary: '#FF8A3D',
+  primaryDark: '#E07020',
   secondary: '#5B4CC4',
-  accent: '#0099CC',
+  accent: '#FF8A3D',
 
   success: '#00A84D',
   warning: '#E6A800',
   danger: '#D93025',
   info: '#1A73E8',
 
-  bgDark: '#F0F2F5',
-  bgCard: 'rgba(0, 0, 0, 0.03)',
-  bgCardHover: 'rgba(0, 0, 0, 0.06)',
-  bgGlass: 'rgba(255, 255, 255, 0.85)',
+  bgDark: '#F5F1EE',
+  bgCard: '#F6F2E9',
+  bgCardHover: 'rgba(0, 0, 0, 0.05)',
+  bgGlass: '#F6F2E9',
   bgGlassLight: 'rgba(0, 0, 0, 0.03)',
-  bgCardSolid: '#FFFFFF',
+  bgCardSolid: '#F6F2E9',
 
-  textPrimary: '#1F1F1F',
-  textSecondary: 'rgba(0, 0, 0, 0.6)',
-  textTertiary: 'rgba(0, 0, 0, 0.35)',
-  textAccent: '#0077CC',
+  textPrimary: '#2B2A26',
+  textSecondary: 'rgba(0, 0, 0, 0.62)',
+  textTertiary: 'rgba(0, 0, 0, 0.38)',
+  textAccent: '#FF8A3D',
 
   borderGlass: 'rgba(0, 0, 0, 0.08)',
   borderGlassFocus: 'rgba(0, 0, 0, 0.2)',
 
-  cardShadow: 'rgba(0, 0, 0, 0.12)',
+  cardShadow: 'rgba(180, 160, 120, 0.14)',
   cardShadowRadius: 14
 }
-
