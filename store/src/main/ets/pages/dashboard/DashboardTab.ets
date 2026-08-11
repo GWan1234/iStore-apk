@@ -228,7 +228,7 @@ export struct DashboardTab {
     return {
       hostname: '', model: '', kernel: '', firmwareVersion: '',
       localTime: '', uptime: 0, cpuUsage: 0, memoryTotal: 0, memoryUsed: 0,
-      memoryCached: 0, memoryAvailable: 0, storageTotal: 0, storageUsed: 0, cpuTemp: 0,
+      memoryCached: 0, memoryAvailable: 0, storageTotal: 0, storageUsed: 0, cpuTemp: 0, cpuFreq: 0,
       boardName: '', cpuModel: '', distribution: '', releaseVersion: '', releaseRevision: '', releaseTarget: ''
     }
   }
@@ -351,6 +351,9 @@ export struct DashboardTab {
       const h: number = 44
       ctx.clearRect(0, 0, w, h)
       if (this.cpuHistory.length < 2) {
+        // 数据就绪前的占位：画一条浅色横条
+        ctx.fillStyle = 'rgba(255,138,61,0.18)'
+        ctx.fillRect(0, h / 2 - 2, w, 4)
         return
       }
       const data: number[] = this.cpuHistory
@@ -960,7 +963,7 @@ export struct DashboardTab {
                   Column() {
                     Text(this.systemInfo.cpuTemp > 0 ? `温度 ${this.systemInfo.cpuTemp.toFixed(0)}°C` : '温度 --')
                       .fontSize(10).fontColor(this.theme.textTertiary)
-                    Text(`内存 ${this.memoryPercent()}%`)
+                    Text(`频率 ${this.systemInfo.cpuFreq} MHz`)
                       .fontSize(10).fontColor(this.theme.textTertiary).margin({ top: 2 })
                   }
                   .alignItems(HorizontalAlign.Start)

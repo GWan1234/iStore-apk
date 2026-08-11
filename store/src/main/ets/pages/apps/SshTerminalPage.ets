@@ -41,6 +41,9 @@ struct SshTerminalPage {
   @State connecting: boolean = true
   @State connected: boolean = false
   @State connError: string = ''
+  @State keyboardUp: boolean = false  // 键盘弹出状态：收起快捷命令栏，给输出区更多空间
+  @State kbCompensate: number = 0  // 键盘弹出补偿：上半部分下移量（抵消系统整页上移，顶部内容回屏）
+  @State kbPad: number = 0         // 键盘弹出补偿：输出区底部压缩量（= 键盘高度）
   @State records: CmdRecord[] = []
   @State inputText: string = ''
   @State running: boolean = false
@@ -177,6 +180,27 @@ this.theme = AppState.getInstance().getTheme()
     })
   }
 
+  /** 读取键盘高度并应用补偿：上半部分下移 + 输出区压缩，输入栏保持在键盘上方 */
+  private readKeyboardHeight(): void {
+    try {
+      const hostCtx = this.getUIContext().getHostContext()
+      if (hostCtx) {
+        window.getLastWindow(hostCtx as Context).then((win: window.Window) => {
+          const area: window.AvoidArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_KEYBOARD)
+          const h: number = px2vp(area.bottomRect.height)
+          if (h > 0) {
+            this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseOut }, () => {
+              this.kbCompensate = h
+              this.kbPad = h
+            })
+          }
+        })
+      }
+    } catch (e) {
+      hilog.error(0x0001, 'SshTerminal', `readKeyboardHeight err: ${String(e)}`)
+    }
+  }
+
   /** 滚动到底部 */
   private scrollToBottom(): void {
     try {
@@ -212,6 +236,9 @@ this.theme = AppState.getInstance().getTheme()
 
   build() {
     Column() {
+      // 上半部分（标题栏 + 输出区 + 快捷栏）：
+      // 键盘弹出时系统整页上移，这里整体下移补偿（顶部内容回屏）+ 底部压缩输出区
+      Column() {
       // 标题栏
       Row() {
         Row() {
@@ -299,26 +326,32 @@ this.theme = AppState.getInstance().getTheme()
       .margin({ left: 12, right: 12 })
       .clip(true)
 
-      // 快捷命令
-      Scroll() {
-        Row({ space: 8 }) {
-          ForEach(QUICK_CMDS, (c: string) => {
-            Text(c)
-              .fontSize(10)
-              .fontColor('#00E676')
-              .fontFamily('monospace')
-              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-              .borderRadius(10)
-              .backgroundColor('rgba(0,230,118,0.1)')
-              .border({ width: 0.5, color: 'rgba(0,230,118,0.3)' })
-              .onClick(() => { this.runCommand(c) })
-          }, (c: string): string => c)
+      // 快捷命令（键盘弹出时收起，输出区可显示更多）
+      if (!this.keyboardUp) {
+        Scroll() {
+          Row({ space: 8 }) {
+            ForEach(QUICK_CMDS, (c: string) => {
+              Text(c)
+                .fontSize(10)
+                .fontColor('#00E676')
+                .fontFamily('monospace')
+                .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+                .borderRadius(10)
+                .backgroundColor('rgba(0,230,118,0.1)')
+                .border({ width: 0.5, color: 'rgba(0,230,118,0.3)' })
+                .onClick(() => { this.runCommand(c) })
+            }, (c: string): string => c)
+          }
+          .padding({ left: 12, right: 12, top: 8, bottom: 4 })
         }
-        .padding({ left: 12, right: 12, top: 8, bottom: 4 })
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
+        .width('100%')
       }
-      .scrollable(ScrollDirection.Horizontal)
-      .scrollBar(BarState.Off)
-      .width('100%')
+      }
+      .layoutWeight(1)
+      .translate({ y: this.kbCompensate })
+      .padding({ bottom: this.kbPad })
 
       // 输入栏
       Row() {
@@ -339,6 +372,23 @@ this.theme = AppState.getInstance().getTheme()
           .layoutWeight(1)
           .onChange((v: string) => { this.inputText = v })
           .onSubmit(() => { this.runCommand(this.inputText) })
+          .onFocus(() => {
+            this.keyboardUp = true
+            // 等键盘布局稳定后：读取键盘高度做补偿 + 滚动到底部
+            setTimeout(() => {
+              this.readKeyboardHeight()
+            }, 200)
+            setTimeout(() => {
+              this.scrollToBottom()
+            }, 250)
+          })
+          .onBlur(() => {
+            this.keyboardUp = false
+            this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
+              this.kbCompensate = 0
+              this.kbPad = 0
+            })
+          })
         Row() {
           Text(this.running ? '…' : '执行')
             .fontSize(12)
@@ -355,7 +405,7 @@ this.theme = AppState.getInstance().getTheme()
         .onClick(() => { this.runCommand(this.inputText) })
       }
       .width('100%')
-      .padding({ top: 6, bottom: 18 })
+      .padding({ top: 6, bottom: this.keyboardUp ? 6 : 18 })
     }
     .width('100%')
     .height('100%')

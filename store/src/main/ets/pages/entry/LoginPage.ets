@@ -14,6 +14,7 @@ import {LIGHT_THEME, ThemePalette} from '../../common/theme/ThemeColors'
 import { common } from '@kit.AbilityKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { deviceInfo } from '@kit.BasicServicesKit'
+import { promptAction } from '@kit.ArkUI'
 import { window } from '@kit.ArkUI'
 import { getAppVersionText } from '../../common/utils/AppVersion'
 import { applyImmersiveBar } from '../../common/utils/WindowUtils'
@@ -112,7 +113,7 @@ struct LoginPage {
   async doSave(): Promise<void> {
     const host: string = this.host.trim()
     if (!host) {
-      this.errorMessage = '请输入设备地址'
+      this.showError('请输入设备地址')
       return
     }
 
@@ -168,7 +169,7 @@ struct LoginPage {
       setTimeout(() => { this.successMessage = '' }, 2000)
     } catch (e) {
       this.isSaving = false
-      this.errorMessage = '保存失败'
+      this.showError('保存失败')
     }
   }
 
@@ -183,11 +184,11 @@ struct LoginPage {
     const config: ConnectionConfig = { host, port: Number(port) || 80, token, useHttps: false, username, password }
 
     if (!host) {
-      this.errorMessage = '请输入设备地址'
+      this.showError('请输入设备地址')
       return
     }
     if (!username && !token) {
-      this.errorMessage = '请输入用户名和密码'
+      this.showError('请输入用户名和密码')
       return
     }
 
@@ -202,8 +203,7 @@ struct LoginPage {
         timedOut = true
         this.isConnecting = false
         this.connectingId = ''
-        this.errorMessage = '连接超时，请检查设备地址和网络'
-        setTimeout(() => { this.errorMessage = '' }, 4000)
+        this.showError('连接超时，请检查设备地址和网络')
       }
     }, 30000)
 
@@ -251,12 +251,10 @@ struct LoginPage {
         this.connectingId = ''
         const lastErr: string = this.appState.getLastError()
         if (lastErr) {
-          this.errorMessage = lastErr
+          this.showError(lastErr)
         } else {
-          this.errorMessage = '连接失败，请检查地址和账号密码'
-        }
-        setTimeout(() => { this.errorMessage = '' }, 10000)
-      }
+          this.showError('连接失败，请检查地址和账号密码')
+        }      }
     } catch (netErr) {
       // 网络异常处理
       if (timedOut) return
@@ -266,8 +264,22 @@ struct LoginPage {
       }
       this.isConnecting = false
       this.connectingId = ''
-      this.errorMessage = '网络错误，请检查设备地址和网络连接'
-      setTimeout(() => { this.errorMessage = '' }, 4000)
+      this.showError('网络错误，请检查设备地址和网络连接')
+    }
+  }
+
+  /** 弹窗错误提示（用户点击确定后关闭） */
+  showError(msg: string): void {
+    try {
+      promptAction.showDialog({
+        title: '提示',
+        message: msg,
+        buttons: [
+          { text: '确定', color: '#FF8A3D' }
+        ]
+      })
+    } catch (e) {
+      hilog.error(0x0001, 'LoginPage', `showError err: ${String(e)}`)
     }
   }
 
@@ -411,15 +423,24 @@ struct LoginPage {
                     }
                     .margin({ left: 10 }).alignItems(HorizontalAlign.Start).layoutWeight(1)
 
-                    Image($r('app.media.app_edit'))
-                      .width(17).height(17)
-                      .padding(8)
-                      .onClick(() => { this.fillForm(device) })
+                    Row() {
+                      Image($r('app.media.app_edit'))
+                        .width(15).height(15)
+                    }
+                    .width(30).height(30).borderRadius(15)
+                    .backgroundColor('rgba(255,138,61,0.14)')
+                    .justifyContent(FlexAlign.Center)
+                    .margin({ right: 6 })
+                    .onClick(() => { this.fillForm(device) })
 
-                    Image($r('app.media.app_trash'))
-                      .width(17).height(17)
-                      .padding(8)
-                      .onClick(() => { this.deleteDevice(device.id) })
+                    Row() {
+                      Image($r('app.media.app_trash'))
+                        .width(15).height(15)
+                    }
+                    .width(30).height(30).borderRadius(15)
+                    .backgroundColor('rgba(255,82,82,0.13)')
+                    .justifyContent(FlexAlign.Center)
+                    .onClick(() => { this.deleteDevice(device.id) })
                   }
                   .width('100%')
                   .onClick(() => { this.connectAndEnter(device) })

@@ -82,6 +82,13 @@ export struct AlbumTab {
   @State videoPaused: boolean[] = []
   // 视频自定义控制条（进度/全屏）
   @State viewerCtrlVisible: boolean = true
+  // 照片双指捏合缩放（查看器内）
+  @State viewerScale: number = 1
+  @State viewerOffsetX: number = 0
+  @State viewerOffsetY: number = 0
+  @State viewerViewW: number = 0
+  @State viewerViewH: number = 0
+  private viewerLastScale: number = 1
   @State videoFullscreen: boolean = false
   @State videoProgress: number = 0
   @State videoDuration: number = 0
@@ -229,6 +236,9 @@ this.theme = AppState.getInstance().getTheme()
     this.videoPaused = []
     this.videoFullscreen = false
     this.viewerCtrlVisible = true
+    this.viewerScale = 1
+    this.viewerOffsetX = 0
+    this.viewerOffsetY = 0
     this.videoProgress = 0
     this.videoDuration = 0
     this.shareMsg = ''
@@ -888,6 +898,66 @@ this.theme = AppState.getInstance().getTheme()
                 .width('100%')
                 .height('100%')
                 .objectFit(ImageFit.Contain)
+                .translate({ x: this.viewerOffsetX, y: this.viewerOffsetY })
+                .scale({ x: this.viewerScale, y: this.viewerScale })
+                .gesture(
+                  GestureGroup(GestureMode.Exclusive,
+                    // 双击：1x ↔ 2x 切换
+                    TapGesture({ count: 2 })
+                      .onAction(() => {
+                        if (this.viewerScale > 1.01) {
+                          this.viewerScale = 1
+                        } else {
+                          this.viewerScale = 2
+                        }
+                        this.viewerOffsetX = 0
+                        this.viewerOffsetY = 0
+                      }),
+                    // 双指捏合缩放（1x~4x）
+                    PinchGesture({ fingers: 2 })
+                      .onActionStart(() => {
+                        this.viewerLastScale = this.viewerScale
+                      })
+                      .onActionUpdate((event: GestureEvent) => {
+                        let ns: number = this.viewerLastScale * event.scale
+                        ns = Math.max(1, Math.min(4, ns))
+                        this.viewerScale = ns
+                        if (ns <= 1.01) {
+                          this.viewerOffsetX = 0
+                          this.viewerOffsetY = 0
+                        }
+                      })
+                      .onActionEnd(() => {
+                        if (this.viewerScale < 1) {
+                          this.viewerScale = 1
+                        }
+                      })
+                  )
+                )
+                // 单指拖动平移：放大后启用（此时 Swiper 不可滑动，由 Pan 接管）；
+                // 未放大时挂空手势，Swiper 正常左右滑动切照片
+                .gesture(
+                  this.viewerScale > 1.01
+                    ? PanGesture({ fingers: 1, distance: 5 })
+                      .onActionUpdate((event: GestureEvent) => {
+                        // 边界约束：放大后图片边缘不拖出视口，可查看任意位置
+                        const s = this.viewerScale
+                        const maxX = this.viewerViewW > 0 ? (this.viewerViewW * (s - 1)) / 2 : 0
+                        const maxY = this.viewerViewH > 0 ? (this.viewerViewH * (s - 1)) / 2 : 0
+                        let nx: number = this.viewerOffsetX + event.offsetX
+                        let ny: number = this.viewerOffsetY + event.offsetY
+                        if (maxX > 0) {
+                          nx = Math.max(-maxX, Math.min(maxX, nx))
+                        }
+                        if (maxY > 0) {
+                          ny = Math.max(-maxY, Math.min(maxY, ny))
+                        }
+                        this.viewerOffsetX = nx
+                        this.viewerOffsetY = ny
+                      })
+                    : TapGesture({ count: 1 }).onAction(() => {})
+                  , GestureMask.IgnoreInternal
+                )
             }
           }
           .width('100%').height('100%')
@@ -895,9 +965,17 @@ this.theme = AppState.getInstance().getTheme()
       }
       .index(this.viewerIndex)
       .indicator(false)
+      .onAreaChange((_oldValue: Area, newValue: Area) => {
+        this.viewerViewW = newValue.width as number
+        this.viewerViewH = newValue.height as number
+      })
       .loop(false)
       .width('100%').height('100%')
       .onChange((index: number) => {
+        // 切换照片时重置缩放/平移
+        this.viewerScale = 1
+        this.viewerOffsetX = 0
+        this.viewerOffsetY = 0
         // 切换照片时：停止所有视频播放（回到缩略图），避免多个视频同时出声
         if (index !== this.viewerIndex) {
           // 滑走时终止分享下载并清理缓存

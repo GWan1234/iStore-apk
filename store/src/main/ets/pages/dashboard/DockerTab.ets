@@ -15,6 +15,7 @@ export struct DockerTab {
   @State dockerStarting: boolean = false
   @State isRefreshing: boolean = false
   @State statsMap: Map<string, DockerStats> = new Map()
+  @State istoreIcons: Map<string, string> = new Map()
   @State apiAvailable: boolean = false
   @State showApiConfirm: boolean = false
   @State apiEnabling: boolean = false
@@ -82,6 +83,32 @@ export struct DockerTab {
       this.iconFailed.push(name)
     }
   }
+
+  /** 加载 iStore 已安装应用图标映射（容器名 → iStore 应用图标 URL） */
+  private istoreIconsLoaded: boolean = false
+  private async loadIStoreIcons(): Promise<void> {
+    if (this.istoreIconsLoaded) {
+      return
+    }
+    try {
+      const apps = await this.api.fetchIStoreApps()
+      const base = this.api.getBaseUrl()
+      const map: Map<string, string> = new Map()
+      for (let i = 0; i < apps.length; i++) {
+        const app = apps[i]
+        if (app && app.name) {
+          map.set(app.name.toLowerCase(), `${base}/luci-static/resources/app-icons/${app.name}.png`)
+        }
+      }
+      if (map.size > 0) {
+        this.istoreIcons = map
+      }
+      this.istoreIconsLoaded = true
+    } catch (e) {
+      hilog.error(0x0001, 'DockerTab', `loadIStoreIcons err: ${String(e)}`)
+      this.istoreIconsLoaded = true
+    }
+  }
   private refreshTimer: number = -1
   private isVisible: boolean = false
   private tabChangeListener: ((tab: number) => void) | null = null
@@ -133,6 +160,7 @@ export struct DockerTab {
         this.containers = await this.api.fetchDockerContainers()
         this.fetchStats()
       }
+      this.loadIStoreIcons()
     } catch (e) {
       this.errorText = '加载失败'
     }
@@ -146,6 +174,7 @@ export struct DockerTab {
         this.containers = await this.api.fetchDockerContainers()
         this.fetchStats()
       }
+      this.loadIStoreIcons()
     } catch (e) {
       hilog.error(0x0001, 'DockerTab', `refreshSilently err: ${String(e)}`)
     }
@@ -244,22 +273,19 @@ export struct DockerTab {
     return this.overview.daemonStatus === 'running' ? '运行中' : '已停止'
   }
 
-  containerIconUrl(image: string): string {
-    if (!image) return ''
-    let name = image
-    const atIdx = name.indexOf('@')
-    if (atIdx !== -1) {
-      name = name.substring(0, atIdx)
+  /**
+   * 容器图标：仅使用 iStore 已安装应用的图标（容器名 == iStore 应用名，
+   * 即 iStore 商店安装的容器，图标取路由器本地 /luci-static/resources/app-icons/<app>.png）。
+   * 未匹配返回空串 → 使用默认 Docker 图标
+   */
+  containerIcon(c: DockerContainer): string {
+    if (c && c.name) {
+      const istoreUrl = this.istoreIcons.get(c.name.toLowerCase())
+      if (istoreUrl && istoreUrl.length > 0) {
+        return istoreUrl
+      }
     }
-    const colonIdx = name.indexOf(':')
-    if (colonIdx !== -1) {
-      name = name.substring(0, colonIdx)
-    }
-    const parts = name.split('/')
-    if (parts.length >= 3) {
-      name = parts[parts.length - 2] + '/' + parts[parts.length - 1]
-    }
-    return `https://xuanyuan.cloud/api/logo/${name}.png`
+    return ''
   }
 
   cpuText(c: DockerContainer): string {
@@ -470,18 +496,17 @@ export struct DockerTab {
                     Column() {
                       if (this.actionContainer === c.name) {
                         LoadingProgress().width(18).height(18).color(this.theme.primary)
-                      } else if (this.iconFailed.indexOf(c.name) >= 0) {
-                        // 远程 logo 加载失败 → 默认 Docker 图标
+                      } else if (this.iconFailed.indexOf(c.name) >= 0 || !this.containerIcon(c)) {
+                        // 无 iStore 图标或加载失败 → 默认 Docker 图标
                         Image($r('app.media.icon_docker'))
                           .width(28).height(28).objectFit(ImageFit.Contain)
                       } else {
-                        Image(this.containerIconUrl(c.image))
+                        Image(this.containerIcon(c))
                           .width(40).height(40).objectFit(ImageFit.Cover).borderRadius(12)
                           .onError(() => { this.markIconFailed(c.name) })
                       }
                     }
-                    .width(40).height(40).borderRadius(12)
-                    .backgroundColor('rgba(200,200,200,0.15)')
+                    .width(40).height(40)
                     .justifyContent(FlexAlign.Center)
 
                     Column() {
@@ -567,8 +592,7 @@ export struct DockerTab {
                         Image($r('app.media.icon_docker'))
                           .width(24).height(24).objectFit(ImageFit.Contain)
                       }
-                      .width(40).height(40).borderRadius(12)
-                      .backgroundColor('rgba(200,200,200,0.15)')
+                      .width(40).height(40)
                       .justifyContent(FlexAlign.Center)
 
                       Column() {
@@ -633,8 +657,7 @@ export struct DockerTab {
                         Text('🌐')
                           .fontSize(20)
                       }
-                      .width(40).height(40).borderRadius(12)
-                      .backgroundColor('rgba(200,200,200,0.15)')
+                      .width(40).height(40)
                       .justifyContent(FlexAlign.Center)
 
                       Column() {

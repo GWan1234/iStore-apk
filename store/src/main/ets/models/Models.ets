@@ -21,6 +21,7 @@ export interface SystemInfo {
   storageTotal: number      // 存储总量（字节）
   storageUsed: number       // 已用存储（字节）
   cpuTemp: number           // CPU 温度（摄氏度）
+  cpuFreq: number           // CPU 当前频率（MHz，0 表示未知）
   boardName: string         // 主板名称
   cpuModel: string          // CPU 型号
   distribution: string      // 发行版名称

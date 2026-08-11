@@ -1199,6 +1199,7 @@ export class ApiClient {
         data['cores'] = 0
         // CPU 温度：quickstart 接口（iStoreOS）或 /sys/class/thermal（ACL 授权的系统）
         data['cpu_temp'] = st ? ApiUtils.numOf(st, 'cpuTemperature', 0) : await this.getThermalTemp()
+        data['cpu_freq'] = await this.getCpuFreqMhz()
         resp.code = 0
         resp.data = data as Object
         return resp
@@ -1563,6 +1564,54 @@ export class ApiClient {
       }
     }
     return 0
+  }
+
+  /** CPU 当前频率（MHz）：cat scaling_cur_freq（kHz → MHz） */
+  private cachedCpuFreq: number = 0
+  private sshFreqTried: boolean = false
+  private sshFreqFails: number = 0
+
+  /** CPU 频率（MHz）：后台异步获取并缓存，首次调用立即返回 0（不阻塞首页加载） */
+  private async getCpuFreqMhz(): Promise<number> {
+    if (this.cachedCpuFreq > 0) {
+      return this.cachedCpuFreq
+    }
+    if (!this.sshFreqTried && this.sshFreqFails < 3) {
+      this.sshFreqTried = true
+      this.fetchCpuFreqBackground()
+    }
+    return 0
+  }
+
+  private async fetchCpuFreqBackground(): Promise<void> {
+    try {
+      const ssh: SshService = SshService.getInstance()
+      let out: string = ''
+      if (ssh.isConnected()) {
+        out = await ssh.exec('cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq')
+      } else {
+        const device: SavedDevice | undefined = AppState.getInstance().getActiveDevice()
+        if (device && device.username && device.password) {
+          const ok: boolean = await ssh.connect(device)
+          if (ok) {
+            out = await ssh.exec('cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq')
+          }
+        }
+      }
+      const khz: number = parseInt(SshService.cleanShellOut(out)) || 0
+      if (khz > 0) {
+        this.cachedCpuFreq = Math.round(khz / 1000)
+        this.sshFreqFails = 0
+        hilog.error(DOMAIN, TAG, `cpu_freq bg ok=${this.cachedCpuFreq} MHz`)
+        return
+      }
+      hilog.error(DOMAIN, TAG, `cpu_freq bg out=[${out}]`)
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `cpu_freq bg err: ${String(e)}`)
+    }
+    // 失败：下次轮询重试（最多 3 次）
+    this.sshFreqTried = false
+    this.sshFreqFails++
   }
 
   /**
@@ -2548,6 +2597,15 @@ export class ApiClient {
     if (result && result.data) {
       const data = result.data as Record<string, Object>
       return Number(data['cpu_temp'] || data['temp'] || data['temperature'] || 0)
+    }
+    return 0
+  }
+
+  /** CPU 当前频率（MHz） */
+  async getCPUFreq(): Promise<number> {
+    const result = await this.request('cpu_info')
+    if (result && result.data) {
+      return Number((result.data as Record<string, Object>)['cpu_freq'] || 0)
     }
     return 0
   }

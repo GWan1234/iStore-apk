@@ -219,8 +219,9 @@ export class ApiService {
       // cached 和 buffered 合并为缓存总量
       const memCached = ObjectHelper.getNumber(memory, 'cached', 0) + ObjectHelper.getNumber(memory, 'buffered', 0)
       const memUsed = memTotal - memAvailable
-      // 5. 额外获取 CPU 温度
+      // 5. 额外获取 CPU 温度与当前频率
       const cpuTemp = await this.fetchCPUTemp()
+      const cpuFreq = await this.fetchCPUFreq()
 
       return {
         hostname: hostname,
@@ -237,6 +238,7 @@ export class ApiService {
         storageTotal: 0,
         storageUsed: 0,
         cpuTemp: cpuTemp,
+        cpuFreq: cpuFreq,
         boardName: boardName,
         cpuModel: cpuModel,
         distribution: distribution,
@@ -539,11 +541,15 @@ export class ApiService {
     return this.client.getCPUTemp()
   }
 
+  private async fetchCPUFreq(): Promise<number> {
+    return this.client.getCPUFreq()
+  }
+
   private emptySystemInfo(): SystemInfo {
     return {
       hostname: '', model: '', kernel: '', firmwareVersion: '',
       localTime: '', uptime: 0, cpuUsage: 0, memoryTotal: 0, memoryUsed: 0,
-      memoryCached: 0, memoryAvailable: 0, storageTotal: 0, storageUsed: 0, cpuTemp: 0,
+      memoryCached: 0, memoryAvailable: 0, storageTotal: 0, storageUsed: 0, cpuTemp: 0, cpuFreq: 0,
       boardName: '', cpuModel: '', distribution: '', releaseVersion: '', releaseRevision: '', releaseTarget: ''
     }
   }
@@ -1419,6 +1425,11 @@ export class ApiService {
       hilog.error(DOMAIN, TAG, `fetchIStoreApps err: ${String(e)}`)
     }
     return []
+  }
+
+  /** 当前设备 API 基础 URL（协议://主机:端口），用于拼 LuCI 静态资源地址 */
+  getBaseUrl(): string {
+    return this.client.baseUrl
   }
 
   async fetchDockerOverview(): Promise<DockerOverview> {

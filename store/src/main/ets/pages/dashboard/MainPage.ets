@@ -21,6 +21,8 @@ struct MainPage {
   @State navHidden: boolean = false
   @State bottomSafeArea: number = 20  // 默认 20vp，覆盖大部分设备的导航指示条高度
   @State lastTabIndex: number = 0  // 进入应用中心前的 Tab（返回时恢复）
+  @State tabOpacity: number = 1      // Tab 内容过渡动画：透明度
+  @State tabTranslateY: number = 0   // Tab 内容过渡动画：垂直位移
   private lastScrollOffset: number = 0
   private tabsController: HdsTabsController = new HdsTabsController()
 
@@ -133,7 +135,12 @@ struct MainPage {
 
         HdsTabs({ controller: this.tabsController }) {
           TabContent() {
-            DashboardTab({ theme: this.theme })
+            Stack() {
+              DashboardTab({ theme: this.theme })
+            }
+            .width('100%').height('100%')
+            .opacity(this.tabOpacity)
+            .translate({ y: this.tabTranslateY })
           }
           .tabBar(new BottomTabBarStyle({
             normal: new SymbolGlyphModifier($r('sys.symbol.house_fill')),
@@ -141,7 +148,12 @@ struct MainPage {
           }, '首页'))
 
           TabContent() {
-            DeviceTab({ theme: this.theme })
+            Stack() {
+              DeviceTab({ theme: this.theme })
+            }
+            .width('100%').height('100%')
+            .opacity(this.tabOpacity)
+            .translate({ y: this.tabTranslateY })
           }
           .tabBar(new BottomTabBarStyle({
             normal: new SymbolGlyphModifier($r('sys.symbol.nearby_devices')),
@@ -149,7 +161,12 @@ struct MainPage {
           }, '设备'))
 
           TabContent() {
-            AlbumTab({ theme: this.theme })
+            Stack() {
+              AlbumTab({ theme: this.theme })
+            }
+            .width('100%').height('100%')
+            .opacity(this.tabOpacity)
+            .translate({ y: this.tabTranslateY })
           }
           .tabBar(new BottomTabBarStyle({
             normal: new SymbolGlyphModifier($r('sys.symbol.archivebox_fill')),
@@ -157,7 +174,12 @@ struct MainPage {
           }, '相册'))
 
           TabContent() {
-            IStoreTabView({ theme: this.theme })
+            Stack() {
+              IStoreTabView({ theme: this.theme })
+            }
+            .width('100%').height('100%')
+            .opacity(this.tabOpacity)
+            .translate({ y: this.tabTranslateY })
           }
           .tabBar(new BottomTabBarStyle({
             normal: new SymbolGlyphModifier($r('sys.symbol.bag_fill')),
@@ -165,7 +187,12 @@ struct MainPage {
           }, 'iStore'))
 
           TabContent() {
-            DockerTab({ theme: this.theme })
+            Stack() {
+              DockerTab({ theme: this.theme })
+            }
+            .width('100%').height('100%')
+            .opacity(this.tabOpacity)
+            .translate({ y: this.tabTranslateY })
           }
           .tabBar(new BottomTabBarStyle({
             normal: new SymbolGlyphModifier($r('sys.symbol.archivebox_fill')),
@@ -208,6 +235,13 @@ struct MainPage {
             }
             return
           }
+          // 切换过场动画：内容淡入 + 轻微上移（遮住切换瞬间的加载感）
+          this.tabOpacity = 0.2
+          this.tabTranslateY = 14
+          this.getUIContext().animateTo({ duration: 240, curve: Curve.EaseOut }, () => {
+            this.tabOpacity = 1
+            this.tabTranslateY = 0
+          })
           // 广播当前 Tab，供各子页做前台感知（暂停/恢复轮询）
           AppState.getInstance().setCurrentTab(index)
           // 记录当前 Tab（点"系统"跳应用中心时记住，返回时恢复）
