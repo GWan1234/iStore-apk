@@ -2,6 +2,8 @@ import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { AppState } from '../../common/store/AppState'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { getAppVersionText } from '../../common/utils/AppVersion'
+import { ApiService } from '../../api/ApiService'
+import { SystemInfo } from '../../models/Models'
 
 
 interface ToolEntry {
@@ -26,8 +28,10 @@ struct AppsPage {
   @State deviceName: string = '未连接设备'
   @State deviceHost: string = ''
   @State deviceConnected: boolean = false
-  @State savedCount: number = 0
   @State versionText: string = getAppVersionText()
+  @State savedCount: number = 0
+  @State upText: string = '--'       // 运行时长（保持卡片样式不变，仅新增数据）
+  private api: ApiService = new ApiService()
 
   private groups: ToolGroup[] = [
     {
@@ -102,6 +106,27 @@ struct AppsPage {
   }
 
   /** 拉取远程最新版本并跳转关于页（version.json 发布信息） */
+  /** 获取运行时长（只读 uptime，不改变卡片样式） */
+  async loadUptime(): Promise<void> {
+    if (!this.deviceConnected) return
+    try {
+      const sys: SystemInfo = await this.api.fetchSystemInfo()
+      const u: number = sys.uptime
+      if (u > 0) {
+        const days: number = Math.floor(u / 86400)
+        const hrs: number = Math.floor((u % 86400) / 3600)
+        const mins: number = Math.floor((u % 3600) / 60)
+        if (days > 0) {
+          this.upText = `${days}天`
+        } else if (hrs > 0) {
+          this.upText = `${hrs}时`
+        } else {
+          this.upText = `${mins}分`
+        }
+      }
+    } catch (e) {}
+  }
+
   handleClick(tool: ToolEntry): void {
     // 关于页：直接进入，版本检查由页面内「检查更新」按钮触发（不再阻塞进入）
     if (tool.route === '__about__') {
@@ -130,6 +155,7 @@ this.theme = AppState.getInstance().getTheme()
       this.deviceHost = active.host ? `${active.host}${active.port && active.port !== '80' ? ':' + active.port : ''}` : ''
     }
     this.savedCount = AppState.getInstance().devices.length
+    this.loadUptime()
 
     const tools: ToolEntry[] = this.flatTools()
     const slides: number[] = []
@@ -233,7 +259,7 @@ this.theme = AppState.getInstance().getTheme()
             Row() {
               // 圆形设备头像
               Row() {
-                Image($r('app.media.app_drive'))
+                Image($r('app.media.app_center'))
                   .width(32).height(32)
               }
               .width(64).height(64).borderRadius(32)
@@ -269,14 +295,25 @@ this.theme = AppState.getInstance().getTheme()
               .layoutWeight(1)
               .margin({ left: 14 })
 
-              // 已保存设备数
-              Column() {
-                Text(String(this.savedCount))
-                  .fontSize(20).fontColor(this.theme.primary).fontWeight(FontWeight.Bold)
-                Text('已保存设备')
-                  .fontSize(10).fontColor(this.theme.textTertiary).margin({ top: 2 })
+              // 已保存设备数 + 运行时长（同款样式并排）
+              Row({ space: 12 }) {
+                Column() {
+                  Text(String(this.savedCount))
+                    .fontSize(20).fontColor(this.theme.primary).fontWeight(FontWeight.Bold)
+                  Text('已保存设备')
+                    .fontSize(10).fontColor(this.theme.textTertiary).margin({ top: 2 })
+                }
+                .alignItems(HorizontalAlign.Center)
+
+                Column() {
+                  Text(this.upText)
+                    .fontSize(20).fontColor(this.theme.primary).fontWeight(FontWeight.Bold)
+                  Text('运行时长')
+                    .fontSize(10).fontColor(this.theme.textTertiary).margin({ top: 2 })
+                }
+                .alignItems(HorizontalAlign.Center)
               }
-              .alignItems(HorizontalAlign.Center)
+              .alignItems(VerticalAlign.Center)
               .padding({ left: 12, right: 4 })
             }
             .width('calc(100% - 56px)')
