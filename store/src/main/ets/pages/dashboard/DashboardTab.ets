@@ -23,6 +23,10 @@ export struct DashboardTab {
   @State mountPoints: MountPoint[] = []
   @State conntrack: ConntrackInfo = { current: 0, max: 0, percent: 0 }
   @State networkInterfaces: NetworkInterface[] = []
+  @State boomShow: boolean = false     // 满速彩蛋显示
+  @State boomTick: number = 0          // 彩蛋动画节拍
+  private boomTimer: number = -1       // 彩蛋定时器
+  private lastBoomTime: number = 0     // 上次彩蛋时间（冷却）
   @State onlineClientCount: number = 0
   private lastScrollY: number = 0
   private timerId: number = -1
@@ -124,6 +128,11 @@ export struct DashboardTab {
       this.networkInterfaces = results[4]
       this.onlineClientCount = this.countOnlineClients(results[5])
       this.isOnline = true
+      // 满速彩蛋：下载速率超过 30MB/s（约 240Mbps）且冷却 30 秒后触发
+      const rx: number = this.wanStatus.rxRate
+      if (rx >= 30 * 1024 * 1024 && Date.now() - this.lastBoomTime > 30000) {
+        this.triggerBoom()
+      }
     } catch (dashErr) {
       this.errorText = '加载数据失败'
     }
@@ -222,6 +231,77 @@ export struct DashboardTab {
     const now: Date = new Date()
     this.lastUpdate =
       `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
+  }
+
+  /** 触发满速彩蛋：3.5 秒粒子动画后自动消失 */
+  private triggerBoom(): void {
+    this.lastBoomTime = Date.now()
+    this.boomShow = true
+    this.boomTick = 0
+    if (this.boomTimer !== -1) {
+      clearInterval(this.boomTimer)
+    }
+    this.boomTimer = setInterval(() => {
+      this.boomTick = this.boomTick + 1
+      if (this.boomTick >= 70) {
+        clearInterval(this.boomTimer)
+        this.boomTimer = -1
+        this.boomShow = false
+      }
+    }, 50)
+  }
+
+  private boomProgress(i: number): number {
+    const phase: number = (this.boomTick + i * 7) % 40
+    return phase / 40
+  }
+
+  private boomSize(i: number): number {
+    return 10 + this.boomProgress(i) * 30
+  }
+
+  private boomColor(i: number): string {
+    const colors: string[] = ['#FF8A3D', '#00C853', '#E6A800', '#FF5252', '#42A5F5', '#AB47BC']
+    return colors[i % colors.length]
+  }
+
+  private boomX(i: number): number {
+    const base: number = 90 + (i % 4) * 120
+    return base + Math.cos(i * 0.52) * this.boomProgress(i) * 150
+  }
+
+  private boomY(i: number): number {
+    return 260 + Math.sin(i * 0.52) * this.boomProgress(i) * 190
+  }
+
+  /** 满速彩蛋粒子层 */
+  @Builder
+  boomLayer() {
+    if (this.boomShow) {
+      Stack() {
+        Column()
+          .width('100%').height('100%')
+          .backgroundColor('rgba(255,255,255,0.06)')
+        ForEach([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], (i: number) => {
+          Circle({ width: this.boomSize(i), height: this.boomSize(i) })
+            .fill(this.boomColor(i))
+            .opacity(1 - this.boomProgress(i))
+            .position({
+              x: this.boomX(i),
+              y: this.boomY(i)
+            })
+        }, (i: number): string => `b${i}`)
+        Column() {
+          Text('⚡ 满速时刻！')
+            .fontSize(26).fontColor('#FF8A3D').fontWeight(FontWeight.Bold)
+          Text('网速起飞，恭喜！')
+            .fontSize(12).fontColor(this.theme.textSecondary).margin({ top: 4 })
+        }
+        .position({ x: 0, y: 240 }).width('100%').alignItems(HorizontalAlign.Center)
+      }
+      .width('100%').height('100%')
+      .hitTestBehavior(HitTestMode.None)
+    }
   }
 
   emptySys(): SystemInfo {
@@ -934,7 +1014,7 @@ export struct DashboardTab {
                 this.quickItem('排行', 'pages/apps/TrafficRankPage', '#F2D08A', $r('app.media.ranking'))
                 this.quickItem('WiFi', 'pages/apps/WifiPage', '#8FB8E8', $r('app.media.wifi_icon'))
                 this.quickItem('定时', 'pages/apps/SchedulePage', '#C0C090', $r('app.media.schedule'))
-                this.quickItem('拓扑', 'pages/apps/TopologyPage', '#8FD6A5', $r('app.media.topology'))
+                this.quickItem('体检', 'pages/apps/NetworkCheckPage', '#8FD6A5', $r('app.media.app_health'))
                 this.quickItem('商店', 'tab:3', '#F0A8C0', $r('app.media.app_store'))
               }
               .width('100%')
@@ -1254,6 +1334,9 @@ export struct DashboardTab {
           }
         })
       }
+
+      // 满速彩蛋层（全屏覆盖，不拦截触摸）
+      this.boomLayer()
     }
     .width('100%')
     .height('100%')

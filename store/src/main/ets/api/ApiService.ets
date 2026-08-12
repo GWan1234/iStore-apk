@@ -36,7 +36,7 @@ import {
   DeviceVisitRecord,
   TimeSlot
 } from '../models/Models'
-import { ConnectionConfig, DhcpBindingInfo, GuestWifiInfo } from '../models/Models'
+import { ConnectionConfig, DhcpBindingInfo, GuestWifiInfo, NetworkCheckItem } from '../models/Models'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { ObjectUtil } from '@pura/harmony-utils'
 import { FormatUtils } from '../common/utils/FormatUtils'
@@ -1046,6 +1046,81 @@ export class ApiService {
       hilog.error(DOMAIN, TAG, 'execCommand err')
     }
     return ''
+  }
+
+  /** 智能网络体检：逐项执行 ping 检测并解析结果 */
+  async networkDiagnose(): Promise<NetworkCheckItem[]> {
+    const items: NetworkCheckItem[] = []
+    // 1. 先识别网关地址（路由表默认路由）
+    let gateway: string = ''
+    try {
+      const gwOut: string = await this.execCommand('/sbin/ip', ['route', 'show', 'default'])
+      const gwMatch: RegExpMatchArray | null = gwOut.match(/default via ([\d.]+)/)
+      if (gwMatch && gwMatch[1]) {
+        gateway = gwMatch[1]
+      }
+    } catch (e) {}
+    // 2. 逐项检测（串行，避免并发命令在路由器上冲突）
+    items.push(await this.pingCheck('gateway', '网关连通性', gateway ? gateway : '192.168.1.1',
+      '内网网关延迟', gateway ? '' : '未识别网关，使用默认 192.168.1.1'))
+    items.push(await this.pingCheck('wan_ali', '外网连通性', '223.5.5.5', '阿里公共 DNS'))
+    items.push(await this.pingCheck('wan_tx', '公网延迟', '119.29.29.29', '腾讯公共 DNS'))
+    items.push(await this.pingCheck('dns', 'DNS 解析', 'baidu.com', '域名解析能力'))
+    return items
+  }
+
+  /** 单项 ping 检测：执行 ping -c 3 -W 1 并解析丢包率/平均延迟 */
+  private async pingCheck(key: string, name: string, target: string, desc: string,
+    detailNote: string = ''): Promise<NetworkCheckItem> {
+    let status: string = 'fail'
+    let latency: number = 0
+    let loss: number = 100
+    let detail: string = detailNote
+    try {
+      const out: string = await this.execCommand('/bin/ping', ['-c', '3', '-W', '1', target])
+      if (out) {
+        const lossMatch: RegExpMatchArray | null = out.match(/(\d+)% packet loss/i)
+        if (lossMatch) {
+          loss = parseInt(lossMatch[1])
+        } else {
+          const recvMatch: RegExpMatchArray | null = out.match(/(\d+) packets received/i)
+          if (recvMatch) {
+            loss = 3 - parseInt(recvMatch[1])
+          }
+        }
+        const avgMatch: RegExpMatchArray | null = out.match(/round-trip min\/avg\/max = [\d.]+\/([\d.]+)\//) ||
+          out.match(/min\/avg\/max\s*=\s*[\d.]+\/([\d.]+)\//)
+        if (avgMatch && avgMatch[1]) {
+          latency = parseFloat(avgMatch[1])
+        }
+        if (loss >= 100) {
+          status = 'fail'
+          detail = detail || '目标不可达'
+        } else if (loss > 0) {
+          status = 'warn'
+          detail = detail || `${loss}% 丢包`
+        } else if (latency > 0 && latency < 50) {
+          status = 'ok'
+          detail = detail || '网络优秀'
+        } else if (latency >= 50 && latency < 150) {
+          status = 'ok'
+          detail = detail || '网络正常'
+        } else if (latency >= 150) {
+          status = 'warn'
+          detail = detail || '延迟偏高'
+        } else {
+          status = 'ok'
+          detail = detail || '连通正常'
+        }
+      } else {
+        detail = detail || '命令无输出（可能无 ping 权限）'
+      }
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `pingCheck ${key} err: ${String(e)}`)
+      detail = detail || '检测异常'
+    }
+    return { key: key, name: name, target: target, desc: desc, status: status,
+      latencyMs: Math.round(latency), lossPercent: loss, detail: detail }
   }
 
   /** 读取路由器文件内容 */

@@ -4,8 +4,11 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import { common } from '@kit.AbilityKit'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { promptAction } from '@kit.ArkUI'
+import { http } from '@kit.NetworkKit'
+import { util } from '@kit.ArkTS'
 import { getAppVersion } from '../../common/utils/AppVersion'
 
+const VERSION_URL = 'https://raw.githubusercontent.com/HWYWL/iStore/main/api/version.json'
 const PROJECT_URL = 'https://github.com/HWYWL/iStore'
 const QQ_GROUP = '1101685827'
 
@@ -13,8 +16,11 @@ const QQ_GROUP = '1101685827'
 @Component
 struct AboutPage {
   @State theme: ThemePalette = LIGHT_THEME
-  @State latestVersion: string = '加载中...'
+  @State latestVersion: string = '点击下方按钮检查'
   @State isReady: boolean = false
+  @State checking: boolean = false     // 检查更新中
+  @State checkDone: boolean = false    // 已完成检查
+  @State checkText: string = ''        // 检查结果提示（已是最新/发现新版本/获取失败）
 
   /** 复制 QQ 群号到剪贴板，弹窗提示，1.5 秒后消失 */
   copyQqGroup(): void {
@@ -43,20 +49,83 @@ struct AboutPage {
   }
 
   aboutToAppear(): void {
-this.theme = AppState.getInstance().getTheme()
+    this.theme = AppState.getInstance().getTheme()
+    // 直接进入页面，不阻塞等待远程版本（由「检查更新」按钮触发）
+    this.latestVersion = '点击下方按钮检查'
+    this.isReady = true
+  }
 
-    
+  /** 检查更新：点击按钮才请求远程版本信息 */
+  async checkUpdate(): Promise<void> {
+    if (this.checking) return
+    this.checking = true
+    this.checkDone = false
+    this.checkText = ''
+    let req: http.HttpRequest | null = null
     try {
-      const params = this.getUIContext().getRouter().getParams() as Record<string, Object>
-      if (params && params['latestVersion']) {
-        this.latestVersion = params['latestVersion'] as string
+      req = http.createHttp()
+      const result = await Promise.race([
+        req.request(VERSION_URL, {
+          method: http.RequestMethod.GET,
+          expectDataType: http.HttpDataType.STRING,
+          connectTimeout: 4000,
+          readTimeout: 4000
+        }),
+        new Promise<null>(r => setTimeout(() => r(null), 5000))
+      ])
+      if (result && (result as http.HttpResponse).responseCode === 200) {
+        const resp = result as http.HttpResponse
+        let bodyStr = ''
+        if (typeof resp.result === 'string') {
+          bodyStr = resp.result as string
+        } else {
+          const decoder = new util.TextDecoder('utf-8')
+          bodyStr = decoder.decodeToString(new Uint8Array(resp.result as ArrayBuffer))
+        }
+        const body = JSON.parse(bodyStr) as Record<string, Object>
+        const ver: string = (body['version'] as string) || ''
+        if (ver) {
+          this.latestVersion = ver
+          const cur: string = getAppVersion()
+          if (this.isNewer(ver, cur)) {
+            this.checkText = `发现新版本 ${ver}，当前 ${cur}`
+          } else {
+            this.checkText = '已是最新版本'
+          }
+        } else {
+          this.latestVersion = '获取失败'
+          this.checkText = '版本信息解析失败，可重试'
+        }
       } else {
-        this.latestVersion = '未知'
+        this.latestVersion = '获取失败'
+        this.checkText = '网络异常，可重试'
       }
     } catch (_e) {
-      this.latestVersion = '未知'
+      this.latestVersion = '获取失败'
+      this.checkText = '网络异常，可重试'
+    } finally {
+      try { req?.destroy() } catch (_e) {}
     }
-    this.isReady = true
+    this.checking = false
+    this.checkDone = true
+  }
+
+  /** 版本号比较：remote > current 返回 true */
+  private isNewer(remote: string, cur: string): boolean {
+    try {
+      const r: number[] = remote.split('.').map((x: string) => parseInt(x) || 0)
+      const c: number[] = cur.split('.').map((x: string) => parseInt(x) || 0)
+      const max: number = Math.max(r.length, c.length)
+      for (let i = 0; i < max; i++) {
+        const rv: number = i < r.length ? r[i] : 0
+        const cv: number = i < c.length ? c[i] : 0
+        if (rv > cv) return true
+        if (rv < cv) return false
+      }
+      return false
+    } catch (e) {
+      return false
+    }
   }
 
   build() {
@@ -130,8 +199,47 @@ this.theme = AppState.getInstance().getTheme()
                 .width('100%')
 
               this.infoRow('当前版本', getAppVersion())
-              this.infoRow('最新版本', this.isReady ? this.latestVersion : '加载中...',
-                this.latestVersion !== '未知' && this.latestVersion !== '加载中...' ? this.theme.success : this.theme.textSecondary)
+
+              // 最新版本行（带检查更新按钮）
+              Row() {
+                Text('最新版本')
+                  .fontSize(12)
+                  .fontColor(this.theme.textSecondary)
+                  .width(68)
+                Text(this.latestVersion)
+                  .fontSize(12)
+                  .fontColor(this.checkText.includes('发现新版本') ? '#00C853' : this.theme.textPrimary)
+                  .fontWeight(FontWeight.Medium)
+                Blank()
+                if (this.checking) {
+                  Row() {
+                    LoadingProgress().width(14).height(14).color('#FF8A3D')
+                    Text('  检查中...').fontSize(11).fontColor(this.theme.primary)
+                  }
+                } else {
+                  Row() {
+                    Text(this.checkDone ? (this.checkText.includes('发现新版本') ? '去更新' : '再查一次') : '检查更新')
+                      .fontSize(11)
+                      .fontColor(this.checkDone && this.checkText.includes('发现新版本') ? '#FFFFFF' : this.theme.primary)
+                      .fontWeight(FontWeight.Bold)
+                  }
+                  .padding({ left: 12, right: 12, top: 5, bottom: 5 })
+                  .borderRadius(14)
+                  .backgroundColor(this.checkDone && this.checkText.includes('发现新版本') ? '#FF8A3D' : 'rgba(255,138,61,0.1)')
+                  .onClick(() => { this.checkUpdate() })
+                }
+              }
+              .width('100%')
+              .padding({ top: 8, bottom: 8 })
+              .border({ width: { bottom: 0.3 }, color: this.theme.borderGlass })
+
+              if (this.checkText) {
+                Text(this.checkText)
+                  .fontSize(10)
+                  .fontColor(this.checkText.includes('发现新版本') ? '#00C853' : this.theme.textTertiary)
+                  .margin({ top: 6 })
+                  .width('100%')
+              }
             }
             .width('100%')
             .padding(14)

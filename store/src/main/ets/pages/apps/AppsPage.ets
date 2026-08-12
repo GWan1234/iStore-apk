@@ -1,11 +1,8 @@
 import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { AppState } from '../../common/store/AppState'
 import { hilog } from '@kit.PerformanceAnalysisKit'
-import { http } from '@kit.NetworkKit'
-import { util } from '@kit.ArkTS'
 import { getAppVersionText } from '../../common/utils/AppVersion'
 
-const VERSION_URL = 'https://raw.githubusercontent.com/HWYWL/iStore/main/api/version.json'
 
 interface ToolEntry {
   emoji: string
@@ -43,7 +40,28 @@ struct AppsPage {
         { emoji: '',  name: '网口流量',  desc: '各接口实时速率与累计统计', route: 'pages/apps/PortTrafficPage', iconResource: $r('app.media.flow_monitoring') },
         { emoji: '🖧', name: '物理网口',  desc: '查看物理端口连接状态与速率', route: 'pages/apps/EthPortPage', iconResource: $r('app.media.green_network_port') },
         { emoji: '📈', name: '流量统计',  desc: '近 7/30 天每日流量趋势', route: 'pages/apps/TrafficReportPage', iconResource: $r('app.media.traffic_pipe') },
+        { emoji: '🩺', name: '智能体检',  desc: '一键检测网络连通与延迟', route: 'pages/apps/NetworkCheckPage', iconResource: $r('app.media.app_health') },
         { emoji: '🗺', name: '网络拓扑',  desc: '可视化设备连接关系图', route: 'pages/apps/TopologyPage', iconResource: $r('app.media.topology') },
+      ]
+    },
+    {
+      title: '趣味',
+      items: [
+        { emoji: '🎉', name: '运行里程碑', desc: '连续运行天数与纪念日', route: 'pages/apps/MileStonePage', iconResource: $r('app.media.app_restart') },
+        { emoji: '🏆', name: '网络成就',  desc: '收集你的网络徽章', route: 'pages/apps/AchievementPage', iconResource: $r('app.media.app_bell') },
+        { emoji: '🌡', name: '设备作息',  desc: '设备 24h 活跃热力图', route: 'pages/apps/DeviceActivityPage', iconResource: $r('app.media.flow_monitoring') },
+        { emoji: '📊', name: 'AI 周报',  desc: '7 天流量汇总与点评', route: 'pages/apps/NetworkReportPage', iconResource: $r('app.media.ranking') },
+        { emoji: '🎴', name: '今日运势',  desc: '每天一次网络占卜', route: 'pages/apps/FortunePage', iconResource: $r('app.media.app_health') },
+        { emoji: '🤖', name: '路由器心情', desc: '今天路由器心情如何', route: 'pages/apps/RouterMoodPage', iconResource: $r('app.media.ai_assistant') },
+        { emoji: '📇', name: 'WiFi 访客卡', desc: '扫码连接 WiFi 卡片', route: 'pages/apps/WifiCardPage', iconResource: $r('app.media.wifi_icon') },
+        { emoji: '🫀', name: '网络心电图', desc: '实时延迟波形监测', route: 'pages/apps/NetEcgPage', iconResource: $r('app.media.flow_monitoring') },
+        { emoji: '🚀', name: '网速排位赛', desc: '测速看全国排名', route: 'pages/apps/SpeedTestPage', iconResource: $r('app.media.ranking') },
+        { emoji: '🏷️', name: '设备外号', desc: '给设备起社交外号', route: 'pages/apps/DeviceAliasPage', iconResource: $r('app.media.topology') },
+        { emoji: '🥊', name: 'DNS 擂台', desc: '各家 DNS 谁最快', route: 'pages/apps/DnsBattlePage', iconResource: $r('app.media.network_mgmt') },
+        { emoji: '⚡', name: '远程开机', desc: 'WOL 一键唤醒设备', route: 'pages/apps/WolPage', iconResource: $r('app.media.app_restart') },
+        { emoji: '📸', name: '装 B 分享卡', desc: '网络状态生成分享图', route: 'pages/apps/ShareCardPage', iconResource: $r('app.media.ranking') },
+        { emoji: '🆙', name: '路由器等级', desc: 'Lv.1 到网络之神', route: 'pages/apps/RouterLevelPage', iconResource: $r('app.media.app_bell') },
+        { emoji: '💰', name: '流量月账单', desc: '运营商账单风统计', route: 'pages/apps/TrafficBillPage', iconResource: $r('app.media.flow_monitoring') },
       ]
     },
     {
@@ -62,9 +80,13 @@ struct AppsPage {
     {
       title: '系统',
       items: [
+        { emoji: '🌐', name: 'OpenWRT 首页', desc: '打开路由器管理后台', route: 'pages/apps/WebViewPage', iconResource: $r('app.media.app_globe') },
+        { emoji: '🔁', name: '网络重启',  desc: '只重启网络服务不动整机', route: 'pages/system/NetworkRestartPage', iconResource: $r('app.media.network_mgmt') },
+        { emoji: '🧩', name: '软件包管理', desc: 'opkg/apk 安装卸载软件', route: 'pages/system/PackageManagerPage', iconResource: $r('app.media.app_gear') },
+        { emoji: '📜', name: '系统日志',  desc: '实时查看路由器日志', route: 'pages/system/SystemLogPage', iconResource: $r('app.media.app_info') },
+        { emoji: '💾', name: '配置备份',  desc: '备份与恢复全部配置', route: 'pages/system/ConfigBackupPage', iconResource: $r('app.media.folder_file') },
         { emoji: '🔄', name: '重启',     desc: '重启路由器设备', route: 'pages/system/RebootPage', iconResource: $r('app.media.app_restart') },
         { emoji: '🔙', name: '恢复出厂', desc: '恢复设备到出厂设置', route: 'pages/system/FactoryResetPage', iconResource: $r('app.media.app_reset') },
-        { emoji: '🌐', name: 'OpenWRT 首页', desc: '打开路由器管理后台', route: 'pages/apps/WebViewPage', iconResource: $r('app.media.app_globe') },
         { emoji: 'ℹ️', name: '关于',     desc: '版本信息与更新检查', route: '__about__', iconResource: $r('app.media.app_info') },
       ]
     },
@@ -80,47 +102,14 @@ struct AppsPage {
   }
 
   /** 拉取远程最新版本并跳转关于页（version.json 发布信息） */
-  async fetchVersionAndAbout(): Promise<void> {
-    let ver = '未知'
-    let req: http.HttpRequest | null = null
-    try {
-      req = http.createHttp()
-      const result = await Promise.race([
-        req.request(VERSION_URL, {
-          method: http.RequestMethod.GET,
-          expectDataType: http.HttpDataType.STRING,
-          connectTimeout: 4000,
-          readTimeout: 4000
-        }),
-        new Promise<null>(r => setTimeout(() => r(null), 5000))
-      ])
-      if (result && (result as http.HttpResponse).responseCode === 200) {
-        const resp = result as http.HttpResponse
-        let bodyStr = ''
-        if (typeof resp.result === 'string') {
-          bodyStr = resp.result as string
-        } else {
-          const decoder = new util.TextDecoder('utf-8')
-          bodyStr = decoder.decodeToString(new Uint8Array(resp.result as ArrayBuffer))
-        }
-        const body = JSON.parse(bodyStr) as Record<string, Object>
-        ver = (body['version'] as string) || '未知'
-      }
-    } catch (_e) {
-    } finally {
-      try { req?.destroy() } catch (_e) {}
-    }
-    try {
-      this.getUIContext().getRouter().pushUrl({
-        url: 'pages/other/AboutPage',
-        params: { latestVersion: ver }
-      })
-    } catch (_e) {}
-  }
-
   handleClick(tool: ToolEntry): void {
+    // 关于页：直接进入，版本检查由页面内「检查更新」按钮触发（不再阻塞进入）
     if (tool.route === '__about__') {
-      this.fetchVersionAndAbout()
+      try {
+        this.getUIContext().getRouter().pushUrl({ url: 'pages/other/AboutPage' })
+      } catch (e) {
+        hilog.error(0x0001, 'AppsPage', `pushUrl failed: ${e}`)
+      }
     } else {
       try {
         this.getUIContext().getRouter().pushUrl({ url: tool.route })

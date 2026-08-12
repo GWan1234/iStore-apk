@@ -52,6 +52,18 @@ export interface NetworkInterface {
 /**
  * WAN 口状态 - 外网连接状态
  */
+/** 智能网络体检单项结果 */
+export interface NetworkCheckItem {
+  key: string            // 检测项标识
+  name: string           // 检测项名称
+  target: string         // 检测目标
+  desc: string           // 说明（如「阿里公共 DNS」）
+  status: string         // pending / running / ok / warn / fail
+  latencyMs: number      // 平均延迟（ms）
+  lossPercent: number    // 丢包率（%）
+  detail: string         // 附加说明（如网关地址/错误信息）
+}
+
 export interface WanStatus {
   interface: string         // WAN 接口名称
   uptime: number            // 连接持续时间（秒）

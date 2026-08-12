@@ -1,7 +1,7 @@
 {
-  "version": "3.0.1",
+  "version": "3.1.1",
   "versionCode": 2,
-  "description": "修复小bug，增加动画",
+  "description": "增加很多趣味小工具，例如测速排行、路由器心情",
   "releaseDate": "2026-08-05",
   "downloadUrl": "https://github.com/HWYWL/iStore/releases"
 }
