@@ -42,6 +42,8 @@
     "pages/system/ConfigBackupPage",
     "pages/system/NetworkRestartPage",
     "pages/system/PackageManagerPage",
+    "pages/apps/ModelShopPage",
+    "pages/apps/DeviceManagePage",
     "pages/apps/TopologyPage",
     "pages/apps/AiAssistantPage",
     "pages/apps/SshTerminalPage",

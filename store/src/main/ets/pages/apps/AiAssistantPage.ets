@@ -1,6 +1,7 @@
 /**
- * AiAssistantPage - AI 网络助手（聊天式）
+ * NetworkHelperPage - 网络助手（快捷问答）
  * 本地规则引擎：快捷提问 + 自由输入，实时拉取路由器数据回答
+ * 注：本地 AI 对话已由底部「AI」Tab 承担，本页专注网络快捷问答
  */
 import { AppState } from '../../common/store/AppState'
 import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
@@ -18,7 +19,7 @@ const QUICK_QUESTIONS: string[] = [
 
 @Entry
 @Component
-struct AiAssistantPage {
+struct NetworkHelperPage {
   @State theme: ThemePalette = LIGHT_THEME
   @State topSafeArea: number = 44
   @State messages: ChatMsg[] = []
@@ -27,8 +28,8 @@ struct AiAssistantPage {
   private listScroller: Scroller = new Scroller()
 
   aboutToAppear(): void {
-this.theme = AppState.getInstance().getTheme()
-        this.loadTopSafeArea()
+    this.theme = AppState.getInstance().getTheme()
+    this.loadTopSafeArea()
     // 开场白
     this.messages.push({
       role: 'ai',
@@ -95,7 +96,7 @@ this.theme = AppState.getInstance().getTheme()
       } else {
         Column() {
           Row() {
-            Text('🤖')
+            Text('🌐')
               .fontSize(16)
             Text(' 网络助手')
               .fontSize(10)
@@ -129,25 +130,25 @@ this.theme = AppState.getInstance().getTheme()
       // 标题栏
       Row() {
         Row() {
-          Text(' AI 网络助手')
-            .fontSize(16)
+          Text('‹')
+            .fontSize(24)
             .fontColor(this.theme.textPrimary)
-            .fontWeight(FontWeight.Medium)
+            .padding({ left: 4, right: 12, top: 2, bottom: 2 })
         }
-        .padding({ left: 12, right: 16, top: 6, bottom: 6 })
-        .borderRadius(100)
-        .backgroundColor(this.theme.bgCard)
-        .border({ width: 0.5, color: this.theme.borderGlass })
         .onClick(() => {
           this.getUIContext().getRouter().back()
         })
+        Text('网络助手')
+          .fontSize(17)
+          .fontColor(this.theme.textPrimary)
+          .fontWeight(FontWeight.Bold)
         Blank()
         Text('实时诊断')
           .fontSize(10)
           .fontColor(this.theme.textTertiary)
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: this.topSafeArea + 4, bottom: 8 })
+      .padding({ left: 12, right: 16, top: this.topSafeArea + 4, bottom: 8 })
 
       // 消息列表
       List({ scroller: this.listScroller, space: 2 }) {
@@ -229,8 +230,8 @@ this.theme = AppState.getInstance().getTheme()
     .width('100%')
     .height('100%')
     .linearGradient({
-      angle: 135,
-      colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+      angle: 180,
+      colors: [['#F6F2EA', 0], ['#FAF7F0', 0.5], ['#F6F2EA', 1]]
     })
   }
 }

@@ -71,12 +71,14 @@ struct AppsPage {
     {
       title: '管理',
       items: [
+        { emoji: '📱', name: '设备管理',  desc: '设备列表与备注管理', route: 'pages/apps/DeviceManagePage', iconResource: $r('app.media.device_manage') },
+        { emoji: '🌐', name: '网络助手',  desc: '快捷问答 · 实时诊断网络', route: 'pages/apps/AiAssistantPage', iconResource: $r('app.media.help_icon') },
         { emoji: '🛡️', name: '家长控制',  desc: 'OAF 应用过滤引擎配置', route: 'pages/apps/OafPage', iconResource: $r('app.media.app_shield') },
         { emoji: '⚙️', name: '系统进程',  desc: '查看和管理运行中的进程', route: 'pages/process/ProcessListPage', iconResource: $r('app.media.app_gear') },
         { emoji: '🚀', name: '启动项',   desc: '管理开机自启服务', route: 'pages/process/StartupPage', iconResource: $r('app.media.app_rocket') },
         { emoji: '🔔', name: '智能通知',  desc: '断网告警与新设备接入提醒', route: 'pages/apps/NotifySettingsPage', iconResource: $r('app.media.app_bell') },
         { emoji: '⏰', name: '定时任务',  desc: '定时重启与定时开关 WiFi', route: 'pages/apps/SchedulePage', iconResource: $r('app.media.schedule') },
-        { emoji: '🤖', name: 'AI 网络助手', desc: '自然语言查询网络状态', route: 'pages/apps/AiAssistantPage', iconResource: $r('app.media.ai_assistant') },
+        { emoji: '🏪', name: '模型商店',  desc: '下载本地 AI 模型', route: 'pages/apps/ModelShopPage', iconResource: $r('app.media.shop_icon') },
         { emoji: '⌨️', name: 'SSH 终端',   desc: '命令行管理路由器', route: 'pages/apps/SshTerminalPage', iconResource: $r('app.media.terminal') },
         { emoji: '📁', name: '文件管理',   desc: '浏览管理 OpenWrt 文件', route: 'pages/apps/FileManagerPage', iconResource: $r('app.media.folder_file') },
       ]

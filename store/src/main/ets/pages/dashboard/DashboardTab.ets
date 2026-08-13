@@ -1004,7 +1004,7 @@ export struct DashboardTab {
             Column() {
               Row() {
                 this.quickItem('文件', 'pages/apps/FileManagerPage', '#A8C8A0', $r('app.media.folder_file'))
-                this.quickItem('AI 助手', 'pages/apps/AiAssistantPage', '#B8A6E8', $r('app.media.ai_assistant'))
+                this.quickItem('AI 助手', 'tab:1', '#B8A6E8', $r('app.media.ai_assistant'))
                 this.quickItem('Docker', 'tab:4', '#9FB8E8', $r('app.media.docker'))
                 this.quickItem('SSH', 'pages/apps/SshTerminalPage', '#A0B8D8', $r('app.media.terminal'))
                 this.quickItem('应用中心', 'pages/apps/AppsPage', '#FFB37A', $r('app.media.app_center'))

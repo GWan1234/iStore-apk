@@ -4,7 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit'
 import { SymbolGlyphModifier, window } from '@kit.ArkUI'
 import { DashboardTab } from './DashboardTab'
-import { DeviceTab } from './DeviceTab'
+import { AiTab } from './AiTab'
 import { IStoreTabView } from './IStoreTabView'
 import { NotificationWatcher } from '../../common/store/NotificationWatcher'
 import { NotifyStore } from '../../common/store/NotifyStore'
@@ -149,16 +149,16 @@ struct MainPage {
 
           TabContent() {
             Stack() {
-              DeviceTab({ theme: this.theme })
+              AiTab({ theme: this.theme })
             }
             .width('100%').height('100%')
             .opacity(this.tabOpacity)
             .translate({ y: this.tabTranslateY })
           }
           .tabBar(new BottomTabBarStyle({
-            normal: new SymbolGlyphModifier($r('sys.symbol.nearby_devices')),
-            selected: new SymbolGlyphModifier($r('sys.symbol.nearby_devices'))
-          }, '设备'))
+            normal: new SymbolGlyphModifier($r('sys.symbol.children')),
+            selected: new SymbolGlyphModifier($r('sys.symbol.children'))
+          }, 'AI'))
 
           TabContent() {
             Stack() {
@@ -169,8 +169,8 @@ struct MainPage {
             .translate({ y: this.tabTranslateY })
           }
           .tabBar(new BottomTabBarStyle({
-            normal: new SymbolGlyphModifier($r('sys.symbol.archivebox_fill')),
-            selected: new SymbolGlyphModifier($r('sys.symbol.archivebox_fill'))
+            normal: new SymbolGlyphModifier($r('sys.symbol.picture_2')),
+            selected: new SymbolGlyphModifier($r('sys.symbol.picture_2'))
           }, '相册'))
 
           TabContent() {
