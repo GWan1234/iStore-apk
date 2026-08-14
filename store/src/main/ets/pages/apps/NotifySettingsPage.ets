@@ -18,6 +18,7 @@ struct NotifySettingsPage {
   @State masterEnabled: boolean = false
   @State offlineAlert: boolean = false
   @State newDeviceAlert: boolean = false
+  @State aiHealthAlert: boolean = false
   @State notifyEnabled: boolean = true  // 系统通知权限
   private store: NotifyStore = NotifyStore.getInstance()
 
@@ -30,6 +31,7 @@ this.theme = AppState.getInstance().getTheme()
     this.masterEnabled = this.store.isEnabled()
     this.offlineAlert = this.store.isOfflineAlertOn()
     this.newDeviceAlert = this.store.isNewDeviceAlertOn()
+    this.aiHealthAlert = this.store.isAiHealthAlertOn()
     this.checkNotifyPermission()
     // 获取状态栏高度（避免标题栏被遮挡）
     this.loadTopSafeArea()
@@ -92,16 +94,19 @@ this.theme = AppState.getInstance().getTheme()
       Toggle({ type: ToggleType.Switch, isOn: checked })
         .selectedColor('#448AFF')
         .onChange((v: boolean) => {
-          // tag 分发：0=总开关 1=断网告警 2=新设备提醒
+          // tag 分发：0=总开关 1=断网告警 2=新设备提醒 3=AI健康告警
           if (tag === 0) {
             this.masterEnabled = v
             this.store.setEnabled(v)
           } else if (tag === 1) {
             this.offlineAlert = v
             this.store.setOfflineAlert(v)
-          } else {
+          } else if (tag === 2) {
             this.newDeviceAlert = v
             this.store.setNewDeviceAlert(v)
+          } else {
+            this.aiHealthAlert = v
+            this.store.setAiHealthAlert(v)
           }
         })
     }
@@ -190,6 +195,9 @@ this.theme = AppState.getInstance().getTheme()
             // 新设备接入提醒
             this.switchRow('新设备接入提醒', '有新设备连接 WiFi 时通知你（首次建立基线不打扰）',
               this.newDeviceAlert, 2)
+            // AI 健康告警
+            this.switchRow('AI 健康告警', '温度过高/内存紧张/CPU 高负载/突发大流量时通知你',
+              this.aiHealthAlert, 3)
           }
           .margin({ top: 8 })
           .backgroundColor(this.theme.bgCard)
@@ -264,7 +272,7 @@ this.theme = AppState.getInstance().getTheme()
     .height('100%')
     .linearGradient({
       angle: 135,
-      colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+      colors: this.theme.pageGradient
     })
   }
 }

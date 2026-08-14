@@ -911,6 +911,22 @@ export struct DashboardTab {
         .onClick(() => {
           this.getUIContext().getRouter().pushUrl({ url: 'pages/apps/NotifySettingsPage' })
         })
+
+        // 右侧：皮肤管理
+        Stack() {
+          Image($r('app.media.skin_icon'))
+            .width(22)
+            .height(22)
+        }
+        .width(36)
+        .height(36)
+        .borderRadius(18)
+        .backgroundColor('#F5F0E6')
+        .alignContent(Alignment.Center)
+        .margin({ left: 8 })
+        .onClick(() => {
+          this.getUIContext().getRouter().pushUrl({ url: 'pages/apps/SkinManagePage' })
+        })
       }
       .width('100%')
       .padding({ left: 18, right: 18, top: 4, bottom: 10 })
@@ -1342,7 +1358,7 @@ export struct DashboardTab {
     .height('100%')
     .linearGradient({
       angle: 135,
-      colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+      colors: this.theme.pageGradient
     })
   }
 

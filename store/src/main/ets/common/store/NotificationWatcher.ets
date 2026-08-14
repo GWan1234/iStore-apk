@@ -3,12 +3,14 @@
  * 由 MainPage 在前台时启停（start/stop），间隔 60 秒检测：
  * 1. 断网告警：路由器离线/恢复时发本地通知
  * 2. 新设备提醒：设备列表出现新 MAC 时发本地通知
- * 3. 定时任务：到点执行定时重启 / 定时开关 WiFi（App 运行期间有效）
+ * 3. AI 健康告警：温度/内存/CPU/流量超阈值时发本地通知
+ * 4. 定时任务：到点执行定时重启 / 定时开关 WiFi（App 运行期间有效）
  */
 import { notificationManager } from '@kit.NotificationKit'
 import { ApiService } from '../../api/ApiService'
 import { NotifyStore } from './NotifyStore'
 import { ScheduleStore, ScheduleTask } from './ScheduleStore'
+import { AiHealthChecker } from './AiHealthChecker'
 import { AppState } from './AppState'
 import { ConnectedDevice } from '../../models/Models'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -63,6 +65,7 @@ export class NotificationWatcher {
         return
       }
       await this.checkNotify()
+      await this.checkHealth()
       await this.checkSchedule()
     } catch (e) {
       hilog.error(DOMAIN, TAG, `tick err: ${JSON.stringify(e)}`)
@@ -128,6 +131,16 @@ export class NotificationWatcher {
       this.notifyStore.setLastMacs(merged)
     } catch (e) {
       hilog.error(DOMAIN, TAG, `checkNewDevices err: ${JSON.stringify(e)}`)
+    }
+  }
+
+  // ========== AI 健康告警检测 ==========
+
+  private async checkHealth(): Promise<void> {
+    try {
+      await AiHealthChecker.getInstance().checkHealth()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `checkHealth err: ${JSON.stringify(e)}`)
     }
   }
 

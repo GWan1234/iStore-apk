@@ -1,7 +1,7 @@
 /**
  * NotifyStore - 智能通知设置存储（单例）
- * 保存：总开关、断网告警开关、新设备提醒开关
- * 以及检测状态：上次在线状态、已知设备 MAC 集合（用于检测新设备）
+ * 保存：总开关、断网告警开关、新设备提醒开关、AI 健康告警开关
+ * 以及检测状态：上次在线状态、已知设备 MAC 集合、AI 告警去重记录
  */
 import { preferences } from '@kit.ArkData'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -27,7 +27,7 @@ export class NotifyStore {
     try {
       this.prefs = await preferences.getPreferences(context, STORE_NAME)
       // 预热缓存
-      const keys: string[] = ['enabled', 'offlineAlert', 'newDeviceAlert', 'lastOnline', 'lastMacs', 'lastCheckedDate']
+      const keys: string[] = ['enabled', 'offlineAlert', 'newDeviceAlert', 'aiHealthAlert', 'lastOnline', 'lastMacs', 'lastCheckedDate', 'lastAiAlerts']
       for (let i = 0; i < keys.length; i++) {
         this.cache.set(keys[i], this.prefs.getSync(keys[i], '') as string)
       }
@@ -83,6 +83,15 @@ export class NotifyStore {
     this.setStr('newDeviceAlert', v ? '1' : '0')
   }
 
+  /** AI 健康告警开关（温度/内存/流量异常主动推送） */
+  isAiHealthAlertOn(): boolean {
+    return this.getStr('aiHealthAlert', '') === '1'
+  }
+
+  setAiHealthAlert(v: boolean): void {
+    this.setStr('aiHealthAlert', v ? '1' : '0')
+  }
+
   // ========== 检测状态 ==========
 
   /** 上次在线状态（true=在线 false=离线；未检测过返回 null） */
@@ -118,5 +127,20 @@ export class NotifyStore {
 
   setLastCheckedDate(d: string): void {
     this.setStr('lastCheckedDate', d)
+  }
+
+  /** AI 告警去重记录：{ 类型: 上次推送日期YYYY-MM-DD }，同类型 24h 内不重复推送 */
+  getLastAiAlerts(): Record<string, string> {
+    try {
+      const v: string = this.getStr('lastAiAlerts', '')
+      if (!v) return {}
+      return JSON.parse(v) as Record<string, string>
+    } catch (e) {
+      return {}
+    }
+  }
+
+  setLastAiAlerts(map: Record<string, string>): void {
+    this.setStr('lastAiAlerts', JSON.stringify(map))
   }
 }

@@ -210,7 +210,7 @@ export struct RouterLevelPage {
     .width('100%').height('100%')
     .linearGradient({
       angle: 180,
-      colors: [['#F6F2EA', 0], ['#FAF7F0', 0.5], ['#F6F2EA', 1]]
+      colors: this.theme.pageGradient
     })
   }
 

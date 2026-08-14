@@ -1,7 +1,7 @@
 /**
- * 主题色彩系统（统一亮色米色风格，无黑夜模式）
- * 全应用固定使用 LIGHT_THEME 米色主题：浅暖米色底 + 纯白大圆角卡片 + 暖橙高亮
- * 组件通过 AppState.getTheme() 获取主题，无需关注切换
+ * 主题色彩系统（多皮肤支持）
+ * 每套皮肤 = 一组 ThemePalette 调色板。当前皮肤由 AppState 持久化管理，
+ * 组件通过 AppState.getTheme() 获取，切换皮肤后全应用自动跟随。
  */
 
 /**
@@ -42,6 +42,9 @@ export interface ThemePalette {
   // --- 光感（沉浸式投影） ---
   cardShadow: string        // 卡片柔和投影颜色（透明色，如 rgba(0,0,0,0.14)）
   cardShadowRadius: number  // 卡片投影模糊半径（vp）
+
+  // --- 页面渐变背景（皮肤专属） ---
+  pageGradient: Array<[ResourceColor, number]>  // linearGradient colors：[[color, offset], ...]
 }
 
 /**
@@ -75,5 +78,292 @@ export const LIGHT_THEME: ThemePalette = {
   borderGlassFocus: 'rgba(0, 0, 0, 0.2)',
 
   cardShadow: 'rgba(180, 160, 120, 0.14)',
-  cardShadowRadius: 14
+  cardShadowRadius: 14,
+  pageGradient: [['#F6F2EA', 0], ['#FAF7F0', 0.5], ['#F6F2EA', 1]]
 }
+
+/**
+ * 皮肤注册表：每套皮肤的元数据 + 调色板
+ * id 用于持久化，后续新增皮肤只需在此追加一个条目。
+ */
+export interface SkinDef {
+  id: string
+  name: string
+  desc: string
+  preview: string[]   // 预览色块（2-3 个代表色）
+  theme: ThemePalette
+}
+
+/** 皮肤注册表（默认第一项为米色经典） */
+export const SKINS: SkinDef[] = [
+  {
+    id: 'beige',
+    name: '米色经典',
+    desc: '浅暖米色 · 商务极简',
+    preview: ['#F6F2EA', '#FF8A3D', '#FFFFFF'],
+    theme: LIGHT_THEME
+  },
+  {
+    id: 'white',
+    name: '纯净白',
+    desc: '清爽纯白 · 简洁明亮',
+    preview: ['#F5F7FA', '#3B82F6', '#FFFFFF'],
+    theme: {
+      primary: '#3B82F6',
+      primaryDark: '#2563EB',
+      secondary: '#0EA5E9',
+      accent: '#3B82F6',
+
+      success: '#00A84D',
+      warning: '#E6A800',
+      danger: '#D93025',
+      info: '#3B82F6',
+
+      bgDark: '#F0F4FA',
+      bgCard: '#FFFFFF',
+      bgCardHover: 'rgba(0, 0, 0, 0.05)',
+      bgGlass: '#FFFFFF',
+      bgGlassLight: 'rgba(0, 0, 0, 0.03)',
+      bgCardSolid: '#FFFFFF',
+
+      textPrimary: '#1F2937',
+      textSecondary: 'rgba(0, 0, 0, 0.62)',
+      textTertiary: 'rgba(0, 0, 0, 0.38)',
+      textAccent: '#3B82F6',
+
+      borderGlass: 'rgba(0, 0, 0, 0.08)',
+      borderGlassFocus: 'rgba(0, 0, 0, 0.2)',
+
+      cardShadow: 'rgba(31, 41, 55, 0.1)',
+      cardShadowRadius: 14,
+      pageGradient: [['#F0F4FA', 0], ['#F7FAFD', 0.5], ['#F0F4FA', 1]]
+    }
+  },
+  {
+    id: 'ivory',
+    name: '雾霭白',
+    desc: '灰粉渐变 · 轻柔雅致',
+    preview: ['#EEE1E1', '#F4F3F8', '#FFFFFF'],
+    theme: {
+      primary: '#C79B9B',
+      primaryDark: '#A97F7F',
+      secondary: '#8E9BC4',
+      accent: '#C79B9B',
+
+      success: '#00A84D',
+      warning: '#E6A800',
+      danger: '#D93025',
+      info: '#8E9BC4',
+
+      bgDark: '#EEE1E1',
+      bgCard: '#FAF7F7',
+      bgCardHover: 'rgba(0, 0, 0, 0.05)',
+      bgGlass: '#FAF7F7',
+      bgGlassLight: 'rgba(0, 0, 0, 0.03)',
+      bgCardSolid: '#FAF7F7',
+
+      textPrimary: '#4A4444',
+      textSecondary: 'rgba(0, 0, 0, 0.6)',
+      textTertiary: 'rgba(0, 0, 0, 0.38)',
+      textAccent: '#C79B9B',
+
+      borderGlass: 'rgba(0, 0, 0, 0.08)',
+      borderGlassFocus: 'rgba(0, 0, 0, 0.2)',
+
+      cardShadow: 'rgba(160, 140, 140, 0.16)',
+      cardShadowRadius: 14,
+      pageGradient: [['#EEE1E1', 0], ['#F2EDF0', 0.5], ['#F4F3F8', 1]]
+    }
+  },
+  {
+    id: 'apricot',
+    name: '杏子暖',
+    desc: '杏粉渐变 · 温暖治愈',
+    preview: ['#F2C3B1', '#F6EEEB', '#FFF5F0'],
+    theme: {
+      primary: '#E8936A',
+      primaryDark: '#CE7A52',
+      secondary: '#C79B8E',
+      accent: '#E8936A',
+
+      success: '#00A84D',
+      warning: '#E6A800',
+      danger: '#D93025',
+      info: '#C79B8E',
+
+      bgDark: '#F2C3B1',
+      bgCard: '#FDF8F5',
+      bgCardHover: 'rgba(0, 0, 0, 0.05)',
+      bgGlass: '#FDF8F5',
+      bgGlassLight: 'rgba(0, 0, 0, 0.03)',
+      bgCardSolid: '#FDF8F5',
+
+      textPrimary: '#5A4438',
+      textSecondary: 'rgba(0, 0, 0, 0.6)',
+      textTertiary: 'rgba(0, 0, 0, 0.38)',
+      textAccent: '#E8936A',
+
+      borderGlass: 'rgba(0, 0, 0, 0.08)',
+      borderGlassFocus: 'rgba(0, 0, 0, 0.2)',
+
+      cardShadow: 'rgba(200, 140, 110, 0.18)',
+      cardShadowRadius: 14,
+      pageGradient: [['#F2C3B1', 0], ['#F5DCD3', 0.5], ['#F6EEEB', 1]]
+    }
+  },
+  {
+    id: 'mint',
+    name: '薄荷青',
+    desc: '清新治愈 · 呼吸感',
+    preview: ['#E4F3EE', '#2FBFA8', '#FFFFFF'],
+    theme: {
+      primary: '#2FBFA8',
+      primaryDark: '#25A38F',
+      secondary: '#67C8B4',
+      accent: '#2FBFA8',
+
+      success: '#00A84D',
+      warning: '#E6A800',
+      danger: '#D93025',
+      info: '#2FBFA8',
+
+      bgDark: '#E4F3EE',
+      bgCard: '#FAFFFD',
+      bgCardHover: 'rgba(0, 0, 0, 0.05)',
+      bgGlass: '#FAFFFD',
+      bgGlassLight: 'rgba(0, 0, 0, 0.03)',
+      bgCardSolid: '#FAFFFD',
+
+      textPrimary: '#22453D',
+      textSecondary: 'rgba(0, 0, 0, 0.6)',
+      textTertiary: 'rgba(0, 0, 0, 0.38)',
+      textAccent: '#2FBFA8',
+
+      borderGlass: 'rgba(0, 0, 0, 0.08)',
+      borderGlassFocus: 'rgba(0, 0, 0, 0.2)',
+
+      cardShadow: 'rgba(80, 160, 140, 0.16)',
+      cardShadowRadius: 14,
+      pageGradient: [['#E4F3EE', 0], ['#F0F9F5', 0.5], ['#EBF6F1', 1]]
+    }
+  },
+  {
+    id: 'dusk',
+    name: '暮紫',
+    desc: '优雅静谧 · 科技感',
+    preview: ['#EDE9F8', '#8B7CF6', '#FFFFFF'],
+    theme: {
+      primary: '#8B7CF6',
+      primaryDark: '#7262E0',
+      secondary: '#A99CF8',
+      accent: '#8B7CF6',
+
+      success: '#00A84D',
+      warning: '#E6A800',
+      danger: '#D93025',
+      info: '#8B7CF6',
+
+      bgDark: '#EDE9F8',
+      bgCard: '#FDFCFF',
+      bgCardHover: 'rgba(0, 0, 0, 0.05)',
+      bgGlass: '#FDFCFF',
+      bgGlassLight: 'rgba(0, 0, 0, 0.03)',
+      bgCardSolid: '#FDFCFF',
+
+      textPrimary: '#3B3460',
+      textSecondary: 'rgba(0, 0, 0, 0.6)',
+      textTertiary: 'rgba(0, 0, 0, 0.38)',
+      textAccent: '#8B7CF6',
+
+      borderGlass: 'rgba(0, 0, 0, 0.08)',
+      borderGlassFocus: 'rgba(0, 0, 0, 0.2)',
+
+      cardShadow: 'rgba(120, 100, 220, 0.16)',
+      cardShadowRadius: 14,
+      pageGradient: [['#EDE9F8', 0], ['#F6F3FC', 0.5], ['#F0EDFA', 1]]
+    }
+  },
+  {
+    id: 'coral',
+    name: '珊瑚',
+    desc: '活力暖色 · 元气治愈',
+    preview: ['#FFD9CE', '#FF7A6E', '#FFFBF9'],
+    theme: {
+      primary: '#FF7A6E',
+      primaryDark: '#E5604F',
+      secondary: '#F5A091',
+      accent: '#FF7A6E',
+
+      success: '#00A84D',
+      warning: '#E6A800',
+      danger: '#D93025',
+      info: '#FF7A6E',
+
+      bgDark: '#FFD9CE',
+      bgCard: '#FFFBF9',
+      bgCardHover: 'rgba(0, 0, 0, 0.05)',
+      bgGlass: '#FFFBF9',
+      bgGlassLight: 'rgba(0, 0, 0, 0.03)',
+      bgCardSolid: '#FFFBF9',
+
+      textPrimary: '#5C3A33',
+      textSecondary: 'rgba(0, 0, 0, 0.6)',
+      textTertiary: 'rgba(0, 0, 0, 0.38)',
+      textAccent: '#FF7A6E',
+
+      borderGlass: 'rgba(0, 0, 0, 0.08)',
+      borderGlassFocus: 'rgba(0, 0, 0, 0.2)',
+
+      cardShadow: 'rgba(220, 120, 100, 0.18)',
+      cardShadowRadius: 14,
+      pageGradient: [['#FFD9CE', 0], ['#FFECE6', 0.5], ['#FFE3DC', 1]]
+    }
+  },
+  {
+    id: 'steel',
+    name: '黛青',
+    desc: '沉稳冷色 · 商务专业',
+    preview: ['#DCE8F4', '#4A7FB5', '#FFFFFF'],
+    theme: {
+      primary: '#4A7FB5',
+      primaryDark: '#3A6796',
+      secondary: '#7AA3C9',
+      accent: '#4A7FB5',
+
+      success: '#00A84D',
+      warning: '#E6A800',
+      danger: '#D93025',
+      info: '#4A7FB5',
+
+      bgDark: '#DCE8F4',
+      bgCard: '#FFFFFF',
+      bgCardHover: 'rgba(0, 0, 0, 0.05)',
+      bgGlass: '#FFFFFF',
+      bgGlassLight: 'rgba(0, 0, 0, 0.03)',
+      bgCardSolid: '#FFFFFF',
+
+      textPrimary: '#27344A',
+      textSecondary: 'rgba(0, 0, 0, 0.6)',
+      textTertiary: 'rgba(0, 0, 0, 0.38)',
+      textAccent: '#4A7FB5',
+
+      borderGlass: 'rgba(0, 0, 0, 0.08)',
+      borderGlassFocus: 'rgba(0, 0, 0, 0.2)',
+
+      cardShadow: 'rgba(90, 130, 170, 0.16)',
+      cardShadowRadius: 14,
+      pageGradient: [['#DCE8F4', 0], ['#EBF2F9', 0.5], ['#E3EDF6', 1]]
+    }
+  }
+]
+
+/** 按 id 查找皮肤（不存在返回默认米色） */
+export function getSkinById(id: string): SkinDef {
+  for (let i = 0; i < SKINS.length; i++) {
+    if (SKINS[i].id === id) {
+      return SKINS[i]
+    }
+  }
+  return SKINS[0]
+}
+

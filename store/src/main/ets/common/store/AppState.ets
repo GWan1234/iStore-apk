@@ -15,7 +15,7 @@ import { preferences } from '@kit.ArkData'
 import { ApiClient } from '../../api/ApiClient'
 import { ConnectionConfig } from '../../models/Models'
 import { DeviceStore, SavedDevice } from './DeviceStore'
-import { LIGHT_THEME, ThemePalette } from '../theme/ThemeColors'
+import { LIGHT_THEME, ThemePalette, SKINS, SkinDef, getSkinById } from '../theme/ThemeColors'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 
 const TAG = 'AppState'
@@ -70,6 +70,11 @@ export class AppState {
     // 初始化应用设置存储
     try {
       this.settingsPrefs = await preferences.getPreferences(context, PREFS_NAME)
+      // 恢复上次皮肤
+      const savedSkin: string = this.settingsPrefs.getSync('skinId', 'apricot') as string
+      if (savedSkin && getSkinById(savedSkin).id === savedSkin) {
+        this.currentSkinId = savedSkin
+      }
     } catch (e) {
       hilog.error(DOMAIN, TAG, `Settings pref init failed: ${JSON.stringify(e)}`)
     }
@@ -221,17 +226,47 @@ export class AppState {
 
   // ========== 主题管理 ==========
 
+  /** 当前皮肤 id（持久化，默认 apricot 杏子暖） */
+  private currentSkinId: string = 'apricot'
+
   /**
-   * 获取当前主题调色板（统一亮色米色风格，无黑夜模式）
+   * 获取当前皮肤定义
    */
-  getTheme(): ThemePalette {
-    return LIGHT_THEME
+  getSkin(): SkinDef {
+    return getSkinById(this.currentSkinId)
   }
 
-  // ========== 主题变更监听（兼容桩，不再有主题切换） ==========
+  /**
+   * 获取当前主题调色板（跟随当前皮肤）
+   */
+  getTheme(): ThemePalette {
+    return this.getSkin().theme
+  }
 
   /**
-   * 注册主题变化监听器（保留兼容，实际不再触发）
+   * 切换皮肤并持久化，通知全应用刷新
+   */
+  setSkin(id: string): void {
+    const skin: SkinDef = getSkinById(id)
+    if (skin.id === this.currentSkinId) return
+    this.currentSkinId = skin.id
+    try {
+      if (this.settingsPrefs) {
+        this.settingsPrefs.putSync('skinId', skin.id)
+        this.settingsPrefs.flush()
+      }
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `save skinId err: ${JSON.stringify(e)}`)
+    }
+    for (const l of this.themeListeners) {
+      try { l() } catch (_e) {}
+    }
+  }
+
+  // ========== 主题变更监听 ==========
+
+  /**
+   * 注册主题变化监听器（切换皮肤时触发）
    */
   onThemeChange(listener: ThemeListener): void {
     if (!this.themeListeners.includes(listener)) {

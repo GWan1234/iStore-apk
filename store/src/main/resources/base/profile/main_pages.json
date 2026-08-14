@@ -46,6 +46,7 @@
     "pages/apps/DeviceManagePage",
     "pages/apps/TopologyPage",
     "pages/apps/NetworkHelperPage",
+    "pages/apps/SkinManagePage",
     "pages/apps/SshTerminalPage",
     "pages/apps/FileManagerPage"
   ]

@@ -82,7 +82,7 @@ this.theme = AppState.getInstance().getTheme()
         .width('100%').height('100%')
         .linearGradient({
           angle: 135,
-          colors: [['#F1BCA8', 0], ['#F3D6C8', 0.5], ['#F5F1EE', 1]]
+          colors: this.theme.pageGradient
         })
 
       Column() {
