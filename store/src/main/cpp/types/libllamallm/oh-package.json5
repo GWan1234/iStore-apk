@@ -1,5 +1,5 @@
 {
-  "name": "libllamallm",
+  "name": "libllamallm.so",
   "version": "1.0.0",
   "description": "llama.cpp 鸿蒙桥接层（自编译，9 个 NAPI 函数）",
   "main": "",
