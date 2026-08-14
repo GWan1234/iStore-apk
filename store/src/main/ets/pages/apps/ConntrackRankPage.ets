@@ -2,6 +2,7 @@ import { AppState } from '../../common/store/AppState'
 import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { ConnectedDevice } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
+import { LoadingWhimsy } from '../../common/components/LoadingWhimsy'
 
 /** 每个 IP 的连接统计 */
 class IpRank {
@@ -132,8 +133,7 @@ this.theme = AppState.getInstance().getTheme()
 
         if (this.isLoading) {
           Column() {
-            LoadingProgress().color(this.theme.primary).width(32).height(32)
-            Text('加载中…').fontSize(13).fontColor(this.theme.textTertiary).margin({ top: 12 })
+            LoadingWhimsy()
           }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
         } else if (this.errorText && this.items.length === 0) {
           Column() {
@@ -207,7 +207,7 @@ this.theme = AppState.getInstance().getTheme()
               })
 
               if (this.items.length === 0) {
-                Text('暂无连接数据').fontSize(13).fontColor(this.theme.textTertiary)
+                Text('这里还很安静，等数据来报到 📭').fontSize(13).fontColor(this.theme.textTertiary)
                   .width('100%').textAlign(TextAlign.Center).padding(32)
               }
               Row().width('100%').height(100)

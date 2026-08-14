@@ -59,27 +59,27 @@ export class AiHealthChecker {
 
       // —— 1. CPU 温度 ——
       if (sys.cpuTemp > TEMP_WARN && last['temp'] !== today) {
-        this.publish('🌡️ 路由器温度过高', `CPU 温度已达 ${sys.cpuTemp.toFixed(0)}°C（阈值 ${TEMP_WARN}°C），注意散热`)
+        this.publish('🌡️ 路由器温度过高', `今天有点烫手：${sys.cpuTemp.toFixed(0)}°C（阈值 ${TEMP_WARN}°C），建议给我透透气 🥵`)
         fired['temp'] = today
       }
 
       // —— 2. 内存占用 ——
       const memPct: number = sys.memoryTotal > 0 ? (sys.memoryUsed / sys.memoryTotal) * 100 : 0
       if (memPct > MEM_PCT_WARN && last['memory'] !== today) {
-        this.publish('💾 内存占用过高', `已用 ${memPct.toFixed(0)}%（阈值 ${MEM_PCT_WARN}%），可考虑释放进程或重启`)
+        this.publish('💾 内存占用过高', `脑子快满了：已用 ${memPct.toFixed(0)}%（阈值 ${MEM_PCT_WARN}%），重启一下我会舒服很多 💭`)
         fired['memory'] = today
       }
 
       // —— 3. CPU 使用率 ——
       if (sys.cpuUsage > CPU_PCT_WARN && last['cpu'] !== today) {
-        this.publish('⚙️ CPU 高负载', `CPU 使用率 ${sys.cpuUsage.toFixed(0)}%（阈值 ${CPU_PCT_WARN}%），后台任务较多`)
+        this.publish('⚙️ CPU 高负载', `有点忙不过来：CPU ${sys.cpuUsage.toFixed(0)}%（阈值 ${CPU_PCT_WARN}%），看看谁在跑任务吧 ⚙️`)
         fired['cpu'] = today
       }
 
       // —— 4. 突发流量 ——
       const mbps: number = await this.downMbps()
       if (mbps >= TRAFFIC_MBPS_WARN && last['traffic'] !== today) {
-        this.publish('🚀 突发大流量', `当前下行速率 ${mbps.toFixed(1)} Mbps，可能有设备在大量下载`)
+        this.publish('🚀 突发大流量', `有人在下大东西：下行 ${mbps.toFixed(1)} Mbps，去看看谁在占带宽 🚀`)
         fired['traffic'] = today
       }
 

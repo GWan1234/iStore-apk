@@ -3,6 +3,7 @@ import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { OafStatus, AppFilterBase, AppClass, AppItem, AppFilterTime, AppFilterUser, TimeSlot } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import { LoadingWhimsy } from '../../common/components/LoadingWhimsy'
 
 /** 星期常量映射 */
 const WEEKDAYS: string[] = ['日', '一', '二', '三', '四', '五', '六']
@@ -185,8 +186,7 @@ this.theme = AppState.getInstance().getTheme()
 
         if (this.isLoading) {
           Column() {
-            LoadingProgress().color(this.theme.primary).width(32).height(32)
-            Text('加载中…').fontSize(13).fontColor(this.theme.textTertiary).margin({ top: 12 })
+            LoadingWhimsy()
           }
           .width('100%')
           .layoutWeight(1)
@@ -273,7 +273,7 @@ this.theme = AppState.getInstance().getTheme()
                 .margin({ bottom: 10 })
 
                 if (this.appClasses.length === 0) {
-                  Text('暂无应用分类数据').fontSize(12).fontColor(this.theme.textTertiary)
+                  Text('还没有分类数据，等应用来报到 📭').fontSize(12).fontColor(this.theme.textTertiary)
                     .width('100%').textAlign(TextAlign.Center).padding({ top: 12, bottom: 12 })
                 } else {
                   ForEach(this.appClasses, (cls: AppClass, idx: number) => {

@@ -217,6 +217,24 @@ export class FunStore {
     }
   }
 
+  // ========== AI 首次对话标记 ==========
+  hasAiChatted(): boolean {
+    if (!this.prefs) return false
+    try {
+      return (this.prefs.getSync('ai_first_chat', false) as boolean) || false
+    } catch (e) {
+      return false
+    }
+  }
+
+  setAiChatted(): void {
+    if (!this.prefs) return
+    try {
+      this.prefs.putSync('ai_first_chat', true)
+      this.prefs.flush()
+    } catch (e) {}
+  }
+
   /** 操作次数（趣味功能使用累计） */
   getLevelActions(): number {
     if (!this.prefs) return 0
@@ -225,6 +243,24 @@ export class FunStore {
     } catch (e) {
       return 0
     }
+  }
+
+  /** 刷新累计次数（成就联动） */
+  getRefreshCount(): number {
+    if (!this.prefs) return 0
+    try {
+      return (this.prefs.getSync('refresh_count', 0) as number) || 0
+    } catch (e) {
+      return 0
+    }
+  }
+
+  setRefreshCount(n: number): void {
+    if (!this.prefs) return
+    try {
+      this.prefs.putSync('refresh_count', n)
+      this.prefs.flush()
+    } catch (e) {}
   }
 
   /** 记录一次操作（每天首次计数 +1，封顶防刷） */

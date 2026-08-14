@@ -1,6 +1,7 @@
 import { AppState } from '../../common/store/AppState'
 import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { ApiService } from '../../api/ApiService'
+import { LoadingWhimsy } from '../../common/components/LoadingWhimsy'
 
 /** 物理网口信息 */
 class EthPort {
@@ -104,8 +105,7 @@ this.theme = AppState.getInstance().getTheme()
 
         if (this.isLoading) {
           Column() {
-            LoadingProgress().color(this.theme.primary).width(32).height(32)
-            Text('加载中…').fontSize(13).fontColor(this.theme.textTertiary).margin({ top: 12 })
+            LoadingWhimsy()
           }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
         } else if (this.errorText) {
           Column() {

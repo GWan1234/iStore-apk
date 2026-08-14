@@ -4,6 +4,7 @@ import { NetworkInterface, WanStatus } from '../../models/Models'
 import { ApiService } from '../../api/ApiService'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { FormatUtils } from '../../common/utils/FormatUtils'
+import { LoadingWhimsy } from '../../common/components/LoadingWhimsy'
 
 // ============================================================
 // NetworkPage - 网络管理（独立页面，从应用中心进入）
@@ -111,11 +112,7 @@ this.theme = AppState.getInstance().getTheme()
           Column() {
             if (this.isLoading) {
               Column() {
-                LoadingProgress().width(40).height(40).color(this.theme.primary)
-                Text('加载网络信息...')
-                  .fontSize(14)
-                  .fontColor(this.theme.textSecondary)
-                  .margin({ top: 12 })
+                LoadingWhimsy({ message: '正在读网络信息…' })
               }
               .width('100%')
               .height(200)

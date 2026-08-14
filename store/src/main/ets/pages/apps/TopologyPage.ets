@@ -227,7 +227,7 @@ this.theme = AppState.getInstance().getTheme()
         .width('100%').padding(40).alignItems(HorizontalAlign.Center).margin({ top: 60 })
       } else if (this.devices.length === 0) {
         Column() {
-          Text('暂无在线设备')
+          Text('还没看到在线设备，大家可能都在午休 😴')
             .fontSize(13).fontColor(this.theme.textTertiary)
           if (this.errorText) {
             Text(this.errorText)

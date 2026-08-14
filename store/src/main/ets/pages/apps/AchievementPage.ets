@@ -23,7 +23,9 @@ const ACHS: AchDef[] = [
   { id: 'owl', icon: '🌙', name: '夜猫子', desc: '凌晨 0~4 点还在用 App', hint: '今晚熬个夜试试' },
   { id: 'giant', icon: '📈', name: '流量之王', desc: '某天流量超过 100GB', hint: '下一个大文件冲一冲' },
   { id: 'crowd', icon: '🎪', name: '门庭若市', desc: '同时在线设备 15 台以上', hint: '家里人多时解锁' },
-  { id: 'week', icon: '🔥', name: '七日全勤', desc: '最近 7 天使用 App 5 天以上', hint: '每天打开一次' }
+  { id: 'week', icon: '🔥', name: '七日全勤', desc: '最近 7 天使用 App 5 天以上', hint: '每天打开一次' },
+  { id: 'refresh_master', icon: '🔄', name: '数据狂人', desc: '累计下拉刷新 50 次', hint: '首页多下拉几次' },
+  { id: 'archaeologist', icon: '🔍', name: '数据考古学家', desc: '翻看 3 天前的历史数据', hint: '查看历史流量/排名页' }
 ]
 
 @Entry

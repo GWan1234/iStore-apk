@@ -14,6 +14,7 @@ import { pasteboard } from '@kit.BasicServicesKit'
 import { common } from '@kit.AbilityKit'
 import { LlmHolder } from '../../common/llm/LlmHolder'
 import { LLMManager, ModelInfo, stripAnswerTags } from '../../common/llm/LLMManager'
+import { FunStore } from '../../common/store/FunStore'
 
 @Component
 export struct AiTab {
@@ -21,6 +22,7 @@ export struct AiTab {
   @State messages: ChatMsg[] = []
   @State inputText: string = ''
   @State aiThinking: boolean = false
+  @State whimsySparkle: boolean = false
   @State installed: ModelInfo[] = []
   @State curModel: string = ''         // 当前模型名
   @State isLoaded: boolean = false
@@ -75,6 +77,11 @@ export struct AiTab {
       promptAction.showToast({ message: '请先加载模型', duration: 1500 })
       return
     }
+    // 情感触点：首次对话自我介绍
+    if (!FunStore.getInstance().hasAiChatted()) {
+      FunStore.getInstance().setAiChatted()
+      this.messages.push({ role: 'ai', text: '你好，我是跑在路由器里的本地 AI——小管 🤫\n你问我答，数据都在家里，不会出门。开始吧！' })
+    }
     this.messages.push({ role: 'user', text: text })
     this.inputText = ''
     this.aiThinking = true
@@ -103,6 +110,11 @@ export struct AiTab {
       ? { role: 'ai', text: acc }
       : { role: 'ai', text: '（模型未输出，请检查模型是否正常）' }
     this.messages = msgs
+    // 回复完成微光：AI 消息右下标出星星闪烁一下
+    if (acc) {
+      this.whimsySparkle = true
+      setTimeout(() => { this.whimsySparkle = false }, 1200)
+    }
     this.scrollToBottom()
   }
 
@@ -229,7 +241,7 @@ export struct AiTab {
               .fontSize(10)
               .fontColor(this.theme.textTertiary)
             Blank()
-            // AI 消息：复制图标
+            // AI 消息：复制图标 + 回复完成微光
             Row() {
               SymbolGlyph($r('sys.symbol.doc_plaintext'))
                 .fontSize(11)
@@ -239,6 +251,13 @@ export struct AiTab {
                 .fontColor(this.theme.textTertiary)
             }
             .onClick(() => { this.copyText(msg.text) })
+            if (this.whimsySparkle && idx === this.messages.length - 1) {
+              Text(' ✨')
+                .fontSize(12)
+                .opacity(this.whimsySparkle ? 1 : 0)
+                .animation({ duration: 600, curve: Curve.EaseOut })
+                .margin({ left: 6 })
+            }
           }
           .width('100%')
           .margin({ bottom: 6 })

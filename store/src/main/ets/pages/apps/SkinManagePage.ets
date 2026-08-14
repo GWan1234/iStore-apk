@@ -4,7 +4,8 @@
  */
 import { AppState } from '../../common/store/AppState'
 import { LIGHT_THEME, ThemePalette, SKINS, SkinDef } from '../../common/theme/ThemeColors'
-import { window } from '@kit.ArkUI'
+import { promptAction, window } from '@kit.ArkUI'
+import { vibrator } from '@kit.SensorServiceKit'
 
 @Entry
 @Component
@@ -46,6 +47,11 @@ struct SkinManagePage {
     if (skin.id === this.currentSkinId) return
     this.currentSkinId = skin.id
     AppState.getInstance().setSkin(skin.id)
+    // 换装仪式感：轻震动 + 反馈
+    try {
+      vibrator.startVibration({ type: 'time', duration: 25 }, { id: 0, usage: 'alarm' }).catch(() => {})
+    } catch (e) {}
+    promptAction.showToast({ message: `已切换为「${skin.name}」皮肤 ✨`, duration: 1200 })
   }
 
   /** 皮肤预览卡片 */

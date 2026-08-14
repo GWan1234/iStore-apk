@@ -265,8 +265,30 @@ export struct DockerTab {
     }
   }
 
+  /** 由语义色生成半透明底色（随皮肤切换） */
+  tint(hex: string, alpha: number): string {
+    let c: string = hex
+    if (c.startsWith('#')) {
+      c = c.substring(1)
+    }
+    if (c.length === 3) {
+      c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2]
+    }
+    let r: number = 0
+    let g: number = 0
+    let b: number = 0
+    try {
+      r = parseInt(c.substring(0, 2), 16)
+      g = parseInt(c.substring(2, 4), 16)
+      b = parseInt(c.substring(4, 6), 16)
+    } catch (e) {
+      return 'rgba(0,0,0,0.08)'
+    }
+    return `rgba(${r},${g},${b},${alpha})`
+  }
+
   getStatusColor(): string {
-    return this.overview.daemonStatus === 'running' ? '#4CAF50' : '#FF5252'
+    return this.overview.daemonStatus === 'running' ? this.theme.success : this.theme.danger
   }
 
   getStatusText(): string {
@@ -409,7 +431,7 @@ export struct DockerTab {
                 } else if (this.showApiConfirm) {
                   Row() {
                     Text('容器将短暂重启，确认开启？')
-                      .fontSize(12).fontColor('#FF9800').layoutWeight(1)
+                      .fontSize(12).fontColor(this.theme.warning).layoutWeight(1)
                     Text('取消')
                       .fontSize(12).fontColor(this.theme.textTertiary)
                       .padding({ top: 6, bottom: 6, left: 12, right: 12 })
@@ -515,7 +537,7 @@ export struct DockerTab {
                         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                       Row() {
                         Circle({ width: 6, height: 6 })
-                          .foregroundColor(c.running ? '#4CAF50' : '#9E9E9E')
+                          .foregroundColor(c.running ? this.theme.success : this.theme.textTertiary)
                         Text(this.actionContainer === c.name ? '操作中...' : c.status)
                           .fontSize(11).fontColor(this.theme.textTertiary)
                           .margin({ left: 5 })
@@ -528,7 +550,7 @@ export struct DockerTab {
                     if (this.actionContainer !== c.name) {
                       if (c.running) {
                         Text('停止')
-                          .fontSize(11).fontColor('#FF5252').fontWeight(FontWeight.Medium)
+                          .fontSize(11).fontColor(this.theme.danger).fontWeight(FontWeight.Medium)
                           .padding({ top: 8, bottom: 8, left: 14, right: 14 }).borderRadius(10)
                           .backgroundColor(this.theme.bgGlassLight)
                           .onClick(() => { this.containerAction(c.name, 'stop') })
@@ -539,7 +561,7 @@ export struct DockerTab {
                           .onClick(() => { this.containerAction(c.name, 'restart') })
                       } else {
                         Text('启动')
-                          .fontSize(11).fontColor('#4CAF50').fontWeight(FontWeight.Medium)
+                          .fontSize(11).fontColor(this.theme.success).fontWeight(FontWeight.Medium)
                           .padding({ top: 8, bottom: 8, left: 18, right: 18 }).borderRadius(10)
                           .backgroundColor(this.theme.bgGlassLight)
                           .onClick(() => { this.containerAction(c.name, 'start') })
@@ -556,13 +578,13 @@ export struct DockerTab {
 
                     if (c.running && this.cpuText(c) !== '') {
                       Text(`CPU ${this.cpuText(c)}%`)
-                        .fontSize(10).fontColor('#FF9800')
+                        .fontSize(10).fontColor(this.theme.warning)
                         .padding({ top: 3, bottom: 3, left: 8, right: 8 }).borderRadius(8)
-                        .backgroundColor('rgba(255,152,0,0.12)')
+                        .backgroundColor(this.tint(this.theme.warning, 0.12))
                       Text(`MEM ${this.memText(c)}%`)
-                        .fontSize(10).fontColor('#64B5F6')
+                        .fontSize(10).fontColor(this.theme.info)
                         .padding({ top: 3, bottom: 3, left: 8, right: 8 }).borderRadius(8)
-                        .backgroundColor('rgba(100,181,246,0.12)').margin({ left: 6 })
+                        .backgroundColor(this.tint(this.theme.info, 0.12)).margin({ left: 6 })
                     }
                   }
                   .width('100%').margin({ top: 10 })
@@ -676,7 +698,7 @@ export struct DockerTab {
                           .fontSize(11).fontColor(this.theme.primary)
                           .padding({ top: 3, bottom: 3, left: 10, right: 10 })
                           .borderRadius(8)
-                          .backgroundColor('rgba(68,138,255,0.12)')
+                          .backgroundColor(this.tint(this.theme.info, 0.12))
                         Text(nw.scope === 'local' ? '本地' : nw.scope)
                           .fontSize(10).fontColor(this.theme.textTertiary)
                           .margin({ top: 4 })

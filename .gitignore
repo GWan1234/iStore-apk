@@ -14,3 +14,14 @@
 /.workbuddy
 /.hvigor_bak
 /.hvigor_cli
+/.hvigor_old
+/applog_full.txt
+/build-profile.json5.bak_debug_0811
+/build-profile.json5.bak_release_0810
+/hdc_recv.txt
+/hilog_latest.gz
+/hilog_latest.txt
+/hvigor/hvigor-config.json5.bak_20260806
+/llm_live_log.txt
+/log.txt
+/store/probe_test.txt

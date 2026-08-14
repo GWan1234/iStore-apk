@@ -5,6 +5,7 @@
 import { AppState } from '../../common/store/AppState'
 import { LIGHT_THEME, ThemePalette } from '../../common/theme/ThemeColors'
 import { TrafficStatStore, DayTraffic } from '../../common/store/TrafficStatStore'
+import { FunStore } from '../../common/store/FunStore'
 import { ApiService } from '../../api/ApiService'
 import { ConnectedDevice } from '../../models/Models'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -45,6 +46,19 @@ export struct NetworkReportPage {
       }
       // 7 天流量
       const days: DayTraffic[] = this.traffic.getDays(7)
+      // 情感触点：数据考古学家成就（有 3 天前的历史数据）
+      if (!FunStore.getInstance().isAchieved('archaeologist')) {
+        let hasOld: boolean = false
+        for (let i = 3; i < days.length; i++) {
+          if (days[i].rx > 0 || days[i].tx > 0) {
+            hasOld = true
+            break
+          }
+        }
+        if (hasOld) {
+          FunStore.getInstance().setAchieved('archaeologist')
+        }
+      }
       let total: number = 0
       let peak: number = 0
       let peakDate: string = ''

@@ -6,6 +6,10 @@ import { ApiService } from '../../api/ApiService'
 import { TrafficStatStore } from '../../common/store/TrafficStatStore'
 import { WidgetDataStore } from '../../common/store/WidgetDataStore'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import { promptAction } from '@kit.ArkUI'
+import { LoadingWhimsy } from '../../common/components/LoadingWhimsy'
+import { Whimsy } from '../../common/utils/WhimsyUtil'
+import { FunStore } from '../../common/store/FunStore'
 
 // ============================================================
 // DashboardTab - 首页
@@ -20,6 +24,13 @@ export struct DashboardTab {
   @State lastUpdate: string = '--:--:--'
   @State errorText: string = ''
   @State isOnline: boolean = false
+  @State whimsyShake: boolean = false
+  @State whimsyFish: boolean = false
+  @State bottomInset: number = 150
+  @State greetText: string = ''
+  @State moodText: string = ''
+  @State summaryText: string = ''
+  @State festivalTag: string = ''
   @State mountPoints: MountPoint[] = []
   @State conntrack: ConntrackInfo = { current: 0, max: 0, percent: 0 }
   @State networkInterfaces: NetworkInterface[] = []
@@ -32,6 +43,10 @@ export struct DashboardTab {
   private timerId: number = -1
   private isVisible: boolean = false
   private tabChangeListener: ((tab: number) => void) | null = null
+  private navInsetListener: ((inset: number) => void) | null = null
+  private wasOffline: boolean = false   // 断网恢复庆祝
+  private firstConnectShown: boolean = false
+  private anniversaryShown: boolean = false
   // 仪表盘 Canvas 上下文（每个仪表独立）
   private gaugeCtx0: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true))
   private gaugeCtx1: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true))
@@ -49,6 +64,12 @@ export struct DashboardTab {
   private cpuChartCtx: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true))
 
   aboutToAppear(): void {
+    // 底部导航占位（适配手势条 + 悬浮导航，随机型变化实时更新）
+    this.bottomInset = AppState.getInstance().getBottomNavInset()
+    this.navInsetListener = (inset: number) => {
+      this.bottomInset = inset
+    }
+    AppState.getInstance().onBottomNavInsetChange(this.navInsetListener)
     // 流量统计存储初始化
     const hostCtx = this.getUIContext().getHostContext()
     if (hostCtx) {
@@ -97,6 +118,10 @@ export struct DashboardTab {
       AppState.getInstance().offTabChange(this.tabChangeListener)
       this.tabChangeListener = null
     }
+    if (this.navInsetListener) {
+      AppState.getInstance().offBottomNavInsetChange(this.navInsetListener)
+      this.navInsetListener = null
+    }
   }
 
   async loadData(): Promise<void> {
@@ -105,7 +130,7 @@ export struct DashboardTab {
     try {
       // 检查连接状态，未连接则直接返回
       if (!AppState.getInstance().isConnected()) {
-        this.errorText = '设备未连接'
+        this.errorText = '设备未连接，外面的线被拔了？连上我就能干活了 🔌'
         this.isLoading = false
         return
       }
@@ -128,12 +153,15 @@ export struct DashboardTab {
       this.networkInterfaces = results[4]
       this.onlineClientCount = this.countOnlineClients(results[5])
       this.isOnline = true
+      // ===== 情感触点：首次连接 / 断网恢复 / 周年纪念 / 状态播报 =====
+      this.handleConnectMoments()
       // 满速彩蛋：下载速率超过 30MB/s（约 240Mbps）且冷却 30 秒后触发
       const rx: number = this.wanStatus.rxRate
       if (rx >= 30 * 1024 * 1024 && Date.now() - this.lastBoomTime > 30000) {
         this.triggerBoom()
       }
     } catch (dashErr) {
+      this.wasOffline = true
       this.errorText = '加载数据失败'
     }
     this.isLoading = false
@@ -178,11 +206,97 @@ export struct DashboardTab {
       this.syncWidgetData()
       // CPU 历史采样（处理器卡片折线图）
       this.recordCpuHistory()
+      this.handleConnectMoments()
     } catch (refErr) {
       // 刷新失败静默处理，不打断用户操作
     }
     this.updateTimestamp()
     this.redrawGauges()
+  }
+
+
+  // ========== 情感触点辅助方法 ==========
+  /** 时段问候 */
+  greeting(): string {
+    const h: number = new Date().getHours()
+    if (h >= 5 && h < 11) return '早上好，小管昨晚看了一整夜的门 🌅'
+    if (h >= 11 && h < 18) return '下午好，小管帮你盯着家里' + (this.onlineClientCount > 0 ? ` ${this.onlineClientCount} 台设备` : '的设备') + ' ☕'
+    if (h >= 18 && h < 24) return '晚上好，夜生活开始，网速跟得上吗 🌙'
+    return '都这个点了还在？设备我盯着，你早点睡 🛏️'
+  }
+
+  /** 设备拟人状态 */
+  deviceMood(): string {
+    if (!this.isOnline) return '小管失联了…'
+    const cpu: number = this.systemInfo.cpuUsage
+    const temp: number = this.systemInfo.cpuTemp
+    if (temp >= 75) return '小管在冒汗 🥵'
+    if (cpu >= 80) return '小管有点忙'
+    if (cpu >= 50) return '小管挺精神'
+    return '小管很轻松'
+  }
+
+  /** 状态播报（加载完成后一句总结） */
+  buildSummary(): string {
+    if (!this.isOnline) return ''
+    const cpu: number = this.systemInfo.cpuUsage
+    if (cpu < 50 && this.systemInfo.cpuTemp < 60) return '一切正常，小管在岗 🫡'
+    if (this.systemInfo.cpuTemp >= 75) return '有点烫手，小管建议透透气 🥵'
+    if (cpu >= 80) return 'CPU 快忙不过来了，看看谁在跑 ⚙️'
+    return '网络平稳，设备都在线 ✅'
+  }
+
+  /** 节日彩蛋标签 */
+  festival(): string {
+    const d: Date = new Date()
+    const m: number = d.getMonth() + 1
+    const day: number = d.getDate()
+    if (m === 1 && (day === 1 || day === 28 || day === 29)) return '🧧 新年好'
+    if (m === 2 && day === 29) return '🎂 闰年快乐'
+    if (m === 6 && day === 1) return '🎈 六一快乐'
+    if (m === 10 && day === 1) return '🎆 国庆快乐'
+    if (m === 12 && (day === 24 || day === 25)) return '🎄 圣诞快乐'
+    return ''
+  }
+
+  /** 连接时刻处理：首次欢迎 / 断网恢复 / 周年纪念 */
+  handleConnectMoments(): void {
+    const fun = FunStore.getInstance()
+    // 首次连接欢迎
+    if (!this.firstConnectShown && fun.getFirstDate() === '') {
+      fun.setFirstDate(new Date().toISOString().slice(0, 10))
+      this.firstConnectShown = true
+      this.greetText = '欢迎回家，我是小管 🏠'
+      setTimeout(() => { this.greetText = this.greeting() }, 3000)
+      return
+    }
+    // 断网恢复庆祝
+    if (this.wasOffline && this.isOnline) {
+      this.wasOffline = false
+      this.greetText = '满血复活！刚才那一下差点吓到小管 🟢'
+      setTimeout(() => { this.greetText = this.greeting() }, 2500)
+      return
+    }
+    // 周年纪念（30/100/365 天）
+    if (!this.anniversaryShown) {
+      const days: number = fun.getLevelUpDays()
+      if (days === 30) {
+        this.anniversaryShown = true
+        this.greetText = '我们认识一个月了，这 30 天我守住了你的网 🎂'
+        setTimeout(() => { this.greetText = this.greeting() }, 3000)
+      } else if (days === 365) {
+        this.anniversaryShown = true
+        this.greetText = '周年快乐！这一年在守护你家的 365 个夜晚 🎉'
+        setTimeout(() => { this.greetText = this.greeting() }, 3000)
+      }
+    }
+    // 首次连接后每天：时段问候 + 播报（只在 greetText 空时）
+    if (this.greetText === '') {
+      this.greetText = this.greeting()
+    }
+    this.moodText = this.deviceMood()
+    this.summaryText = this.buildSummary()
+    this.festivalTag = this.festival()
   }
 
   /** 同步数据到桌面小组件 */
@@ -261,7 +375,7 @@ export struct DashboardTab {
   }
 
   private boomColor(i: number): string {
-    const colors: string[] = ['#FF8A3D', '#00C853', '#E6A800', '#FF5252', '#42A5F5', '#AB47BC']
+    const colors: string[] = this.theme.chartColors
     return colors[i % colors.length]
   }
 
@@ -281,7 +395,7 @@ export struct DashboardTab {
       Stack() {
         Column()
           .width('100%').height('100%')
-          .backgroundColor('rgba(255,255,255,0.06)')
+          .backgroundColor(this.tint(this.theme.bgCard, 0.06))
         ForEach([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], (i: number) => {
           Circle({ width: this.boomSize(i), height: this.boomSize(i) })
             .fill(this.boomColor(i))
@@ -293,7 +407,7 @@ export struct DashboardTab {
         }, (i: number): string => `b${i}`)
         Column() {
           Text('⚡ 满速时刻！')
-            .fontSize(26).fontColor('#FF8A3D').fontWeight(FontWeight.Bold)
+            .fontSize(26).fontColor(this.theme.primary).fontWeight(FontWeight.Bold)
           Text('网速起飞，恭喜！')
             .fontSize(12).fontColor(this.theme.textSecondary).margin({ top: 4 })
         }
@@ -324,28 +438,28 @@ export struct DashboardTab {
   getCpuColor(usage: number): string {
     if (usage < 30) {
       // < 30%：低负载（绿色）
-      return '#00E676'
+      return this.theme.success
     }
     if (usage < 60) {
       // 30-60%：中等负载（黄色）
-      return '#FFD740'
+      return this.theme.warning
     }
     // ≥ 60%：高负载（红色）
-    return '#FF5252'
+    return this.theme.danger
   }
 
   /** 磁盘使用色阶：≤35 绿 / 36-60 蓝 / 61-80 黄 / >80 红 */
   diskColor(usage: number): string {
     if (usage <= 35) {
-      return '#00C853'
+      return this.theme.success
     }
     if (usage <= 60) {
-      return '#1872FF'
+      return this.theme.info
     }
     if (usage <= 80) {
-      return '#E6A800'
+      return this.theme.warning
     }
-    return '#E84040'
+    return this.theme.danger
   }
 
   /** 内存使用率（%） */
@@ -404,14 +518,14 @@ export struct DashboardTab {
     return this.systemInfo.hostname || '路由器'
   }
 
-  /** 仪表盘卡片背景（米色） */
+  /** 仪表盘卡片背景（随皮肤） */
   cardBg(): string {
-    return '#F6F2E9'
+    return this.theme.bgCard
   }
 
-  /** 卡片阴影（柔和投影） */
+  /** 卡片阴影（柔和投影，随皮肤） */
   cardShadow(): ShadowOptions {
-    return { radius: 14, color: 'rgba(180,160,120,0.12)', offsetX: 0, offsetY: 4 }
+    return { radius: this.theme.cardShadowRadius, color: this.theme.cardShadow, offsetX: 0, offsetY: 4 }
   }
 
   /** 记录 CPU 采样（折线图数据，保留 30 点） */
@@ -448,7 +562,7 @@ export struct DashboardTab {
           ctx.lineTo(x, y)
         }
       }
-      ctx.strokeStyle = '#FF8A3D'
+      ctx.strokeStyle = this.theme.chartColors[0]
       ctx.lineWidth = 2
       ctx.lineJoin = 'round'
       ctx.lineCap = 'round'
@@ -465,10 +579,32 @@ export struct DashboardTab {
   }
 
   /** 内存颜色（按使用率） */
+  /** 由语义色生成半透明色（随皮肤切换） */
+  tint(hex: string, alpha: number): string {
+    let c: string = hex
+    if (c.startsWith('#')) {
+      c = c.substring(1)
+    }
+    if (c.length === 3) {
+      c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2]
+    }
+    let r: number = 0
+    let g: number = 0
+    let b: number = 0
+    try {
+      r = parseInt(c.substring(0, 2), 16)
+      g = parseInt(c.substring(2, 4), 16)
+      b = parseInt(c.substring(4, 6), 16)
+    } catch (e) {
+      return 'rgba(0,0,0,0.08)'
+    }
+    return `rgba(${r},${g},${b},${alpha})`
+  }
+
   getMemColor(usage: number): string {
-    if (usage < 60) return '#448AFF'
-    if (usage < 85) return '#FFD740'
-    return '#FF5252'
+    if (usage < 60) return this.theme.info
+    if (usage < 85) return this.theme.warning
+    return this.theme.danger
   }
 
   /** 温度 → 仪表进度（0-100%），>90°C 视为满 */
@@ -480,7 +616,7 @@ export struct DashboardTab {
   /** 统一仪表颜色：绿(<30%)/蓝(<60%)/黄(<70%)/红(≥70%)，返回 [浅色, 深色] 渐变对 */
   getGaugeGradient(percent: number): string[] {
     if (percent < 30) {
-      return ['#69F0AE', '#00C853']  // 绿色渐变（浅→深，对比明显）
+      return [this.tint(this.theme.success, 0.55), this.theme.success]  // 绿色渐变（浅→深）
     }
     if (percent < 60) {
       return ['#90CAF9', '#1E88E5']  // 蓝色渐变（浅→深）
@@ -488,16 +624,16 @@ export struct DashboardTab {
     if (percent < 70) {
       return ['#FFE082', '#FFB300']  // 黄色渐变（浅→深）
     }
-    return ['#FF8A80', '#D50000']    // 红色渐变（浅→深）
+    return [this.tint(this.theme.danger, 0.55), this.theme.danger]    // 红色渐变（浅→深）
   }
 
   /** 温度仪表配色：绿(<30°C) / 蓝(<60°C) / 黄(<70°C) / 红(≥70°C)，返回 [浅色, 深色] */
   getTempGaugeGradient(temp: number): string[] {
     if (temp <= 0) {
-      return ['#9E9E9E', '#616161']  // 无温度数据：灰色渐变
+      return [this.tint(this.theme.textTertiary, 0.4), this.theme.textTertiary]  // 无温度数据：灰色渐变
     }
     if (temp < 30) {
-      return ['#69F0AE', '#00C853']  // 绿色渐变（浅→深）
+      return [this.tint(this.theme.success, 0.55), this.theme.success]  // 绿色渐变（浅→深）
     }
     if (temp < 60) {
       return ['#90CAF9', '#1E88E5']  // 蓝色渐变（浅→深）
@@ -505,7 +641,7 @@ export struct DashboardTab {
     if (temp < 70) {
       return ['#FFE082', '#FFB300']  // 黄色渐变（浅→深）
     }
-    return ['#FF8A80', '#D50000']    // 红色渐变（浅→深）
+    return [this.tint(this.theme.danger, 0.55), this.theme.danger]    // 红色渐变（浅→深）
   }
 
   /** 环形仪表卡片（Canvas 渐变圆弧） */
@@ -675,13 +811,13 @@ export struct DashboardTab {
 
   getTypeColor(type: string): string {
     if (type === 'wan') {
-      return '#FF6E40'  // WAN 用橙色
+      return this.theme.primary  // WAN 用主题主色
     }
     if (type === 'lan') {
-      return '#448AFF'  // LAN 用蓝色
+      return this.theme.info  // LAN 用信息蓝
     }
     if (type === 'wifi') {
-      return '#00E676'  // WiFi 用绿色
+      return this.theme.success  // WiFi 用成功绿
     }
     return this.theme.textTertiary
   }
@@ -758,7 +894,7 @@ export struct DashboardTab {
           .width('100%')
           .height(4)
           .borderRadius(2)
-          .backgroundColor('#F0EBE0')
+          .backgroundColor(this.theme.progressTrack)
         Row()
           .width(`${Math.max(0, Math.min(100, percent))}%`)
           .height(4)
@@ -846,7 +982,7 @@ export struct DashboardTab {
             .width('100%')
             .height(4)
             .borderRadius(2)
-            .backgroundColor('#F0EBE0')
+            .backgroundColor(this.theme.progressTrack)
           Row()
             .width(`${Math.max(0, Math.min(100, barPercent))}%`)
             .height(4)
@@ -879,18 +1015,29 @@ export struct DashboardTab {
         .width(40)
         .height(40)
         .borderRadius(12)
-        .backgroundColor('#FDF0E4')
+        .backgroundColor(this.theme.accentSoft)
         .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          if (Whimsy.tap('dash_logo', 5)) {
+            this.whimsyShake = true
+            setTimeout(() => { this.whimsyShake = false }, 900)
+            promptAction.showToast({ message: '小管在，别慌 🎩', duration: 1500 })
+          }
+        })
+        .rotate({ angle: this.whimsyShake ? -8 : 0 })
+        .animation({ duration: 60, iterations: 6, curve: Curve.EaseInOut })
 
         Column() {
           Text('仪表盘')
             .fontSize(20)
             .fontColor(this.theme.textPrimary)
             .fontWeight(FontWeight.Bold)
-          Text(`${this.deviceLabel()}${this.isOnline ? ' · 已连接' : ' · 未连接'}`)
+          Text(`${this.deviceLabel()}${this.isOnline ? ' · 已连接' : ' · 未连接'}${this.festivalTag.length > 0 ? ' · ' + this.festivalTag : ''}`)
             .fontSize(11)
             .fontColor(this.theme.textTertiary)
             .margin({ top: 2 })
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .alignItems(HorizontalAlign.Start)
         .margin({ left: 10 })
@@ -906,7 +1053,7 @@ export struct DashboardTab {
         .width(36)
         .height(36)
         .borderRadius(18)
-        .backgroundColor('#F5F0E6')
+        .backgroundColor(this.theme.accentSoft)
         .alignContent(Alignment.Center)
         .onClick(() => {
           this.getUIContext().getRouter().pushUrl({ url: 'pages/apps/NotifySettingsPage' })
@@ -921,7 +1068,7 @@ export struct DashboardTab {
         .width(36)
         .height(36)
         .borderRadius(18)
-        .backgroundColor('#F5F0E6')
+        .backgroundColor(this.theme.accentSoft)
         .alignContent(Alignment.Center)
         .margin({ left: 8 })
         .onClick(() => {
@@ -933,11 +1080,7 @@ export struct DashboardTab {
 
       if (this.isLoading) {
         Column() {
-          LoadingProgress().width(40).height(40).color(this.theme.primary)
-          Text('加载中...')
-            .fontSize(14)
-            .fontColor(this.theme.textSecondary)
-            .margin({ top: 12 })
+          LoadingWhimsy()
         }
         .width('100%')
         .layoutWeight(1)
@@ -950,12 +1093,50 @@ export struct DashboardTab {
                 Text('⚠')
                   .fontSize(16)
                   .margin({ right: 8 })
-                Text(this.errorText)
+                Text(this.whimsyFish ? '🐟 网络在养鱼（真的断网了），连上设备我就能干活啦' : this.errorText)
                   .fontSize(12)
                   .fontColor(this.theme.warning)
               }
               .width('100%')
               .padding(14)
+              .borderRadius(14)
+              .margin({ top: 4, bottom: 4 })
+              .backgroundColor(this.theme.bgCard)
+              .backdropBlur(20)
+              .border({ width: 0.5, color: this.theme.borderGlass })
+              .onClick(() => {
+                if (Whimsy.tap('fish', 5)) {
+                  this.whimsyFish = true
+                  setTimeout(() => { this.whimsyFish = false }, 3000)
+                }
+              })
+            }
+
+            // ===== 情感触点：时段问候 + 状态播报条 =====
+            if (this.isOnline && (this.greetText.length > 0 || this.summaryText.length > 0)) {
+              Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center }) {
+                Text('💬')
+                  .fontSize(13)
+                  .margin({ right: 6 })
+                Column() {
+                  if (this.greetText.length > 0) {
+                    Text(this.greetText)
+                      .fontSize(12)
+                      .fontColor(this.theme.textPrimary)
+                      .fontWeight(FontWeight.Medium)
+                  }
+                  if (this.summaryText.length > 0) {
+                    Text(this.summaryText)
+                      .fontSize(10)
+                      .fontColor(this.theme.textTertiary)
+                      .margin({ top: 2 })
+                  }
+                }
+                .alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+              }
+              .width('100%')
+              .padding(12)
               .borderRadius(14)
               .margin({ top: 4, bottom: 4 })
               .backgroundColor(this.theme.bgCard)
@@ -980,14 +1161,21 @@ export struct DashboardTab {
                   Circle()
                     .width(6)
                     .height(6)
-                    .foregroundColor(this.isOnline ? '#00C853' : '#FF5252')
+                    .foregroundColor(this.isOnline ? this.theme.success : this.theme.danger)
                   Text(this.isOnline ? '已连接' : '未连接')
                     .fontSize(12)
-                    .fontColor(this.isOnline ? '#00A94F' : '#FF5252')
+                    .fontColor(this.isOnline ? this.theme.success : this.theme.danger)
                     .fontWeight(FontWeight.Medium)
                     .margin({ left: 5 })
                 }
                 .margin({ top: 5 })
+                // 情感触点：设备拟人状态
+                if (this.moodText.length > 0) {
+                  Text(this.moodText)
+                    .fontSize(10)
+                    .fontColor(this.theme.textSecondary)
+                    .margin({ top: 3 })
+                }
                 Text(`版本 ${this.systemInfo.releaseVersion || this.systemInfo.firmwareVersion || '--'}`)
                   .fontSize(10)
                   .fontColor(this.theme.textTertiary)
@@ -1054,7 +1242,7 @@ export struct DashboardTab {
                   Text(`${this.systemInfo.cpuUsage.toFixed(0)}%`)
                     .fontSize(26)
                     .fontWeight(FontWeight.Bold)
-                    .fontColor('#FF8A3D')
+                    .fontColor(this.theme.primary)
                     .fontFamily('monospace')
                   Column() {
                     Text(this.systemInfo.cpuTemp > 0 ? `温度 ${this.systemInfo.cpuTemp.toFixed(0)}°C` : '温度 --')
@@ -1099,8 +1287,8 @@ export struct DashboardTab {
                   Text('›').fontSize(14).fontColor(this.theme.textTertiary)
                 }
                 .width('100%')
-                this.resBar('内存', this.memoryPercent(), '#00C853')
-                this.resBar('硬盘', this.diskPercent(), '#FF8A3D')
+                this.resBar('内存', this.memoryPercent(), this.theme.success)
+                this.resBar('硬盘', this.diskPercent(), this.theme.primary)
                 this.resBar('日志', this.logPercent(), '#B8A6E8')
               }
               .width('48%')
@@ -1158,7 +1346,7 @@ export struct DashboardTab {
                   Circle()
                     .width(6)
                     .height(6)
-                    .foregroundColor(this.isOnline ? '#00C853' : '#FF5252')
+                    .foregroundColor(this.isOnline ? this.theme.success : this.theme.danger)
                   Text(this.wanStatus.interface || 'WAN')
                     .fontSize(12)
                     .fontColor(this.theme.textPrimary)
@@ -1167,7 +1355,7 @@ export struct DashboardTab {
                   Blank()
                   Text(this.isOnline ? '已连接' : '未连接')
                     .fontSize(10)
-                    .fontColor(this.isOnline ? '#00A94F' : '#FF5252')
+                    .fontColor(this.isOnline ? this.theme.success : this.theme.danger)
                 }
                 .width('100%')
                 .margin({ top: 8 })
@@ -1175,7 +1363,7 @@ export struct DashboardTab {
                   Text('↑ 上行').fontSize(10).fontColor(this.theme.textTertiary)
                   Blank()
                   Text(FormatUtils.formatSpeed(this.wanStatus.rxRate))
-                    .fontSize(16).fontWeight(FontWeight.Bold).fontColor('#FF8A3D').fontFamily('monospace')
+                    .fontSize(16).fontWeight(FontWeight.Bold).fontColor(this.theme.primary).fontFamily('monospace')
                 }
                 .width('100%')
                 .margin({ top: 8 })
@@ -1183,7 +1371,7 @@ export struct DashboardTab {
                   Text('↓ 下行').fontSize(10).fontColor(this.theme.textTertiary)
                   Blank()
                   Text(FormatUtils.formatSpeed(this.wanStatus.txRate))
-                    .fontSize(16).fontWeight(FontWeight.Bold).fontColor('#00C853').fontFamily('monospace')
+                    .fontSize(16).fontWeight(FontWeight.Bold).fontColor(this.theme.success).fontFamily('monospace')
                 }
                 .width('100%')
                 .margin({ top: 6 })
@@ -1210,7 +1398,7 @@ export struct DashboardTab {
                 Text(`${this.onlineClientCount}`)
                   .fontSize(20)
                   .fontWeight(FontWeight.Bold)
-                  .fontColor('#FF8A3D')
+                  .fontColor(this.theme.primary)
                   .fontFamily('monospace')
                   .width('100%')
                   .margin({ top: 6 })
@@ -1237,7 +1425,7 @@ export struct DashboardTab {
                 Text(`${this.conntrack.current}`)
                   .fontSize(20)
                   .fontWeight(FontWeight.Bold)
-                  .fontColor(this.conntrack.percent > 80 ? '#F5A623' : '#00C853')
+                  .fontColor(this.conntrack.percent > 80 ? this.theme.warning : this.theme.success)
                   .fontFamily('monospace')
                   .width('100%')
                   .margin({ top: 6 })
@@ -1310,7 +1498,7 @@ export struct DashboardTab {
                         .width('100%')
                         .height(4)
                         .borderRadius(2)
-                        .backgroundColor('#F0EBE0')
+                        .backgroundColor(this.theme.progressTrack)
                       Row()
                         .width(`${Math.max(0, Math.min(100, mp.usedPercent))}%`)
                         .height(4)
@@ -1335,7 +1523,7 @@ export struct DashboardTab {
             .margin({ top: 12 })
           }
           .width('100%')
-          .padding({ left: 12, right: 12, bottom: 130 })
+          .padding({ left: 12, right: 12, bottom: this.bottomInset })
         }
         .width('100%')
         .layoutWeight(1)
@@ -1418,10 +1606,10 @@ export struct DashboardTab {
       Row() {
         Text(`↓ ${FormatUtils.formatBytes(iface.rxBytes)}`)
           .fontSize(11)
-          .fontColor('#00E676')
+          .fontColor(this.theme.success)
         Text(`  ↑ ${FormatUtils.formatBytes(iface.txBytes)}`)
           .fontSize(11)
-          .fontColor('#448AFF')
+          .fontColor(this.theme.info)
       }
       .width('100%')
       .margin({ top: 4 })

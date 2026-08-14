@@ -43,6 +43,13 @@ export interface ThemePalette {
   cardShadow: string        // 卡片柔和投影颜色（透明色，如 rgba(0,0,0,0.14)）
   cardShadowRadius: number  // 卡片投影模糊半径（vp）
 
+  // --- 进度条底色（皮肤专属，替代写死的浅色轨道） ---
+  progressTrack: string
+  // --- 图表多色序列（折线/仪表盘，随皮肤主色变化） ---
+  chartColors: string[]
+  // --- 浅色强调底（图标/胶囊底，替代写死的浅橙 #FDF0E4 系） ---
+  accentSoft: string
+
   // --- 页面渐变背景（皮肤专属） ---
   pageGradient: Array<[ResourceColor, number]>  // linearGradient colors：[[color, offset], ...]
 }
@@ -63,7 +70,7 @@ export const LIGHT_THEME: ThemePalette = {
   info: '#1A73E8',
 
   bgDark: '#F5F1EE',
-  bgCard: '#F6F2E9',
+  bgCard: '#FFFFFF',
   bgCardHover: 'rgba(0, 0, 0, 0.05)',
   bgGlass: '#F6F2E9',
   bgGlassLight: 'rgba(0, 0, 0, 0.03)',
@@ -79,6 +86,9 @@ export const LIGHT_THEME: ThemePalette = {
 
   cardShadow: 'rgba(180, 160, 120, 0.14)',
   cardShadowRadius: 14,
+  progressTrack: '#F0EBE0',
+  chartColors: ['#FF8A3D', '#00A84D', '#E6A800', '#1A73E8', '#5B4CC4'],
+  accentSoft: '#FDF0E4',
   pageGradient: [['#F6F2EA', 0], ['#FAF7F0', 0.5], ['#F6F2EA', 1]]
 }
 
@@ -136,6 +146,9 @@ export const SKINS: SkinDef[] = [
 
       cardShadow: 'rgba(31, 41, 55, 0.1)',
       cardShadowRadius: 14,
+      progressTrack: '#EEF2F7',
+      chartColors: ['#3B82F6', '#00A84D', '#E6A800', '#1A73E8', '#8B7CF6'],
+      accentSoft: '#EAF1FC',
       pageGradient: [['#F0F4FA', 0], ['#F7FAFD', 0.5], ['#F0F4FA', 1]]
     }
   },
@@ -172,6 +185,9 @@ export const SKINS: SkinDef[] = [
 
       cardShadow: 'rgba(160, 140, 140, 0.16)',
       cardShadowRadius: 14,
+      progressTrack: '#EFE9E6',
+      chartColors: ['#C79B9B', '#00A84D', '#E6A800', '#8E9BC4', '#5B4CC4'],
+      accentSoft: '#F5EDED',
       pageGradient: [['#EEE1E1', 0], ['#F2EDF0', 0.5], ['#F4F3F8', 1]]
     }
   },
@@ -208,6 +224,9 @@ export const SKINS: SkinDef[] = [
 
       cardShadow: 'rgba(200, 140, 110, 0.18)',
       cardShadowRadius: 14,
+      progressTrack: '#F5E9E0',
+      chartColors: ['#E8936A', '#00A84D', '#E6A800', '#C79B8E', '#8B7CF6'],
+      accentSoft: '#FBE9DF',
       pageGradient: [['#F2C3B1', 0], ['#F5DCD3', 0.5], ['#F6EEEB', 1]]
     }
   },
@@ -244,6 +263,9 @@ export const SKINS: SkinDef[] = [
 
       cardShadow: 'rgba(80, 160, 140, 0.16)',
       cardShadowRadius: 14,
+      progressTrack: '#E3F1EC',
+      chartColors: ['#2FBFA8', '#00A84D', '#E6A800', '#2FBFA8', '#5B4CC4'],
+      accentSoft: '#E0F4EF',
       pageGradient: [['#E4F3EE', 0], ['#F0F9F5', 0.5], ['#EBF6F1', 1]]
     }
   },
@@ -280,6 +302,9 @@ export const SKINS: SkinDef[] = [
 
       cardShadow: 'rgba(120, 100, 220, 0.16)',
       cardShadowRadius: 14,
+      progressTrack: '#ECE8F8',
+      chartColors: ['#8B7CF6', '#00A84D', '#E6A800', '#8B7CF6', '#C79B9B'],
+      accentSoft: '#EEEAFB',
       pageGradient: [['#EDE9F8', 0], ['#F6F3FC', 0.5], ['#F0EDFA', 1]]
     }
   },
@@ -316,6 +341,9 @@ export const SKINS: SkinDef[] = [
 
       cardShadow: 'rgba(220, 120, 100, 0.18)',
       cardShadowRadius: 14,
+      progressTrack: '#F7E8E4',
+      chartColors: ['#FF7A6E', '#00A84D', '#E6A800', '#FF7A6E', '#8B7CF6'],
+      accentSoft: '#FDEAE7',
       pageGradient: [['#FFD9CE', 0], ['#FFECE6', 0.5], ['#FFE3DC', 1]]
     }
   },
@@ -352,6 +380,9 @@ export const SKINS: SkinDef[] = [
 
       cardShadow: 'rgba(90, 130, 170, 0.16)',
       cardShadowRadius: 14,
+      progressTrack: '#E6EEF6',
+      chartColors: ['#4A7FB5', '#00A84D', '#E6A800', '#4A7FB5', '#8B7CF6'],
+      accentSoft: '#E7F0F9',
       pageGradient: [['#DCE8F4', 0], ['#EBF2F9', 0.5], ['#E3EDF6', 1]]
     }
   }
