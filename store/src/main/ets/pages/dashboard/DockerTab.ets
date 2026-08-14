@@ -19,7 +19,7 @@ export struct DockerTab {
   @State apiAvailable: boolean = false
   @State showApiConfirm: boolean = false
   @State apiEnabling: boolean = false
-  @State iconFailed: string[] = []  // 远程 logo 加载失败的容器（回退默认 icon_docker）
+  @State iconFailed: string[] = []  // 远程 logo 加载失败的容器（回退默认 docker_logo）
   @State viewIndex: number = 0  // 0=容器 / 1=镜像 / 2=网络
   @State images: DockerImage[] = []
   @State imagesLoading: boolean = false
@@ -303,7 +303,7 @@ export struct DockerTab {
       Scroll() {
         Column() {
           Row() {
-            Image($r('app.media.icon_docker')).width(28).height(28).margin({ right: 8 })
+            Image($r('app.media.docker_logo')).width(28).height(28).margin({ right: 8 })
             Text('Docker')
               .fontSize(24).fontWeight(FontWeight.Bold)
               .fontColor(this.theme.textPrimary)
@@ -498,7 +498,7 @@ export struct DockerTab {
                         LoadingProgress().width(18).height(18).color(this.theme.primary)
                       } else if (this.iconFailed.indexOf(c.name) >= 0 || !this.containerIcon(c)) {
                         // 无 iStore 图标或加载失败 → 默认 Docker 图标
-                        Image($r('app.media.icon_docker'))
+                        Image($r('app.media.docker_logo'))
                           .width(28).height(28).objectFit(ImageFit.Contain)
                       } else {
                         Image(this.containerIcon(c))
@@ -589,7 +589,7 @@ export struct DockerTab {
                   Column() {
                     Row() {
                       Column() {
-                        Image($r('app.media.icon_docker'))
+                        Image($r('app.media.docker_logo'))
                           .width(24).height(24).objectFit(ImageFit.Contain)
                       }
                       .width(40).height(40)

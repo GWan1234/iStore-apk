@@ -72,7 +72,7 @@ struct AppsPage {
       title: '管理',
       items: [
         { emoji: '📱', name: '设备管理',  desc: '设备列表与备注管理', route: 'pages/apps/DeviceManagePage', iconResource: $r('app.media.device_manage') },
-        { emoji: '🌐', name: '网络助手',  desc: '快捷问答 · 实时诊断网络', route: 'pages/apps/AiAssistantPage', iconResource: $r('app.media.help_icon') },
+        { emoji: '🌐', name: '网络助手',  desc: '快捷问答 · 实时诊断网络', route: 'pages/apps/NetworkHelperPage', iconResource: $r('app.media.help_icon') },
         { emoji: '🛡️', name: '家长控制',  desc: 'OAF 应用过滤引擎配置', route: 'pages/apps/OafPage', iconResource: $r('app.media.app_shield') },
         { emoji: '⚙️', name: '系统进程',  desc: '查看和管理运行中的进程', route: 'pages/process/ProcessListPage', iconResource: $r('app.media.app_gear') },
         { emoji: '🚀', name: '启动项',   desc: '管理开机自启服务', route: 'pages/process/StartupPage', iconResource: $r('app.media.app_rocket') },

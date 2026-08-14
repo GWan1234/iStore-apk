@@ -45,7 +45,7 @@
     "pages/apps/ModelShopPage",
     "pages/apps/DeviceManagePage",
     "pages/apps/TopologyPage",
-    "pages/apps/AiAssistantPage",
+    "pages/apps/NetworkHelperPage",
     "pages/apps/SshTerminalPage",
     "pages/apps/FileManagerPage"
   ]

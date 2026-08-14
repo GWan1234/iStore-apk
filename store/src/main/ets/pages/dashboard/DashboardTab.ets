@@ -987,7 +987,7 @@ export struct DashboardTab {
               .layoutWeight(1)
 
               // 右侧 NAS 机箱插图
-              Image($r('app.media.NAS'))
+              Image($r('app.media.nas'))
                 .width(92)
                 .height(92)
                 .objectFit(ImageFit.Contain)
@@ -1004,7 +1004,7 @@ export struct DashboardTab {
             Column() {
               Row() {
                 this.quickItem('文件', 'pages/apps/FileManagerPage', '#A8C8A0', $r('app.media.folder_file'))
-                this.quickItem('AI 助手', 'tab:1', '#B8A6E8', $r('app.media.ai_assistant'))
+                this.quickItem('AI 助手', 'tab:1', '#B8A6E8', $r('app.media.ai_chat'))
                 this.quickItem('Docker', 'tab:4', '#9FB8E8', $r('app.media.docker'))
                 this.quickItem('SSH', 'pages/apps/SshTerminalPage', '#A0B8D8', $r('app.media.terminal'))
                 this.quickItem('应用中心', 'pages/apps/AppsPage', '#FFB37A', $r('app.media.app_center'))
@@ -1156,7 +1156,7 @@ export struct DashboardTab {
                 .width('100%')
                 .margin({ top: 8 })
                 Row() {
-                  Text('↓ 下行').fontSize(10).fontColor(this.theme.textTertiary)
+                  Text('↑ 上行').fontSize(10).fontColor(this.theme.textTertiary)
                   Blank()
                   Text(FormatUtils.formatSpeed(this.wanStatus.rxRate))
                     .fontSize(16).fontWeight(FontWeight.Bold).fontColor('#FF8A3D').fontFamily('monospace')
@@ -1164,7 +1164,7 @@ export struct DashboardTab {
                 .width('100%')
                 .margin({ top: 8 })
                 Row() {
-                  Text('↑ 上行').fontSize(10).fontColor(this.theme.textTertiary)
+                  Text('↓ 下行').fontSize(10).fontColor(this.theme.textTertiary)
                   Blank()
                   Text(FormatUtils.formatSpeed(this.wanStatus.txRate))
                     .fontSize(16).fontWeight(FontWeight.Bold).fontColor('#00C853').fontFamily('monospace')
