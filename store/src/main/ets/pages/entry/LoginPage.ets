@@ -25,6 +25,7 @@ struct LoginPage {
   // ========== 表单状态 ==========
   @State host: string = ''
   @State port: string = '80'
+  @State useHttps: boolean = false
   @State username: string = 'root'
   @State password: string = ''
   @State label: string = ''
@@ -136,7 +137,7 @@ struct LoginPage {
           host: config.host,
           port: String(config.port),
           token: keepLegacyToken ? existing!.token : '',
-          useHttps: false,
+          useHttps: this.useHttps,
           lastConnected: existing ? existing.lastConnected : Date.now(),
           version: existing ? existing.version : 0,
           username: keepLegacyToken ? '' : config.username!,
@@ -151,7 +152,7 @@ struct LoginPage {
           host: config.host,
           port: String(config.port),
           token: '',
-          useHttps: false,
+          useHttps: this.useHttps,
           lastConnected: Date.now(),
           version: 0,
           username: config.username!,
@@ -181,7 +182,7 @@ struct LoginPage {
     const token: string = savedDevice ? savedDevice.token : ''
     const username: string = savedDevice ? (savedDevice.username || '') : this.username.trim()
     const password: string = savedDevice ? (savedDevice.password || '') : this.password
-    const config: ConnectionConfig = { host, port: Number(port) || 80, token, useHttps: false, username, password }
+    const config: ConnectionConfig = { host, port: Number(port) || 80, token, useHttps: this.useHttps, username, password }
 
     if (!host) {
       this.showError('请输入设备地址')
@@ -194,7 +195,7 @@ struct LoginPage {
 
     this.isConnecting = true
     this.errorMessage = ''
-    this.connectingId = savedDevice ? savedDevice.id : ''
+    this.connectingId = savedDevice ? savedDevice.id : (this.editingId || '')
     let timedOut: boolean = false
 
     // 超时兜底（仅真正无响应时触发；正常设备 3~5s，QWRT 自动授权 ~10~60s）
@@ -208,7 +209,26 @@ struct LoginPage {
     }, 30000)
 
     try {
-      // 如果没有保存设备，先创建新设备并持久化
+      // 编辑模式：先更新已存在设备（不新增），再用其 id 连接
+      if (!savedDevice && this.editingId) {
+        const existing: SavedDevice | undefined = this.appState.getDeviceById(this.editingId)
+        const keepLegacyToken: boolean = !this.password && !!existing && !!existing.token
+        const upd: SavedDevice = {
+          id: this.editingId,
+          label: this.label.trim() || host,
+          host: host,
+          port: String(config.port),
+          token: keepLegacyToken ? existing!.token : '',
+          useHttps: this.useHttps,
+          lastConnected: existing ? existing.lastConnected : Date.now(),
+          version: existing ? existing.version : 0,
+          username: keepLegacyToken ? '' : config.username!,
+          password: keepLegacyToken ? '' : config.password!
+        }
+        await this.appState.saveDevice(upd)
+        savedDevice = upd
+      }
+      // 如果没有保存设备且非编辑模式，先创建新设备并持久化
       if (!savedDevice) {
         const device: SavedDevice = {
           id: `${config.host}_${Math.random().toString(36).substring(2, 10)}`,
@@ -216,7 +236,7 @@ struct LoginPage {
           host: config.host,
           port: String(config.port),
           token: config.token,
-          useHttps: false,
+          useHttps: this.useHttps,
           lastConnected: Date.now(),
           version: 0,
           username: config.username!,
@@ -286,6 +306,7 @@ struct LoginPage {
   resetForm(): void {
     this.host = ''
     this.port = '80'
+    this.useHttps = false
     this.username = 'root'
     this.password = ''
     this.label = ''
@@ -297,6 +318,7 @@ struct LoginPage {
   fillForm(device: SavedDevice): void {
     this.host = device.host
     this.port = device.port
+    this.useHttps = device.useHttps
     this.username = device.username || 'root'
     this.password = device.password || ''
     this.label = device.label
@@ -537,13 +559,35 @@ struct LoginPage {
       .border({ width: 0.5, color: this.theme.borderGlass })
       .padding({ left: 14, right: 14 }).margin({ bottom: 14 })
 
-      // 端口
+      // 端口 + https 切换
       Row() {
         TextInput({ placeholder: '端口', text: this.port })
           .placeholderColor(this.theme.textTertiary).fontColor(this.theme.textPrimary)
           .backgroundColor('transparent').type(InputType.Number)
-          .onChange((v: string) => { this.port = v })
+          .onChange((v: string) => {
+            this.port = v
+            // 443/8443 等 https 常用端口自动开启 https
+            if (v === '443' || v === '8443') {
+              this.useHttps = true
+            } else if (v === '80' || v === '8080') {
+              this.useHttps = false
+            }
+          })
           .layoutWeight(1).height(52)
+        // https 开关
+        Row() {
+          Text(this.useHttps ? 'HTTPS' : 'HTTP')
+            .fontSize(11)
+            .fontColor(this.useHttps ? '#FFFFFF' : this.theme.textSecondary)
+            .fontWeight(FontWeight.Medium)
+        }
+        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+        .borderRadius(10)
+        .backgroundColor(this.useHttps ? this.theme.primary : this.theme.bgGlassLight)
+        .margin({ right: 10 })
+        .onClick(() => {
+          this.useHttps = !this.useHttps
+        })
       }
       .width('100%').height(52).borderRadius(24)
       .backgroundColor(this.theme.bgCard).backdropBlur(10)
