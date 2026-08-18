@@ -12,6 +12,7 @@ import { applyImmersiveBar } from '../../common/utils/WindowUtils'
 import { ScheduleStore } from '../../common/store/ScheduleStore'
 import { DockerTab } from './DockerTab'
 import { AlbumTab } from './AlbumTab'
+import { PetView } from '../pet/PetPage'
 
 @Entry
 @Component
@@ -162,16 +163,16 @@ struct MainPage {
 
           TabContent() {
             Stack() {
-              AlbumTab({ theme: this.theme })
+              PetView({ theme: this.theme })
             }
             .width('100%').height('100%')
             .opacity(this.tabOpacity)
             .translate({ y: this.tabTranslateY })
           }
           .tabBar(new BottomTabBarStyle({
-            normal: new SymbolGlyphModifier($r('sys.symbol.picture_2')),
-            selected: new SymbolGlyphModifier($r('sys.symbol.picture_2'))
-          }, '相册'))
+            normal: new SymbolGlyphModifier($r('sys.symbol.media_center')),
+            selected: new SymbolGlyphModifier($r('sys.symbol.media_center'))
+          }, '小管家'))
 
           TabContent() {
             Stack() {

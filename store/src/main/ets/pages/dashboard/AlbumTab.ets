@@ -6,10 +6,9 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import { systemShare } from '@kit.ShareKit'
 import { fileIo as fs } from '@kit.CoreFileKit'
 import { fileUri } from '@kit.CoreFileKit'
+import { SymbolGlyphModifier } from '@kit.ArkUI'
 import { http } from '@kit.NetworkKit'
 import { common } from '@kit.AbilityKit'
-import { window } from '@kit.ArkUI'
-import { setWindowOrientation } from '../../common/utils/WindowUtils'
 
 /**
  * AlbumTab - Immich 相册（仿鸿蒙相册）
@@ -206,13 +205,7 @@ this.theme = AppState.getInstance().getTheme()
     // 全屏查看时隐藏底部导航栏，并标记子视图状态（MainPage 据此拦截 Tab 滑动穿透）
     AppState.getInstance().hideNav()
     AppState.getInstance().setAlbumSubView(true)
-    // 查看器内允许旋转（横屏视频可横屏播放），关闭时恢复竖屏
-    try {
-      const ctx = this.getUIContext().getHostContext()
-      if (ctx) {
-        setWindowOrientation(ctx as Context, window.Orientation.AUTO_ROTATION)
-      }
-    } catch (_e) {}
+    // 方向跟随系统旋转锁（module.json5 auto_rotation），不在此强制
   }
 
   /** 关闭全屏查看器 */
@@ -247,13 +240,7 @@ this.theme = AppState.getInstance().getTheme()
     if (!this.activeAlbum) {
       AppState.getInstance().setAlbumSubView(false)
     }
-    // 恢复竖屏（查看器内允许旋转的窗口方向还原）
-    try {
-      const ctx = this.getUIContext().getHostContext()
-      if (ctx) {
-        setWindowOrientation(ctx as Context, window.Orientation.PORTRAIT)
-      }
-    } catch (_e) {}
+    // 方向跟随系统旋转锁（不在此强制）
   }
 
   /** 指定索引的视频是否已开始播放 */
@@ -328,18 +315,9 @@ this.theme = AppState.getInstance().getTheme()
     }
   }
 
-  /** 全屏切换：点击全屏图标自动横屏（无需手动旋转手机） */
+  /** 全屏切换：仅切换 UI 全屏态（方向跟随系统旋转锁） */
   toggleVideoFullscreen(): void {
     this.videoFullscreen = !this.videoFullscreen
-    try {
-      const ctx = this.getUIContext().getHostContext()
-      if (ctx) {
-        setWindowOrientation(ctx as Context,
-          this.videoFullscreen ? window.Orientation.LANDSCAPE : window.Orientation.PORTRAIT)
-      }
-    } catch (e) {
-      hilog.error(0x0001, 'AlbumTab', `fullscreen rotate err: ${JSON.stringify(e)}`)
-    }
   }
 
   /** 视频时间格式化（mm:ss） */
@@ -675,7 +653,11 @@ this.theme = AppState.getInstance().getTheme()
       Column() {
         // 标题栏
         Row() {
-          Text('📷 相册')
+          SymbolGlyph($r('sys.symbol.camera'))
+            .fontSize(22)
+            .fontColor([this.theme.primary])
+            .margin({ right: 8 })
+          Text('相册')
             .fontSize(20)
             .fontColor(this.theme.textPrimary)
             .fontWeight(FontWeight.Bold)
@@ -702,8 +684,39 @@ this.theme = AppState.getInstance().getTheme()
           // 配置视图
           this.configView()
         } else {
-          // 主视图：自绘底部导航「相片 / 相册」
+          // 主视图：统计胶囊 + 顶部分段切换（对齐 HTML）
           Column() {
+            // 顶部分段切换（相片 / 相册，浅底槽 + 白色滑块）
+            Row() {
+              Text('相片')
+                .fontSize(13).fontWeight(FontWeight.Bold)
+                .fontColor(this.mainTab === 0 ? this.theme.primary : this.theme.textTertiary)
+                .textAlign(TextAlign.Center)
+                .layoutWeight(1)
+                .padding({ top: 8, bottom: 8 })
+                .borderRadius(11)
+                .backgroundColor(this.mainTab === 0 ? '#FFFFFF' : Color.Transparent)
+                .shadow(this.mainTab === 0 ? { radius: 8, color: 'rgba(180,160,120,0.12)', offsetY: 3 } : { radius: 0, color: 'transparent', offsetY: 0 })
+                .animation({ duration: 220, curve: Curve.EaseOut })
+                .onClick(() => { this.mainTab = 0 })
+              Text('相册')
+                .fontSize(13).fontWeight(FontWeight.Bold)
+                .fontColor(this.mainTab === 1 ? this.theme.primary : this.theme.textTertiary)
+                .textAlign(TextAlign.Center)
+                .layoutWeight(1)
+                .padding({ top: 8, bottom: 8 })
+                .borderRadius(11)
+                .backgroundColor(this.mainTab === 1 ? '#FFFFFF' : Color.Transparent)
+                .shadow(this.mainTab === 1 ? { radius: 8, color: 'rgba(180,160,120,0.12)', offsetY: 3 } : { radius: 0, color: 'transparent', offsetY: 0 })
+                .animation({ duration: 220, curve: Curve.EaseOut })
+                .onClick(() => { this.mainTab = 1 })
+            }
+            .width('100%')
+            .margin({ left: 16, right: 16, top: 10, bottom: 2 })
+            .padding({ left: 4, right: 4, top: 4, bottom: 4 })
+            .borderRadius(14)
+            .backgroundColor('rgba(235,229,216,0.8)')
+
             // 内容区（Stack + 过渡动画切换）
             Stack({ alignContent: Alignment.Top }) {
               if (this.mainTab === 0) {
@@ -725,18 +738,6 @@ this.theme = AppState.getInstance().getTheme()
             .width('100%')
             .layoutWeight(1)
 
-            // 自绘底部导航条（相片 / 相册，居中悬浮）
-            Row() {
-              this.bottomNavBar()
-            }
-            .width('100%')
-            .justifyContent(FlexAlign.Center)
-
-            // 底部相对留白：= 主页悬浮导航条占用空间（随机型动态计算，不写死）
-            Row()
-              .width('100%')
-              .height(this.bottomInset)
-              .backgroundColor(Color.Transparent)
           }
           .width('100%')
           .height('100%')
@@ -1405,6 +1406,16 @@ this.theme = AppState.getInstance().getTheme()
     .scrollBar(BarState.Off)
   }
 
+  /** 相册日期格式化（YYYY-MM-DD → M月D日） */
+  albumDate(iso: string): string {
+    try {
+      const d: Date = new Date(iso)
+      return `${d.getMonth() + 1}月${d.getDate()}日`
+    } catch (e) {
+      return ''
+    }
+  }
+
   @Builder
   albumListView(): void {
     Scroll() {
@@ -1428,55 +1439,53 @@ this.theme = AppState.getInstance().getTheme()
               .fontSize(12).fontColor(this.theme.textTertiary).margin({ top: 8 })
           }.width('100%').padding({ top: 80 })
         } else {
-          // 相册网格（两列）
-          Grid() {
+          // 相册大图卡（单列：封面渐变遮罩 + 底部信息）
+          Column() {
             ForEach(this.albums, (album: ImmichAlbum) => {
-              GridItem() {
-                Column() {
-                  Stack() {
-                    if (album.coverThumbnailUrl) {
-                      Image(album.coverThumbnailUrl)
-                        .width('100%').height(90).objectFit(ImageFit.Cover)
-                    } else {
-                      Column() {
-                        Text('📁').fontSize(32)
-                      }
-                      .width('100%').height(90)
-                      .justifyContent(FlexAlign.Center)
-                      .backgroundColor(this.theme.bgGlassLight)
-                    }
+              Stack() {
+                // 封面
+                if (album.coverThumbnailUrl) {
+                  Image(album.coverThumbnailUrl)
+                    .width('100%').height(170).objectFit(ImageFit.Cover)
+                } else {
+                  Column() {
+                    Text('📁').fontSize(40)
                   }
-                  .width('100%').height(90).borderRadius(12)
-                  .clip(true)
-
-                  // 名称 + 张数（同一行）
-                  Row() {
-                    Text(album.albumName)
-                      .fontSize(12)
-                      .fontColor(this.theme.textPrimary)
-                      .fontWeight(FontWeight.Medium)
-                      .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                      .layoutWeight(1)
-                    Text(`${album.assetCount} 张`)
-                      .fontSize(10)
-                      .fontColor(this.theme.textTertiary)
-                      .margin({ left: 4 })
-                  }
-                  .width('100%')
-                  .margin({ top: 8 })
+                  .width('100%').height(170)
+                  .justifyContent(FlexAlign.Center)
+                  .backgroundColor(this.theme.bgGlassLight)
                 }
-                .padding(10)
-                .borderRadius(16)
-                .backgroundColor(this.theme.bgCard)
-                .border({ width: 0.5, color: this.theme.borderGlass })
-                .onClick(() => this.openAlbum(album))
+                // 渐变遮罩
+                Column().width('100%').height(170)
+                  .linearGradient({ angle: 180, colors: [['rgba(30,27,20,0)', 0.4], ['rgba(30,27,20,0.75)', 1]] })
+                // 张数胶囊（右上）
+                Text(`${album.assetCount} 张`)
+                  .fontSize(10).fontWeight(FontWeight.Bold).fontColor('#FFFFFF')
+                  .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+                  .borderRadius(9)
+                  .backgroundColor('rgba(0,0,0,0.45)')
+                  .position({ x: '80%', y: 12 })
+                // 底部信息（白字）
+                Column() {
+                  Text(album.albumName)
+                    .fontSize(15).fontWeight(FontWeight.Bold).fontColor('#FFFFFF')
+                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Text(this.albumDate(album.createdAt) + ' · ' + album.assetCount + ' 张')
+                    .fontSize(10).fontColor('rgba(255,255,255,0.85)')
+                    .margin({ top: 3 })
+                }
+                .alignItems(HorizontalAlign.Start)
+                .position({ x: 14, y: '72%' })
               }
+              .width('100%').height(170)
+              .borderRadius(24).clip(true)
+              .shadow({ radius: 14, color: 'rgba(180,160,120,0.2)', offsetY: 5 })
+              .margin({ bottom: 14 })
+              .onClick(() => this.openAlbum(album))
             })
           }
-          .columnsTemplate('1fr 1fr')
-          .columnsGap(10)
-          .rowsGap(10)
           .width('100%')
+          .padding({ top: 4 })
         }
       }
       .width('100%')
@@ -1570,53 +1579,6 @@ this.theme = AppState.getInstance().getTheme()
     .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
   }
 
-  /** 自绘底部导航条（仿主页悬浮胶囊样式，缩小版） */
-  @Builder
-  bottomNavBar(): void {
-    Row() {
-      // 相片
-      this.navItem(0, '相片', $r('app.media.album_photo'))
-      // 相册
-      this.navItem(1, '相册', $r('app.media.album'))
-    }
-    .width(240)
-    .height(44)
-    .borderRadius(22)
-    .backgroundColor('rgba(255,255,255,0.75)')
-    .backdropBlur(20)
-    .border({ width: 0.5, color: this.theme.borderGlass })
-    .shadow({
-      radius: 12,
-      color: 'rgba(31,47,94,0.10)',
-      offsetY: 4
-    })
-  }
-
-  /** 单个导航项（选中态高亮 + 图标 + 文字，仿 BottomTabBarStyle） */
-  @Builder
-  navItem(tab: number, label: string, icon: Resource): void {
-    Column() {
-      // 图标
-      Image(icon)
-        .width(19)
-        .height(19)
-      // 文字
-      Text(label)
-        .fontSize(10)
-        .fontColor(this.mainTab === tab ? this.theme.primary : this.theme.textTertiary)
-        .fontWeight(this.mainTab === tab ? FontWeight.Medium : FontWeight.Normal)
-        .margin({ top: 1 })
-    }
-    .layoutWeight(1)
-    .justifyContent(FlexAlign.Center)
-    .onClick(() => {
-      if (this.mainTab !== tab) {
-        this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseOut }, () => {
-          this.mainTab = tab
-        })
-      }
-    })
-  }
 
   /** 相片时间线视图（按天分组，仿鸿蒙相册首页） */
   @Builder
@@ -1676,20 +1638,22 @@ this.theme = AppState.getInstance().getTheme()
                       Image(asset.thumbnailUrl)
                         .width('100%').height('100%')
                         .objectFit(ImageFit.Cover)
-                      // 视频角标
+                      // 视频角标（黑色毛玻璃胶囊，非 emoji）
                       if (asset.type === 'VIDEO') {
-                        Text('🎬')
-                          .fontSize(13)
-                          .padding(3)
-                          .borderRadius(5)
-                          .backgroundColor('rgba(0,0,0,0.55)')
+                        Text('▶')
+                          .fontSize(9)
+                          .fontColor('#FFFFFF')
+                          .padding({ left: 6, right: 6, top: 3, bottom: 3 })
+                          .borderRadius(7)
+                          .backgroundColor('rgba(0,0,0,0.5)')
                           .position({ x: 5, y: 5 })
                       }
                     }
                     .width('33.3%')
                     .aspectRatio(1)
+                    .borderRadius(10)
                     .clip(true)
-                    .padding({ left: 1.5, right: 1.5, bottom: 3 })
+                    .padding({ left: 2.5, right: 2.5, bottom: 5 })
                     .onClick(() => {
                       this.openViewer(this.allPhotos, this.photoIndexByDay(day, idxInDay))
                     })
@@ -1717,7 +1681,7 @@ this.theme = AppState.getInstance().getTheme()
         } else if (this.allPhotosTotal >= 0 && this.allPhotos.length >= this.allPhotosTotal && this.allPhotos.length > 0) {
           Text('已加载全部')
             .fontSize(11).fontColor(this.theme.textTertiary)
-            .width('100%').textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
+            .width('100%').textAlign(TextAlign.Center).padding({ top: 6, bottom: 4 })
         }
       }
     }

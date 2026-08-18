@@ -48,6 +48,11 @@
     "pages/apps/NetworkHelperPage",
     "pages/apps/SkinManagePage",
     "pages/apps/SshTerminalPage",
-    "pages/apps/FileManagerPage"
+    "pages/apps/FileManagerPage",
+    "pages/security/SecurityHubPage",
+    "pages/pet/PetPage",
+    "pages/pet/SkinPickerPage",
+    "pages/apps/AlbumPage",
+    "pages/apps/DiaryPage"
   ]
 }

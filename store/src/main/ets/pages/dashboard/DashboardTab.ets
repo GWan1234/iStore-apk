@@ -1217,7 +1217,7 @@ export struct DashboardTab {
               Row() {
                 this.quickItem('排行', 'pages/apps/TrafficRankPage', '#F2D08A', $r('app.media.ranking'))
                 this.quickItem('WiFi', 'pages/apps/WifiPage', '#8FB8E8', $r('app.media.wifi_icon'))
-                this.quickItem('定时', 'pages/apps/SchedulePage', '#C0C090', $r('app.media.schedule'))
+                this.quickItem('相册', 'pages/apps/AlbumPage', '#E8A8C0', $r('app.media.folder_file'))
                 this.quickItem('体检', 'pages/apps/NetworkCheckPage', '#8FD6A5', $r('app.media.app_health'))
                 this.quickItem('商店', 'tab:3', '#F0A8C0', $r('app.media.app_store'))
               }

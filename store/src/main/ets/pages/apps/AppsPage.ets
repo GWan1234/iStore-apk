@@ -37,6 +37,7 @@ struct AppsPage {
     {
       title: '网络',
       items: [
+        { emoji: '🛡', name: '安全中心', desc: '安全评分 / 陌生设备 / 危险端口', route: 'pages/security/SecurityHubPage', iconResource: $r('app.media.app_bell') },
         { emoji: '📶', name: 'WiFi 管理', desc: '无线网络状态与配置管理', route: 'pages/apps/WifiPage', iconResource: $r('app.media.wifi_icon') },
         { emoji: '🌐', name: '网络管理', desc: '接口状态与网络信息', route: 'pages/apps/NetworkPage', iconResource: $r('app.media.network_mgmt') },
         { emoji: '📊', name: '流量排行',  desc: '按速率排名的客户端活跃度', route: 'pages/apps/TrafficRankPage', iconResource: $r('app.media.ranking') },
@@ -49,11 +50,18 @@ struct AppsPage {
       ]
     },
     {
+      title: '多媒体',
+      items: [
+        { emoji: '📸', name: '相册', desc: 'Immich 照片与视频管理', route: 'pages/apps/AlbumPage', iconResource: $r('app.media.folder_file') },
+      ]
+    },
+    {
       title: '趣味',
       items: [
         { emoji: '🎉', name: '运行里程碑', desc: '连续运行天数与纪念日', route: 'pages/apps/MileStonePage', iconResource: $r('app.media.app_restart') },
         { emoji: '🏆', name: '网络成就',  desc: '收集你的网络徽章', route: 'pages/apps/AchievementPage', iconResource: $r('app.media.app_bell') },
         { emoji: '🌡', name: '设备作息',  desc: '设备 24h 活跃热力图', route: 'pages/apps/DeviceActivityPage', iconResource: $r('app.media.flow_monitoring') },
+        { emoji: '📖', name: '网络日记',  desc: '每日网络事件时间线', route: 'pages/apps/DiaryPage', iconResource: $r('app.media.ranking') },
         { emoji: '📊', name: 'AI 周报',  desc: '7 天流量汇总与点评', route: 'pages/apps/NetworkReportPage', iconResource: $r('app.media.ranking') },
         { emoji: '🎴', name: '今日运势',  desc: '每天一次网络占卜', route: 'pages/apps/FortunePage', iconResource: $r('app.media.app_health') },
         { emoji: '🤖', name: '路由器心情', desc: '今天路由器心情如何', route: 'pages/apps/RouterMoodPage', iconResource: $r('app.media.ai_assistant') },

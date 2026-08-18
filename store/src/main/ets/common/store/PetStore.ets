@@ -1,0 +1,168 @@
+/**
+ * PetStore — 小管家宠物状态存储
+ * 饱食度/能量/心情/等级/XP/装扮 持久化；每日递减模拟饥饿
+ */
+import { preferences } from '@kit.ArkData'
+import { common } from '@kit.AbilityKit'
+import { hilog } from '@kit.PerformanceAnalysisKit'
+
+const DOMAIN = 0x0001
+const TAG = 'PetStore'
+const STORE_NAME = 'pet_store'
+
+export interface PetState {
+  level: number        // 等级（1-99）
+  xp: number           // 当前等级经验（0-100）
+  full: number         // 饱食度 0-100
+  energy: number       // 能量 0-100
+  mood: number         // 心情 0-100
+  skinId: string       // 当前装扮（对应 ThemeColors SKINS id）
+  lastDay: string      // 上次更新日期（每日递减用）
+}
+
+export class PetStore {
+  private static instance: PetStore
+  private prefs: preferences.Preferences | null = null
+
+  static getInstance(): PetStore {
+    if (!PetStore.instance) {
+      PetStore.instance = new PetStore()
+    }
+    return PetStore.instance
+  }
+
+  async init(ctx: common.UIAbilityContext): Promise<void> {
+    if (this.prefs) return
+    try {
+      this.prefs = await preferences.getPreferences(ctx, STORE_NAME)
+      this.applyDailyDecay()
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `init err: ${String(e)}`)
+    }
+  }
+
+  /** 默认状态 */
+  private defaultState(): PetState {
+    return {
+      level: 1, xp: 0, full: 80, energy: 50, mood: 85,
+      skinId: 'beige', lastDay: this.today()
+    }
+  }
+
+  getState(): PetState {
+    if (!this.prefs) return this.defaultState()
+    try {
+      const raw: string = (this.prefs.getSync('state', '') as string) || ''
+      if (!raw) {
+        const s: PetState = this.defaultState()
+        this.saveState(s)
+        return s
+      }
+      const obj: PetState = JSON.parse(raw) as PetState
+      return obj
+    } catch (e) {
+      return this.defaultState()
+    }
+  }
+
+  saveState(s: PetState): void {
+    if (!this.prefs) return
+    try {
+      this.prefs.putSync('state', JSON.stringify(s))
+      this.prefs.flush()
+    } catch (e) {}
+  }
+
+  private today(): string {
+    const d: Date = new Date()
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+  }
+
+  /** 每日衰减：饱食 -15、心情 -8（未登录也会饿） */
+  private applyDailyDecay(): void {
+    if (!this.prefs) return
+    try {
+      const s: PetState = this.getState()
+      if (s.lastDay === this.today()) return
+      s.full = Math.max(0, s.full - 15)
+      s.mood = Math.max(0, s.mood - 8)
+      s.lastDay = this.today()
+      this.saveState(s)
+    } catch (e) {}
+  }
+
+  /** 喂数据：饱食 +15、XP +5 */
+  feed(): PetState {
+    const s: PetState = this.getState()
+    s.full = Math.min(100, s.full + 15)
+    this.addXp(s, 5)
+    this.saveState(s)
+    return s
+  }
+
+  /** 摸摸头：心情 +10 */
+  pat(): PetState {
+    const s: PetState = this.getState()
+    s.mood = Math.min(100, s.mood + 10)
+    this.saveState(s)
+    return s
+  }
+
+  /** 换装扮 */
+  setSkin(skinId: string): PetState {
+    const s: PetState = this.getState()
+    s.skinId = skinId
+    this.saveState(s)
+    return s
+  }
+
+  /** 任务完成：能量 +n、XP +3 */
+  completeTask(energy: number): PetState {
+    const s: PetState = this.getState()
+    s.energy = Math.min(100, s.energy + energy)
+    this.addXp(s, 3)
+    this.saveState(s)
+    return s
+  }
+
+  // ========== 每日任务完成状态（持久化，每日重置） ==========
+  /** 今日已完成任务索引数组（隔天自动归零） */
+  getDoneTasks(): boolean[] {
+    const done: boolean[] = [false, false, false, false, false]
+    if (!this.prefs) return done
+    try {
+      const day: string = (this.prefs.getSync('task_day', '') as string) || ''
+      if (day !== this.today()) return done
+      const raw: string = (this.prefs.getSync('task_flags', '') as string) || ''
+      if (raw) {
+        const arr: boolean[] = JSON.parse(raw) as boolean[]
+        for (let i = 0; i < arr.length && i < 5; i++) {
+          done[i] = arr[i]
+        }
+      }
+    } catch (e) {}
+    return done
+  }
+
+  markTaskDone(idx: number): void {
+    if (!this.prefs) return
+    try {
+      const done: boolean[] = this.getDoneTasks()
+      if (idx >= 0 && idx < 5) {
+        done[idx] = true
+      }
+      this.prefs.putSync('task_day', this.today())
+      this.prefs.putSync('task_flags', JSON.stringify(done))
+      this.prefs.flush()
+    } catch (e) {}
+  }
+
+  /** 加经验（升级逻辑） */
+  private addXp(s: PetState, n: number): void {
+    s.xp += n
+    while (s.xp >= 100) {
+      s.xp -= 100
+      s.level++
+    }
+  }
+}
