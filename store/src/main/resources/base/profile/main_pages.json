@@ -53,6 +53,10 @@
     "pages/pet/PetPage",
     "pages/pet/SkinPickerPage",
     "pages/apps/AlbumPage",
-    "pages/apps/DiaryPage"
+    "pages/apps/DiaryPage",
+    "pages/apps/JellyfinPage",
+    "pages/apps/JellyfinPlayerPage",
+    "pages/apps/JellyfinDetailPage",
+    "pages/apps/SmartHubPage"
   ]
 }

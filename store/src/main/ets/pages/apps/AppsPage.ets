@@ -53,11 +53,13 @@ struct AppsPage {
       title: '多媒体',
       items: [
         { emoji: '📸', name: '相册', desc: 'Immich 照片与视频管理', route: 'pages/apps/AlbumPage', iconResource: $r('app.media.folder_file') },
+        { emoji: '🎬', name: 'Jellyfin', desc: '电影、剧集与音乐媒体中心', route: 'pages/apps/JellyfinPage', iconResource: $r('app.media.folder_file') },
       ]
     },
     {
       title: '趣味',
       items: [
+        { emoji: '🧠', name: '智能管家', desc: '预知·侦探·值班·一句话·周报', route: 'pages/apps/SmartHubPage', iconResource: $r('app.media.app_bell') },
         { emoji: '🎉', name: '运行里程碑', desc: '连续运行天数与纪念日', route: 'pages/apps/MileStonePage', iconResource: $r('app.media.app_restart') },
         { emoji: '🏆', name: '网络成就',  desc: '收集你的网络徽章', route: 'pages/apps/AchievementPage', iconResource: $r('app.media.app_bell') },
         { emoji: '🌡', name: '设备作息',  desc: '设备 24h 活跃热力图', route: 'pages/apps/DeviceActivityPage', iconResource: $r('app.media.flow_monitoring') },
